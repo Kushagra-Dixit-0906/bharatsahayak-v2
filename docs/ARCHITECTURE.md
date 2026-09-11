@@ -150,22 +150,32 @@ The `load_farmer_profile` node parses incoming queries to maintain session state
 
 ---
 
-## 🛰️ Planned Earth Engine Satellite Intelligence Flow (`🟡 PLANNED`)
+## 🛰️ Planned Earth Engine Satellite Intelligence Flow (`🟡 PLANNED — Phase 1`)
 
-In upcoming phases (Phases 1–6), the data layer will be upgraded to integrate real satellite remote sensing via Google Earth Engine.
+> [!IMPORTANT]
+> **Current Implementation Status:** **NOT IMPLEMENTED YET**.  
+> The current application does **not** yet query Google Earth Engine.  
+> The existing MCP server ([app/mcp_server.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/mcp_server.py)) remains the active **static/mock/catalog implementation** until a subsequent Phase 1 implementation step builds and connects the dedicated Earth Engine module.
+
+In accordance with architectural decision [`DEC-004`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/docs/DECISION_LOG.md#L118-L168) (Option C), the planned Earth Engine architecture decouples MCP tool contracts from geospatial execution:
 
 ```mermaid
 graph TD
-    A["🗺️ Farmer-Friendly Map Location\n(Place search / Village / Pin drop)"] --> B["📍 Exact Coordinates & Farm Area\n(Latitude, Longitude, Bounding Area)"]
-    B --> C["🛰️ Google Earth Engine API\n(Project: bharatsahayak-v2)"]
-    C --> D["📸 Copernicus Sentinel-2 MSI Surface Reflectance\n(Harmonized + Cloud Masking)"]
-    D --> E["🌱 NDVI Calculation\n(NIR - Red) / (NIR + Red)"]
-    E --> F["📊 Regional Statistics Computation\n(Mean, Median, Min, Max)"]
-    F --> G["💡 Agricultural Intelligence Payload\n(Vegetation vigor, stress zones, crop density)"]
-    G --> H["🧠 Gemini Agricultural Reasoning & Advisor Agents"]
+    A["👨‍🌾 Farmer / User Interface"] --> B["🗺️ Map-Based / Farmer-Friendly Location\n(Place Search / Village / PIN / Pin Drop)"]
+    B --> C["📍 Coordinates & Farm Area\n(Latitude, Longitude, Bounding Area)"]
+    C --> D["🔌 MCP Capability Interface\n(Tool Contract: get_farm_satellite_intelligence)"]
+    D --> E["🛰️ Dedicated Earth Engine Module / Service\n(app/satellite/ engine)"]
+    E --> F["📸 Copernicus Sentinel-2 MSI Surface Reflectance\n(Harmonized + QA60/SCL Cloud Masking)"]
+    F --> G["🌱 NDVI Calculation\n(NIR - Red) / (NIR + Red)"]
+    G --> H["📊 Regional Statistics Reducer\n(Mean, Median, Min, Max)"]
+    H --> I["📦 Structured Satellite Result (JSON)\n(Vegetation Vigor, Stress Level, Uniformity)"]
+    I --> D
+    D --> J["🧠 Central Orchestrator & Specialized Advisors\n(Gemini 2.5 Flash Reasoning)"]
 ```
 
-### Architectural Principles for Satellite Integration
-1. **Human-Centric Abstraction:** Farmers are never asked to enter raw coordinates or technical spatial projections. The frontend resolves human inputs (village name, PIN code, map tap) to spatial coordinates.
-2. **Lean Statistical Aggregation First (`DEC-002`):** Compute robust zonal statistics (**mean**, **median**, **min**, **max**) for the farm area rather than transmitting heavy raster image arrays to LLMs.
-3. **Pluggable Data Source Architecture:** The Earth Engine client will implement a decoupled provider interface so that future datasets (Dynamic World LULC, NDWI moisture, soil grids) can be plugged in without refactoring the core multi-agent workflow.
+### Architectural Principles & Boundaries for Earth Engine Integration
+1. **Human-Centric Abstraction (`DEC-003`):** Farmers are never asked to enter raw coordinates or technical spatial projections. The frontend resolves human inputs (village name, PIN code, map tap) to spatial coordinates.
+2. **Layered Integration Boundary (`DEC-004`):** The MCP server provides the capability tool contract, while Earth Engine initialization, image filtering, cloud masking, and reducer operations live in an isolated module.
+3. **Lean Statistical Aggregation First (`DEC-002`):** Compute robust zonal statistics (**mean**, **median**, **min**, **max**) for the farm area rather than transmitting heavy raster image arrays to LLMs.
+4. **Pluggable Data Source Architecture:** The Earth Engine client will implement a decoupled provider interface so that future datasets (Dynamic World LULC, NDWI moisture, soil grids) can be plugged in without refactoring the core multi-agent workflow.
+

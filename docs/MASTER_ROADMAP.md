@@ -51,14 +51,70 @@ graph TD
 ---
 
 ### Phase 1: Earth Engine Foundation
-- **Status:** 🟡 **PLANNED**
-- **Purpose:** Initialize and verify Earth Engine API connectivity, service authentication, and core spatial geometry helpers.
-- **Major Work:**
-  - Verify Google Cloud Earth Engine authentication and service account credentials under GCP project `bharatsahayak-v2`.
-  - Establish reusable bounding box and point-buffer geometry utility functions for farm boundaries.
-  - Set up robust error handling and quota management for Earth Engine API calls.
+- **Status:** 🟡 **IN PROGRESS**
+- **Purpose:** Establish the technical foundation for using Google Earth Engine to extract the first satellite-derived agricultural signal (Sentinel-2 + NDVI regional statistics).
+- **Sub-Roadmap:**
+  - **1A — Earth Engine Architecture & Integration Design (🟡 IN PROGRESS / Active):**
+    - Understand Earth Engine's role in the multi-agent system.
+    - Understand authentication model (service account vs developer ADC).
+    - Understand project/quota model for GCP project `bharatsahayak-v2`.
+    - Compare integration boundaries (Options A, B, C) and select decoupled module architecture (`DEC-004`).
+    - Record architectural decisions and boundary specifications.
+  - **1B — Local Earth Engine Environment (🟡 PLANNED):**
+    - Add `earthengine-api` dependency to project management.
+    - Configure local developer environment.
+    - Authenticate developer environment against Earth Engine API.
+    - Verify GCP project association (`bharatsahayak-v2`).
+  - **1C — Earth Engine Connectivity Test (🟡 PLANNED):**
+    - Initialize Earth Engine client.
+    - Run minimal API query to verify connectivity.
+    - Verify Copernicus Sentinel-2 MSI collection availability.
+    - Verify Earth Engine result deserialization and error handling.
+  - **1D — Geographic Region Definition (🟡 PLANNED):**
+    - Decide point $\rightarrow$ analysis region strategy (bounding box vs point buffer).
+    - Define initial farm/region geometry helpers.
+    - Validate latitude/longitude coordinate bounds (India spatial bounds).
+    - Test region geometry querying against Earth Engine.
+  - **1E — Sentinel-2 Data Pipeline (🟡 PLANNED):**
+    - Select Copernicus Sentinel-2 Level-2A (Surface Reflectance) collection.
+    - Implement spatial location filtering.
+    - Implement temporal date filtering (recent seasonal window).
+    - Implement image selection and cloud masking (`QA60` / SCL band filtering).
+    - Validate retrieved imagery metadata and scene quality.
+  - **1F — NDVI Calculation (🟡 PLANNED):**
+    - Identify Red (B4) and Near-Infrared (B8) spectral bands.
+    - Implement normalized difference calculation: $\text{NDVI} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$.
+    - Generate single-band NDVI image in Earth Engine.
+    - Validate theoretical value range ($-1.0$ to $+1.0$).
+  - **1G — Regional NDVI Statistics (🟡 PLANNED):**
+    - Implement Earth Engine zonal reducers across farm region:
+      - **mean** NDVI (overall vegetative health).
+      - **median** NDVI (robust central tendency).
+      - **minimum** NDVI (localized stress / non-vegetated spots).
+      - **maximum** NDVI (peak vegetative vigor).
+    - Format output as a structured, serializable JSON dictionary.
+  - **1H — Reliability & Data Quality (🟡 PLANNED):**
+    - Handle invalid/out-of-bounds coordinates gracefully.
+    - Handle scenarios with no cloud-free imagery available.
+    - Handle excessive cloud cover flagging and user warnings.
+    - Handle empty spatial regions or zero-pixel reductions.
+    - Handle API timeouts, quota limits, and network errors.
+    - Validate returned statistics against physical sanity constraints.
+  - **1I — Integration Boundary Verification (🟡 PLANNED):**
+    - Verify Earth Engine calculation module works independently of MCP/ADK.
+    - Ensure MCP interface remains a clean capability wrapper.
+    - Avoid unnecessary coupling between Earth Engine code and LLM agent prompts.
+    - Preserve pluggability for future satellite datasets (Dynamic World, NDWI).
+  - **1J — Phase Documentation (🟡 PLANNED):**
+    - Record Before vs After implementation state.
+    - Document actual code changes, test results, and verified outputs.
+    - Update decision logs and record deferred work.
+    - Update Future Upgrade Impact matrix and Resume Status.
+  - **1K — Git Checkpoint (🟡 PLANNED):**
+    - Run full verification test suite.
+    - Commit verified Phase 1 implementation with clean working tree.
 - **Dependencies:** Phase 0.
-- **Future Upgrades:** Polygon boundary ingestion from geoJSON / KML files.
+- **Future Upgrades:** Polygon boundary ingestion from geoJSON / KML files, multi-temporal time series, and anomaly baselines.
 
 ---
 

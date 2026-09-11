@@ -7,8 +7,15 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 Planned
-- **Phase 1 (Earth Engine Foundation):** Earth Engine API initialization, service credentials verification, and spatial geometry utilities.
+### 🟡 In Progress — Phase 1: Earth Engine Foundation (Subphase 1A)
+- **Phase 1 Sub-Roadmap Established:** Defined detailed 1A–1K subphases in `docs/MASTER_ROADMAP.md` covering local environment, connectivity test, geometry definition, Sentinel-2 pipeline, NDVI calculation, regional statistics, reliability, boundary verification, and documentation.
+- **Earth Engine Integration Boundary Documented (`DEC-004`):** Selected Option C (Layered Tool Contract with Dedicated Earth Engine Module) in `docs/DECISION_LOG.md` and `docs/ARCHITECTURE.md`.
+- **Phase 1 Record Created:** Authored `docs/phases/PHASE_01_EARTH_ENGINE_FOUNDATION.md` detailing Before Snapshot, 1A design, and resume status.
+- **Deferred Backlog Refined:** Updated `docs/FUTURE_BACKLOG.md` with decoupled integration areas and satellite enhancements.
+- **Scope Boundary Maintained:** No Earth Engine application code implemented, no dependencies added, no authentication changes made.
+
+### 🟡 Planned Phases
+- **Phase 1 (Earth Engine Foundation):** Local environment setup (1B), connectivity test (1C), geometry definition (1D), Sentinel-2 pipeline (1E), NDVI calculation (1F), regional statistics (1G), and reliability testing (1H).
 - **Phase 2 (Satellite Intelligence):** Copernicus Sentinel-2 MSI surface reflectance querying, cloud masking, and NDVI regional summary statistics (mean, median, min, max).
 - **Phase 3 (Environmental Data Sources):** Pluggable provider architecture for live meteorological forecasts and regional soil databases.
 - **Phase 4 (Data Fusion):** Normalization and fusion of satellite NDVI, weather indicators, and farmer profile context.

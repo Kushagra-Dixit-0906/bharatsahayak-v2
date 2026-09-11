@@ -113,3 +113,56 @@
 - **Interview / Engineering Value:** Embodies user-first engineering principles and empathetic accessibility design for rural demographics.
 - **Deferred Alternatives:** In Phase 0/1 testing, a mock/fallback coordinate resolver will allow test harness simulation while full map UI is built in Phase 9.
 - **Future Upgrade Impact:** Enables future cadastral map overlay, KML/GeoJSON upload, and precise polygon drawing in Phase 9.
+
+---
+
+### DEC-004: Decouple Earth Engine Computation into a Dedicated Module Behind the MCP Capability Interface
+
+- **Decision ID:** `DEC-004`
+- **Date / Context:** Phase 1A Architecture & Integration Design (Earth Engine Integration Planning)
+- **Decision:** Expose the satellite capability through the Model Context Protocol (MCP) tool contract, while delegating all Earth Engine initialization, image querying, cloud masking, band math, and zonal reduction to a dedicated Earth Engine module/service (Option C).
+- **Options Considered:**
+  1. *Option A (Monolithic MCP):* Embed all Earth Engine API initialization, geometry parsing, Sentinel-2 image collection filtering, NDVI math, and reducer logic directly inside `app/mcp_server.py`.
+  2. *Option B (Standalone Satellite Service):* Build a completely independent satellite microservice without any MCP tool bindings, requiring agent orchestration to manage external HTTP endpoints.
+  3. *Option C (Chosen — Layered Tool Contract + Dedicated Engine):* MCP exposes high-level capability tools (e.g. `get_farm_satellite_intelligence`), while a dedicated Earth Engine module performs domain-specific geospatial and Earth Engine computations.
+- **Chosen Option:** Option C — Layered Tool Contract with Dedicated Earth Engine Module.
+- **Architectural Flow:**
+  ```text
+  Farmer-Friendly Location (Search / Pin-drop / GPS)
+          ↓
+  Latitude / Longitude Coordinates
+          ↓
+  MCP Capability Interface (Tool Contract / Parameter Validation)
+          ↓
+  Dedicated Earth Engine Module / Service
+          ↓
+  Copernicus Sentinel-2 Collection (Harmonized Level-2A)
+          ↓
+  Cloud Masking (QA60 / SCL Filtering)
+          ↓
+  NDVI Calculation ((B8 - B4) / (B8 + B4))
+          ↓
+  Regional Statistics Reducer (Mean, Median, Min, Max)
+          ↓
+  Structured JSON Output Envelope
+  ```
+- **Why Chosen:**
+  - **Separation of Responsibilities:** The MCP layer is responsible for defining tool schemas, input validation, execution timing, and communication protocol (stdio/SSE). It should not be cluttered with low-level Earth Engine client details, band indexing, or reducer dictionary parsing.
+  - **Independent Testability:** Earth Engine logic can be thoroughly unit-tested and mocked without running an active MCP stdio sub-process or spinning up an ADK agent runner.
+  - **Preserved Future Pluggability:** Datasets like Dynamic World, NDWI, SoilGrids, and weather feeds can be added into the dedicated data layer without breaking or rewriting the MCP tool signatures.
+  - **Cleaner Technical Story & Interview Value:** Clear separation of concerns between agent communication protocol (MCP), model reasoning (ADK/Gemini), and scientific compute (Earth Engine).
+- **Disadvantages / Trade-offs:**
+  - Introduces an additional module boundary and internal interface contract.
+  - Slightly higher initial file/module scaffolding compared to writing inline functions in `mcp_server.py`.
+- **Complexity:** Moderate.
+- **Reliability / Data-Quality Implications:** High; isolating Earth Engine logic enables dedicated retry handlers, client caching, and mockable unit tests for edge cases (zero pixels, heavy cloud cover, out-of-bounds coordinates).
+- **Cost / Quota Implications:** Low; Earth Engine compute is isolated to lean statistical reductions executed only when the tool is invoked.
+- **Hackathon Value:** Demonstrates production-grade multi-agent software engineering rather than hacky script concatenation.
+- **Interview / Engineering Value:** Highlights deep understanding of clean architecture, interface isolation, and test-driven design in AI-agent ecosystems.
+- **Deferred Alternatives & Features:**
+  - NDVI time-series trends (deferred to Phase 2+).
+  - Historical baseline & anomaly detection (deferred to Backlog).
+  - Dynamic World LULC, NDWI, and other spectral indices (deferred to Phase 3).
+  - Soil & meteorological multi-source data fusion (deferred to Phase 4).
+- **Future Upgrade Impact:** When adding future satellite datasets (e.g. Dynamic World in Phase 3), new methods can be added to the dedicated Earth Engine service without altering the agent-facing MCP contract.
+

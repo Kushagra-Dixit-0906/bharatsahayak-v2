@@ -9,17 +9,23 @@
 
 To maintain laser focus on building a robust, grounded, and verified MVP for BharatSahayak V2, complex or non-critical features have been deliberately scoped into subsequent phases or post-MVP exploration. This backlog defines each item, why it was deferred, its dependencies, and how to maintain decoupled architectural boundaries.
 
+> [!NOTE]
+> **Earth Engine Integration State:**
+> - **Current State:** The Earth Engine integration architecture has been designed (`DEC-004`), but **no application integration has yet been implemented**.
+> - **Future Implementation:** A dedicated Earth Engine module/service will be constructed behind the MCP capability interface (Option C).
+> - **Likely Future Areas Affected:** `app/` directory (geospatial/satellite logic), MCP implementation (`mcp_server.py`), `tests/` (unit and integration tests), and project configuration/dependency files (`pyproject.toml`).
+
 ---
 
 ## 🛰️ 1. Satellite & Remote Sensing Backlog
 
-| Backlog Item | Status | Priority | Reason Deferred | Dependencies | Likely Files / Modules Affected | Architectural Decoupling Rule |
+| Backlog Item | Status | Priority | Reason Deferred | Dependencies | Likely Future Areas Affected | Architectural Decoupling Rule |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| **NDVI Multi-Temporal Time Series** | 🟡 PLANNED (Phase 2+) | Medium | Avoids heavy temporal aggregation latency during real-time chat turns (`DEC-002`). | Phase 1 (EE foundation) | `app/satellite/ndvi.py`, `app/mcp_server.py` | Must return optional time-series array without changing core statistical response keys (`mean`, `max`, etc.). |
-| **Historical NDVI Baselines & Anomaly Detection** | 🔴 IDEA | Medium | Requires 3+ years of seasonal imagery alignment and z-score anomaly modeling. | NDVI time series | `app/satellite/analytics.py`, `app/agent.py` | Anomaly flags must be passed as supplementary metadata, not hard requirements for agent advice. |
-| **Dynamic World Land Cover (LULC)** | 🟡 PLANNED (Phase 3) | Medium | Sentinel-2 NDVI chosen as primary vegetation metric (`DEC-001`). | Phase 1 | `app/satellite/dynamic_world.py` | Implement as a pluggable `LulcProvider`; do not tightly couple crop recommendation to LULC classification. |
-| **NDWI (Water / Moisture Index)** | 🟡 PLANNED (Phase 3) | High | Focused first on vegetation greenness index before expanding spectral band math. | Phase 1 | `app/satellite/indices.py` | Compute as a companion index to NDVI; share same geometry and cloud mask pipeline. |
-| **Additional Indicators (EVI, SAVI, NDRE)** | 🔴 IDEA | Low | Standard NDVI is universally understood and sufficient for smallholder MVP. | Phase 2 | `app/satellite/indices.py` | Keep index calculation functions modular and independent. |
+| **NDVI Multi-Temporal Time Series** | 🟡 PLANNED (Phase 2+) | Medium | Avoids heavy temporal aggregation latency during real-time chat turns (`DEC-002`). | Phase 1 (EE foundation) | `app/` satellite modules, MCP implementation | Must return optional time-series array without changing core statistical response keys (`mean`, `max`, etc.). |
+| **Historical NDVI Baselines & Anomaly Detection** | 🔴 IDEA | Medium | Requires 3+ years of seasonal imagery alignment and z-score anomaly modeling. | NDVI time series | `app/` analytics modules, `app/agent.py` | Anomaly flags must be passed as supplementary metadata, not hard requirements for agent advice. |
+| **Dynamic World Land Cover (LULC)** | 🟡 PLANNED (Phase 3) | Medium | Sentinel-2 NDVI chosen as primary vegetation metric (`DEC-001`). | Phase 1 | `app/` satellite modules, MCP implementation | Implement as a pluggable `LulcProvider`; do not tightly couple crop recommendation to LULC classification. |
+| **NDWI (Water / Moisture Index)** | 🟡 PLANNED (Phase 3) | High | Focused first on vegetation greenness index before expanding spectral band math. | Phase 1 | `app/` satellite modules, MCP implementation | Compute as a companion index to NDVI; share same geometry and cloud mask pipeline. |
+| **Additional Indicators (EVI, SAVI, NDRE)** | 🔴 IDEA | Low | Standard NDVI is universally understood and sufficient for smallholder MVP. | Phase 2 | `app/` satellite modules | Keep index calculation functions modular and independent. |
 
 ---
 
