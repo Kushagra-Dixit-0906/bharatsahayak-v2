@@ -166,3 +166,60 @@
   - Soil & meteorological multi-source data fusion (deferred to Phase 4).
 - **Future Upgrade Impact:** When adding future satellite datasets (e.g. Dynamic World in Phase 3), new methods can be added to the dedicated Earth Engine service without altering the agent-facing MCP contract.
 
+---
+
+### DEC-005: Earth Engine Python API Dependency Management via uv Workflow
+
+- **Decision ID:** `DEC-005`
+- **Date / Context:** Phase 1B Local Earth Engine Environment, after completion of Subphase 1B.1 Environment Inspection
+- **Decision:** Manage and install the official Google Earth Engine Python client library (`earthengine-api`) using the project's standard `uv` package management workflow via `uv add earthengine-api`.
+
+- **Current Environment Findings:**
+  - Package Manager: `uv` v0.11.26
+  - Active Python Runtime: Python 3.13.14
+  - Core ADK Runtime: `google-adk` v2.2.0
+  - Earth Engine API: Not installed
+  - Git Working Tree: Clean at time of inspection
+  - Project Python Version Constraint: `>=3.11,<3.14`
+  - Existing Dependency Manifests: `pyproject.toml` and `uv.lock`
+
+- **Options Considered:**
+  1. **Option A - Ad-hoc pip install:** Run `pip install earthengine-api` directly in the environment.
+  2. **Option B - Manual manifest editing:** Manually add `earthengine-api` to `pyproject.toml` and run `uv sync`.
+  3. **Option C - Chosen - Canonical uv workflow:** Run `uv add earthengine-api` so the project dependency declaration and lockfile are resolved together.
+
+- **Chosen Option:** Option C - `uv add earthengine-api`
+
+- **Why Chosen:**
+  - **Reproducibility:** Keeps `pyproject.toml` and `uv.lock` synchronized.
+  - **Dependency Resolution:** Lets `uv` resolve compatibility with the project's Python version and existing dependencies.
+  - **Consistent Toolchain:** Preserves the dependency-management workflow already used by BharatSahayak V2.
+  - **Developer Experience:** Avoids manual lockfile maintenance.
+  - **Deployment:** Provides a reproducible dependency graph for later cloud deployment.
+
+- **Trade-offs:**
+  - Developers need to use `uv` rather than raw `pip`.
+  - The lockfile must be updated whenever dependencies change.
+  - Dependency resolution may expose conflicts that require investigation before implementation can continue.
+
+- **Cost / Quota Implications:**
+  - Adding the Python client library itself does not consume Earth Engine computation quota.
+  - Earth Engine computation quota becomes relevant when the application actually executes Earth Engine operations in later subphases.
+
+- **Hackathon Value:**
+  - Keeps the prototype reproducible and easier to demonstrate on another environment.
+  - Establishes a clean foundation for the planned Earth Engine integration.
+
+- **Interview / Engineering Value:**
+  - Demonstrates deliberate dependency management.
+  - Demonstrates reproducible environment management.
+  - Demonstrates separation between local setup and application implementation.
+
+- **Future Upgrade Impact:**
+  - Establishes `uv` as the standard mechanism for adding future environmental or geospatial dependencies when they are actually required.
+  - Future packages must be evaluated for compatibility before being added.
+  - Earth Engine authentication and application integration remain separate future steps.
+
+- **Implementation Status:** This decision is documented, but `earthengine-api` has NOT yet been installed.
+
+
