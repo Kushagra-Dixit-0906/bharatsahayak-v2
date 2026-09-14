@@ -7,12 +7,22 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 1: Earth Engine Foundation (Subphase 1A)
-- **Phase 1 Sub-Roadmap Established:** Defined detailed 1A–1K subphases in `docs/MASTER_ROADMAP.md` covering local environment, connectivity test, geometry definition, Sentinel-2 pipeline, NDVI calculation, regional statistics, reliability, boundary verification, and documentation.
-- **Earth Engine Integration Boundary Documented (`DEC-004`):** Selected Option C (Layered Tool Contract with Dedicated Earth Engine Module) in `docs/DECISION_LOG.md` and `docs/ARCHITECTURE.md`.
-- **Phase 1 Record Created:** Authored `docs/phases/PHASE_01_EARTH_ENGINE_FOUNDATION.md` detailing Before Snapshot, 1A design, and resume status.
-- **Deferred Backlog Refined:** Updated `docs/FUTURE_BACKLOG.md` with decoupled integration areas and satellite enhancements.
-- **Scope Boundary Maintained:** No Earth Engine application code implemented, no dependencies added, no authentication changes made.
+### 🟡 In Progress — Phase 1: Earth Engine Foundation (Subphase 1B Active, 1A Complete)
+- **Phase 1A Architecture & Integration Design (🟢 COMPLETE):**
+  - Selected and documented Option C (Layered Tool Contract with Dedicated Earth Engine Module) as `DEC-004` in `docs/DECISION_LOG.md` and `docs/ARCHITECTURE.md`.
+  - Defined detailed 1A–1K sub-roadmap in `docs/MASTER_ROADMAP.md` and `docs/phases/PHASE_01_EARTH_ENGINE_FOUNDATION.md`.
+- **Phase 1B Local Environment & Verification (1B.1–1B.8 🟢 COMPLETE, 1B.9 🟡 IN PROGRESS):**
+  - **1B.1 Local Environment Inspection:** Inspected environment (`uv` 0.11.26, Python 3.13.14, `google-adk` 2.2.0, project constraint `>=3.11,<3.14`). Verified Earth Engine API was initially not installed.
+  - **1B.2 Dependency Management Decision:** Recorded `DEC-005` selecting canonical `uv add earthengine-api` workflow for manifest/lockfile synchronization, reproducible resolution, and consistent project toolchain.
+  - **1B.3 Add Earth Engine API:** Installed `earthengine-api` 1.7.43, updating `pyproject.toml` and `uv.lock`. Successfully verified local Python import (`import ee`).
+  - **1B.4 Lockfile Verification:** Resolved dependency graph and confirmed clean `git diff --check` (Windows CRLF line-ending warnings only).
+  - **1B.5 Authentication:** Completed interactive local Earth Engine developer authentication workflow (`DEC-006`) without recording or exposing any credentials, tokens, or credential contents.
+  - **1B.6 Initialization:** Successfully initialized Earth Engine with project `bharatsahayak-v2` (`ee.Initialize(project='bharatsahayak-v2')`) and verified minimal query (`ee.Number(1).getInfo() -> 1`).
+  - **1B.7 Sentinel-2 Connectivity & Query Bounding:** Executed bounded catalog test query on `COPERNICUS/S2_SR_HARMONIZED` using representative farmland test fixture near Ludhiana, Punjab (coordinate `[75.7196, 30.9157]`, Aug 2026, clouds < 20%) returning 1 image. Documented crucial engineering lesson: For BharatSahayak operational queries, apply spatial and temporal bounds before expensive Earth Engine evaluation wherever possible, reducing unnecessary server-side computation and quota usage.
+  - **1B.8 Credential Safety Check:** Verified clean `git status`, `.gitignore` coverage (`.env`, `.venv`, `.adk`, `*.env`), zero repository credential files outside `.venv`, and zero tracked secrets via `git ls-files`.
+  - **1B.9 Documentation:** In progress across project changelog, roadmap, and phase records.
+  - **1B.10 Git Checkpoint:** Next scheduled milestone.
+- **Strict Scope Boundaries Maintained:** No application code inside `app/` written yet; no NDVI calculation pipeline or production Earth Engine module implemented.
 
 ### 🟡 Planned Phases
 - **Phase 1 (Earth Engine Foundation):** Local environment setup (1B), connectivity test (1C), geometry definition (1D), Sentinel-2 pipeline (1E), NDVI calculation (1F), regional statistics (1G), and reliability testing (1H).

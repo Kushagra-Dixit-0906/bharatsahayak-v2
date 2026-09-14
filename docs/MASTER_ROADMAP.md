@@ -1,7 +1,7 @@
 # BharatSahayak V2 — Master Project Roadmap
 
 > **Master roadmap and progressive implementation plan for BharatSahayak V2.**  
-> *Last Updated: Phase 0 Foundation*  
+> *Last Updated: Phase 1B Local Environment & Verification*  
 > *Baseline Branch: `bharatsahayak-v2` | Commit: `e0fcc29` | GCP Project ID: `bharatsahayak-v2`*
 
 ---
@@ -54,22 +54,23 @@ graph TD
 - **Status:** 🟡 **IN PROGRESS**
 - **Purpose:** Establish the technical foundation for using Google Earth Engine to extract the first satellite-derived agricultural signal (Sentinel-2 + NDVI regional statistics).
 - **Sub-Roadmap:**
-  - **1A — Earth Engine Architecture & Integration Design (🟡 IN PROGRESS / Active):**
-    - Understand Earth Engine's role in the multi-agent system.
-    - Understand authentication model (service account vs developer ADC).
-    - Understand project/quota model for GCP project `bharatsahayak-v2`.
-    - Compare integration boundaries (Options A, B, C) and select decoupled module architecture (`DEC-004`).
-    - Record architectural decisions and boundary specifications.
-  - **1B — Local Earth Engine Environment (🟡 PLANNED):**
-    - Add `earthengine-api` dependency to project management.
-    - Configure local developer environment.
-    - Authenticate developer environment against Earth Engine API.
-    - Verify GCP project association (`bharatsahayak-v2`).
+  - **1A — Earth Engine Architecture & Integration Design (🟢 COMPLETE):**
+    - Understood Earth Engine role, auth models, and quota limits for `bharatsahayak-v2`.
+    - Selected Option C (Layered Tool Contract with Dedicated Earth Engine Module) as `DEC-004`.
+    - Documented architectural integration boundaries and specifications.
+  - **1B — Local Earth Engine Environment & Verification (🟡 IN PROGRESS / 1B.1–1B.8 Complete, 1B.9 In Progress, 1B.10 Next):**
+    - **1B.1 Local Environment Inspection (🟢 COMPLETE):** Verified `uv` 0.11.26, Python 3.13.14, `google-adk` 2.2.0, project constraint `>=3.11,<3.14`, initial absence of EE API.
+    - **1B.2 Dependency Management Decision (🟢 COMPLETE):** Recorded `DEC-005` establishing `uv add earthengine-api` for reproducible manifest/lockfile synchronization.
+    - **1B.3 Add Earth Engine API (🟢 COMPLETE):** Installed `earthengine-api` 1.7.43, updated `pyproject.toml` and `uv.lock`, verified local import `import ee`.
+    - **1B.4 Lockfile Verification (🟢 COMPLETE):** Resolved full dependency graph, confirmed clean diff check (Windows CRLF line-ending warnings only).
+    - **1B.5 Authentication (🟢 COMPLETE):** Completed interactive developer authentication workflow (`DEC-006`) without exposing credentials.
+    - **1B.6 Initialization (🟢 COMPLETE):** Successfully initialized `ee.Initialize(project='bharatsahayak-v2')` and verified `ee.Number(1).getInfo() -> 1`.
+    - **1B.7 Sentinel-2 Connectivity & Query Bounding (🟢 COMPLETE):** Verified `COPERNICUS/S2_SR_HARMONIZED` catalog access with representative farmland fixture near Ludhiana, Punjab (`[75.7196, 30.9157]`, Aug 2026, clouds < 20% -> 1 image). Documented engineering lesson: For BharatSahayak operational queries, apply spatial and temporal bounds before expensive Earth Engine evaluation wherever possible, reducing unnecessary server-side computation and quota usage.
+    - **1B.8 Credential Safety Check (🟢 COMPLETE):** Verified `.gitignore` coverage, clean working tree, zero untracked secrets, and zero tracked credentials via `git ls-files`.
+    - **1B.9 Documentation (🟡 IN PROGRESS):** Recording Phase 1B execution facts in phase document, changelog, and roadmap.
+    - **1B.10 Git Checkpoint (🟡 NEXT):** Commit verified Phase 1B documentation state.
   - **1C — Earth Engine Connectivity Test (🟡 PLANNED):**
-    - Initialize Earth Engine client.
-    - Run minimal API query to verify connectivity.
-    - Verify Copernicus Sentinel-2 MSI collection availability.
-    - Verify Earth Engine result deserialization and error handling.
+    - Connectivity prerequisites were validated during 1B.6/1B.7, but dedicated 1C error-handling/deserialization verification remains pending.
   - **1D — Geographic Region Definition (🟡 PLANNED):**
     - Decide point $\rightarrow$ analysis region strategy (bounding box vs point buffer).
     - Define initial farm/region geometry helpers.
