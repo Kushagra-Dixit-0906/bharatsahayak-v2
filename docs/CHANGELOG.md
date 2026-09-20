@@ -7,11 +7,11 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 1: Earth Engine Foundation (Subphase 1B Active, 1A Complete)
+### 🟡 In Progress — Phase 1: Earth Engine Foundation (Subphase 1C Active, 1A & 1B Complete)
 - **Phase 1A Architecture & Integration Design (🟢 COMPLETE):**
   - Selected and documented Option C (Layered Tool Contract with Dedicated Earth Engine Module) as `DEC-004` in `docs/DECISION_LOG.md` and `docs/ARCHITECTURE.md`.
   - Defined detailed 1A–1K sub-roadmap in `docs/MASTER_ROADMAP.md` and `docs/phases/PHASE_01_EARTH_ENGINE_FOUNDATION.md`.
-- **Phase 1B Local Environment & Verification (1B.1–1B.8 🟢 COMPLETE, 1B.9 🟡 IN PROGRESS):**
+- **Phase 1B Local Environment & Verification (1B.1–1B.10 🟢 COMPLETE):**
   - **1B.1 Local Environment Inspection:** Inspected environment (`uv` 0.11.26, Python 3.13.14, `google-adk` 2.2.0, project constraint `>=3.11,<3.14`). Verified Earth Engine API was initially not installed.
   - **1B.2 Dependency Management Decision:** Recorded `DEC-005` selecting canonical `uv add earthengine-api` workflow for manifest/lockfile synchronization, reproducible resolution, and consistent project toolchain.
   - **1B.3 Add Earth Engine API:** Installed `earthengine-api` 1.7.43, updating `pyproject.toml` and `uv.lock`. Successfully verified local Python import (`import ee`).
@@ -20,9 +20,19 @@
   - **1B.6 Initialization:** Successfully initialized Earth Engine with project `bharatsahayak-v2` (`ee.Initialize(project='bharatsahayak-v2')`) and verified minimal query (`ee.Number(1).getInfo() -> 1`).
   - **1B.7 Sentinel-2 Connectivity & Query Bounding:** Executed bounded catalog test query on `COPERNICUS/S2_SR_HARMONIZED` using representative farmland test fixture near Ludhiana, Punjab (coordinate `[75.7196, 30.9157]`, Aug 2026, clouds < 20%) returning 1 image. Documented crucial engineering lesson: For BharatSahayak operational queries, apply spatial and temporal bounds before expensive Earth Engine evaluation wherever possible, reducing unnecessary server-side computation and quota usage.
   - **1B.8 Credential Safety Check:** Verified clean `git status`, `.gitignore` coverage (`.env`, `.venv`, `.adk`, `*.env`), zero repository credential files outside `.venv`, and zero tracked secrets via `git ls-files`.
-  - **1B.9 Documentation:** In progress across project changelog, roadmap, and phase records.
-  - **1B.10 Git Checkpoint:** Next scheduled milestone.
-- **Strict Scope Boundaries Maintained:** No application code inside `app/` written yet; no NDVI calculation pipeline or production Earth Engine module implemented.
+  - **1B.9 Documentation:** Recorded verified Phase 1B facts across project changelog, roadmap, and phase records.
+  - **1B.10 Git Checkpoint:** Checkpointed verified Phase 1B baseline.
+- **Phase 1C Earth Engine Connectivity & Result Contract (1C.1–1C.7 🟢 COMPLETE, 1C.8 🟡 IN PROGRESS):**
+  - **1C.1 Minimal Server Calculation:** Verified `ee.Number(42).getInfo() -> 42` against project `bharatsahayak-v2`.
+  - **1C.2 Intentional Failure & Error Mapping:** Queried invalid asset `NON_EXISTENT/INVALID_ASSET_12345`; verified Earth Engine Python SDK translated the underlying API error into `ee.EEException`.
+  - **1C.3 Zero-Data Verification:** Executed valid Sentinel-2 query with pre-deployment dates (`1990-01-01` to `1990-01-02`) returning `image_count=0` without exception, confirming distinct `NO_DATA` operational state.
+  - **1C.4 / 1C.5 Architectural Boundary:** Defined structured result contract separating raw Earth Engine SDK exceptions from application-level contracts (`success`, `no_data`, `error`).
+  - **1C.6 Pydantic Result Contract:** Created `app/satellite/__init__.py` and `app/satellite/types.py` defining `EarthEngineResult` (`status`, `dataset`, `image_count`, `data`, `error`), `EarthEngineError` (`type`, `message`), and `EarthEngineStatus` (`Literal["success", "no_data", "error"]`) with non-negative validation on `image_count`. Created `tests/unit/test_satellite_types.py` (6 unit tests passed).
+  - **1C.7 Live Integration Testing:** Created `tests/integration/test_earth_engine_connectivity.py` validating 3 real Earth Engine behaviors against live APIs (3 integration tests passed, 0 skipped, 6 non-blocking framework warnings).
+  - **1C.8 Documentation & Checkpoint:** Active documentation milestone.
+- **Strict Scope Boundaries Maintained:**
+  - `app/satellite/client.py` does **NOT** exist yet.
+  - Earth Engine production client, MCP tool integration, NDVI band math, regional statistics, Dynamic World, and farmer-facing workflows remain deferred to subsequent phases.
 
 ### 🟡 Planned Phases
 - **Phase 1 (Earth Engine Foundation):** Local environment setup (1B), connectivity test (1C), geometry definition (1D), Sentinel-2 pipeline (1E), NDVI calculation (1F), regional statistics (1G), and reliability testing (1H).
