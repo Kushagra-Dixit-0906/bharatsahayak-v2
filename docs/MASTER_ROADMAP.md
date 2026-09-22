@@ -69,19 +69,19 @@ graph TD
     - **1B.8 Credential Safety Check (🟢 COMPLETE):** Verified `.gitignore` coverage, clean working tree, zero untracked secrets, and zero tracked credentials via `git ls-files`.
     - **1B.9 Documentation (🟢 COMPLETE):** Recorded Phase 1B execution facts in phase document, changelog, and roadmap.
     - **1B.10 Git Checkpoint (🟢 COMPLETE):** Checkpointed verified Phase 1B baseline.
-  - **1C — Earth Engine Connectivity & Result Contract (🟡 IN PROGRESS / 1C.1–1C.7 Complete, 1C.8 Doc Active):**
+  - **1C — Earth Engine Connectivity & Result Contract (🟢 COMPLETE / 1C.1–1C.8 Complete):**
     - **1C.1 Minimal Server Calculation (🟢 COMPLETE):** Verified `ee.Number(42).getInfo() -> 42`.
     - **1C.2 Error Mapping (🟢 COMPLETE):** Verified `ee.EEException` raised on invalid asset request.
     - **1C.3 Zero Data Operational State (🟢 COMPLETE):** Verified historical pre-Sentinel-2 date query returns `image_count=0` cleanly without exceptions.
     - **1C.4 / 1C.5 Architectural Contract (🟢 COMPLETE):** Established clean encapsulation of Earth Engine SDK exceptions behind structured application results (`success`, `no_data`, `error`).
     - **1C.6 Pydantic Result Contract (🟢 COMPLETE):** Created `app/satellite/__init__.py` and `app/satellite/types.py` (`EarthEngineResult`, `EarthEngineError`, `EarthEngineStatus`). Verified with 6 unit tests in `tests/unit/test_satellite_types.py`.
     - **1C.7 Live Integration Tests (🟢 COMPLETE):** Created `tests/integration/test_earth_engine_connectivity.py` with 3 passing live integration tests (0 skipped, 6 non-blocking framework warnings).
-    - **1C.8 Documentation & Checkpoint (🟡 IN PROGRESS):** Recording Phase 1C deliverables and boundaries.
-  - **1D — Geographic Region Definition (🟡 PLANNED):**
-    - Decide point $\rightarrow$ analysis region strategy (bounding box vs point buffer).
-    - Define initial farm/region geometry helpers.
-    - Validate latitude/longitude coordinate bounds (India spatial bounds).
-    - Test region geometry querying against Earth Engine.
+    - **1C.8 Documentation & Checkpoint (🟢 COMPLETE):** Recorded Phase 1C deliverables and verified boundaries.
+  - **1D — Geographic Region Definition (🟡 IN PROGRESS / 1D.1 Complete, 1D.2 Planned):**
+    - **1D.1 Geographic Analysis Region Strategy (`DEC-007` 🟢 COMPLETE):** Adopted decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` strategy with a default 100 m circular buffer for Sentinel-2 regional aggregation. Documented approximate area limitations (never exact cadastral boundary), non-configurable MVP parameter, historical analysis reusability, and future field polygon compatibility.
+    - **1D.2 Coordinate Validation (🟡 PLANNED):** Validate latitude/longitude coordinate bounds (India spatial bounds: approx. Lat 6°N–38°N, Lon 68°E–98°E).
+    - **1D.3 Geometry Helpers & Buffer Construction (🟡 PLANNED):** Define geometric data models and helper functions to construct Earth Engine `ee.Geometry.Point` and `buffer(100)` instances.
+    - **1D.4 Live Earth Engine Region Query (🟡 PLANNED):** Test bounded region queries against Earth Engine with validation and error handling.
   - **1E — Sentinel-2 Data Pipeline (🟡 PLANNED):**
     - Select Copernicus Sentinel-2 Level-2A (Surface Reflectance) collection.
     - Implement spatial location filtering.

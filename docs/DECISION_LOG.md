@@ -215,11 +215,106 @@
   - Demonstrates reproducible environment management.
   - Demonstrates separation between local setup and application implementation.
 
+- **Implementation Status:** 🟢 COMPLETE (Installed in Phase 1B)
+
+---
+
+### DEC-006: Local Earth Engine Developer Authentication Workflow
+
+- **Decision ID:** `DEC-006`
+- **Date / Context:** Phase 1B Local Earth Engine Environment (Subphase 1B.5 Developer Authentication)
+- **Decision:** Use interactive Earth Engine authentication (`earthengine authenticate` / ADC workflow) for local BharatSahayak V2 development and verification.
+
+- **Options Considered:**
+  1. **Option A (Chosen):** Interactive local authentication through developer's Google Cloud ADC account.
+  2. **Option B:** Service account key JSON file stored locally.
+  3. **Option C:** Static mocked credentials without real Earth Engine evaluation.
+
+- **Why Chosen:**
+  - **Simplicity:** Appropriate for local development without introducing unnecessary service account keys or IAM complexity prematurely.
+  - **Security:** Zero credential files or secrets stored inside the source repository.
+  - **Compatibility:** Works seamlessly with `ee.Initialize(project='bharatsahayak-v2')`.
+
+- **Security Rule:**
+  - No passwords, access tokens, refresh tokens, or credential files are ever committed to Git or embedded in application code.
+
+- **Trade-offs:**
+  - Requires interactive web browser login for the local developer session.
+  - Dedicated production service account authentication will be evaluated in Phase 10 for Cloud Run / Vertex AI deployment.
+
 - **Future Upgrade Impact:**
-  - Establishes `uv` as the standard mechanism for adding future environmental or geospatial dependencies when they are actually required.
-  - Future packages must be evaluated for compatibility before being added.
-  - Earth Engine authentication and application integration remain separate future steps.
+  - When moving to Google Cloud deployment in Phase 10, production service account authentication and Workload Identity will be evaluated.
 
-- **Implementation Status:** This decision is documented, but `earthengine-api` has NOT yet been installed.
+- **Implementation Status:** 🟢 COMPLETE (Executed and verified in Phase 1B.5)
 
+---
 
+### DEC-007: Geographic Analysis Region Strategy
+
+- **Decision ID:** `DEC-007`
+- **Date / Context:** Phase 1D Geographic Region Definition (Subphase 1D.1 Conceptual Analysis & Strategy Selection)
+
+#### 📸 Before Snapshot
+Prior to DEC-007, Phase 1 established live Earth Engine client initialization (`DEC-005`, `DEC-006`) and application-level result contracts (`Phase 1C`, `EarthEngineResult`). However, the transformation from a human-selected farm location to an Earth Engine spatial geometry remained undefined. The system lacked an explicit abstraction separating user-facing location inputs from backend satellite analysis geometries.
+
+#### 📜 Decision
+Adopt a decoupled two-stage geographic modeling strategy separating **`FarmerLocation`** (user input) from **`AnalysisRegion`** (satellite compute geometry) resolved via an intermediate **Region Resolution** abstraction:
+
+```text
+FarmerLocation (Point: Latitude, Longitude)
+        ↓
+Region Resolution (Resolver / Buffer Engine)
+        ↓
+AnalysisRegion (Geometry: Circular Buffer / Future Polygon)
+```
+
+1. **Farmer-Facing Location Input:**
+   - The farmer specifies location via:
+     - Browser/Device GPS ("Use My Current Location"), OR
+     - Searching a village / panchayat / area on a map, OR
+     - Interactively tapping / dropping a pin on a map.
+   - **Strict Negative Constraints:**
+     - Do **NOT** require the farmer to manually enter latitude and longitude coordinates in decimal degrees or DMS.
+     - Do **NOT** require the farmer to draw a field boundary polygon in the MVP.
+2. **Location Storage:**
+   - Store the original farmer-selected location simply as:
+     - `latitude` (float)
+     - `longitude` (float)
+3. **Initial Analysis Region Strategy:**
+   - Automatically convert the selected point into a **circular analysis region**.
+   - **Default Radius:** Fixed at **100 meters** (approx. 3.14 hectares / ~7.7 acres area).
+   - This radius is an engineering choice for MVP satellite processing, **not** a claim that 100 m represents the farmer's exact farm boundary.
+4. **Internal Non-Configurability:**
+   - The 100 m radius is an internal system constant / default and must **NOT** be exposed to the farmer as a technical or user-configurable setting in the MVP.
+5. **Decoupled Architectural Abstraction:**
+   - `FarmerLocation` and `AnalysisRegion` are maintained as distinct concepts and data structures.
+   - The `Region Resolution` layer is designed so future resolvers can swap or extend the region generator (e.g., 100 m buffer, cadastral boundary lookup, or user-drawn polygon) without altering the downstream satellite processing pipeline.
+6. **Reusability for Historical & Multi-Temporal Analysis:**
+   - The generated `AnalysisRegion` geometry must be deterministic and reusable across both current and historical satellite observations. This ensures that when multi-temporal analysis is introduced, historical trends and delta comparisons are evaluated over the exact same geographic footprint.
+
+#### 💡 Rationale (Why Chosen)
+- **Minimizes Farmer UX Complexity:** Rural Indian farmers can easily identify their village or drop a pin on their field, but forcing polygon boundary drawing on mobile screens creates severe friction, gesture errors, and drop-off.
+- **Eliminates Geospatial Jargon:** Farmers are never exposed to bounding boxes, coordinate reference systems (CRS/EPSG), or polygon topology rules.
+- **Sufficient Spatial Sample for Sentinel-2:** Sentinel-2 Level-2A surface reflectance has a 10m spatial resolution per pixel. A 100 m circular buffer provides an area of $\pi \times 100^2 \approx 31,416\text{ m}^2$, covering approximately 300+ raw 10m pixels, providing a bounded multi-pixel sample for regional satellite statistics rather than relying on a single pixel, while keeping the analysis region computationally manageable.
+- **Preserves Future Precision without Redesign:** Decoupling `FarmerLocation` from `AnalysisRegion` ensures that when precise field polygon drawing is added in Phase 9, the satellite ingestion and zonal reducer modules require zero architectural rework.
+
+#### ⚖️ Trade-offs
+- **Fixed Radius vs. Actual Acreage:** A 100 m buffer represents a standard local spatial envelope; it does not automatically scale to match a farmer's stated acreage (e.g. 0.5 acre vs. 10 acres) in the initial MVP.
+- **Boundary Inexactness:** A circle generated around a pin drop may sample land beyond the farmer's specific parcel boundary.
+- **Two-Stage Data Modeling:** Requires maintaining distinct types and resolution steps (`FarmerLocation` -> `AnalysisRegion`) rather than passing raw coordinates directly to Earth Engine reducers.
+
+#### ⚠️ Limitations
+- **Approximate Local Area Only:** The 100 m circular buffer is strictly an approximate local satellite observation area.
+- **Mixed Land Cover Elements:** The analysis circle may encompass neighboring plots, field bunds, farm roads, irrigation channels, adjacent trees, or rural structures.
+- **Never an Exact Cadastral Boundary:** The analysis region must **NEVER** be described, labelled, or presented to the farmer as their exact legal, cadastral, or revenue parcel boundary.
+
+#### 🔮 Future Upgrade Impact
+- **Phase 9 Field Polygon Drawing:** Seamlessly introduce interactive polygon drawing tools or KML/GeoJSON boundary uploads in the frontend. The region resolver will simply emit a polygon-based `AnalysisRegion` into the unchanged satellite pipeline.
+- **Cadastral & Land Record Integration:** In future phases, state land registry records (e.g., Bhulekh / Bhoomi) can be resolved to official plot boundaries via the same `Region Resolution` interface.
+- **Adaptive Acreage-Scaled Buffering:** The resolver can optionally compute radius as a function of reported farm acreage ($r = \sqrt{\frac{\text{acres} \times 4046.86}{\pi}}$) if requested in future backlog enhancements.
+- **Multi-Temporal Trend Comparison:** Consistent `AnalysisRegion` definitions allow multi-year NDVI trend comparisons across an identical spatial mask.
+
+#### 📊 Current Status & Next Steps
+- **Status:** 🟢 **DECISION RECORDED (Subphase 1D.1 Complete)**
+- **Strict Scope Boundary:** DEC-007 is a **region-definition decision only**. It does **NOT** mean that Sentinel-2 NDVI calculation, historical analysis, weather data fusion, crop disease prediction, Gemini reasoning, or MCP tool integration are implemented.
+- **Next Step (Subphase 1D.2):** Define coordinate boundary validation (India geographic bounding box) and geometric helper specifications in `app/satellite/` without premature code implementation.

@@ -7,7 +7,7 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 1: Earth Engine Foundation (Subphase 1C Active, 1A & 1B Complete)
+### 🟡 In Progress — Phase 1: Earth Engine Foundation (Subphase 1D Active, 1A, 1B, 1C Complete)
 - **Phase 1A Architecture & Integration Design (🟢 COMPLETE):**
   - Selected and documented Option C (Layered Tool Contract with Dedicated Earth Engine Module) as `DEC-004` in `docs/DECISION_LOG.md` and `docs/ARCHITECTURE.md`.
   - Defined detailed 1A–1K sub-roadmap in `docs/MASTER_ROADMAP.md` and `docs/phases/PHASE_01_EARTH_ENGINE_FOUNDATION.md`.
@@ -22,14 +22,16 @@
   - **1B.8 Credential Safety Check:** Verified clean `git status`, `.gitignore` coverage (`.env`, `.venv`, `.adk`, `*.env`), zero repository credential files outside `.venv`, and zero tracked secrets via `git ls-files`.
   - **1B.9 Documentation:** Recorded verified Phase 1B facts across project changelog, roadmap, and phase records.
   - **1B.10 Git Checkpoint:** Checkpointed verified Phase 1B baseline.
-- **Phase 1C Earth Engine Connectivity & Result Contract (1C.1–1C.7 🟢 COMPLETE, 1C.8 🟡 IN PROGRESS):**
+- **Phase 1C Earth Engine Connectivity & Result Contract (1C.1–1C.8 🟢 COMPLETE):**
   - **1C.1 Minimal Server Calculation:** Verified `ee.Number(42).getInfo() -> 42` against project `bharatsahayak-v2`.
   - **1C.2 Intentional Failure & Error Mapping:** Queried invalid asset `NON_EXISTENT/INVALID_ASSET_12345`; verified Earth Engine Python SDK translated the underlying API error into `ee.EEException`.
   - **1C.3 Zero-Data Verification:** Executed valid Sentinel-2 query with pre-deployment dates (`1990-01-01` to `1990-01-02`) returning `image_count=0` without exception, confirming distinct `NO_DATA` operational state.
   - **1C.4 / 1C.5 Architectural Boundary:** Defined structured result contract separating raw Earth Engine SDK exceptions from application-level contracts (`success`, `no_data`, `error`).
   - **1C.6 Pydantic Result Contract:** Created `app/satellite/__init__.py` and `app/satellite/types.py` defining `EarthEngineResult` (`status`, `dataset`, `image_count`, `data`, `error`), `EarthEngineError` (`type`, `message`), and `EarthEngineStatus` (`Literal["success", "no_data", "error"]`) with non-negative validation on `image_count`. Created `tests/unit/test_satellite_types.py` (6 unit tests passed).
   - **1C.7 Live Integration Testing:** Created `tests/integration/test_earth_engine_connectivity.py` validating 3 real Earth Engine behaviors against live APIs (3 integration tests passed, 0 skipped, 6 non-blocking framework warnings).
-  - **1C.8 Documentation & Checkpoint:** Active documentation milestone.
+  - **1C.8 Documentation & Checkpoint:** Recorded Phase 1C verification facts across project documentation.
+- **Phase 1D Geographic Region Definition (Subphase 1D.1 🟢 COMPLETE, 1D.2–1D.4 🟡 PLANNED):**
+  - **1D.1 Geographic Analysis Region Strategy (`DEC-007`):** Formulated and documented `DEC-007` in `docs/DECISION_LOG.md`, establishing the decoupled two-stage geographic modeling strategy: `FarmerLocation` (stored as `latitude`, `longitude` via GPS, search, or map-tap without requiring manual coordinate typing or polygon drawing) $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` (circular buffer with default 100 m radius for Sentinel-2 regional aggregation). Documented approximate area limitations (never exact cadastral boundary), internal non-configurability in MVP, reusability for multi-temporal historical analysis, and forward compatibility with future precise field polygon drawing (Phase 9).
 - **Strict Scope Boundaries Maintained:**
   - `app/satellite/client.py` does **NOT** exist yet.
   - Earth Engine production client, MCP tool integration, NDVI band math, regional statistics, Dynamic World, and farmer-facing workflows remain deferred to subsequent phases.
