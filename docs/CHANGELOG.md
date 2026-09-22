@@ -7,7 +7,7 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 1: Earth Engine Foundation (Subphase 1D Active, 1A, 1B, 1C Complete)
+### 🟡 In Progress — Phase 1: Earth Engine Foundation (Subphases 1A, 1B, 1C, 1D Complete; 1E Next)
 - **Phase 1A Architecture & Integration Design (🟢 COMPLETE):**
   - Selected and documented Option C (Layered Tool Contract with Dedicated Earth Engine Module) as `DEC-004` in `docs/DECISION_LOG.md` and `docs/ARCHITECTURE.md`.
   - Defined detailed 1A–1K sub-roadmap in `docs/MASTER_ROADMAP.md` and `docs/phases/PHASE_01_EARTH_ENGINE_FOUNDATION.md`.
@@ -30,12 +30,13 @@
   - **1C.6 Pydantic Result Contract:** Created `app/satellite/__init__.py` and `app/satellite/types.py` defining `EarthEngineResult` (`status`, `dataset`, `image_count`, `data`, `error`), `EarthEngineError` (`type`, `message`), and `EarthEngineStatus` (`Literal["success", "no_data", "error"]`) with non-negative validation on `image_count`. Created `tests/unit/test_satellite_types.py` (6 unit tests passed).
   - **1C.7 Live Integration Testing:** Created `tests/integration/test_earth_engine_connectivity.py` validating 3 real Earth Engine behaviors against live APIs (3 integration tests passed, 0 skipped, 6 non-blocking framework warnings).
   - **1C.8 Documentation & Checkpoint:** Recorded Phase 1C verification facts across project documentation.
-- **Phase 1D Geographic Region Definition (Subphases 1D.1 & 1D.2 🟢 COMPLETE, 1D.3 🟡 PLANNED):**
+- **Phase 1D Geographic Region Definition (Subphases 1D.1–1D.3 🟢 COMPLETE):**
   - **1D.1 Geographic Analysis Region Strategy (`DEC-007`):** Formulated and documented `DEC-007` in `docs/DECISION_LOG.md`, establishing the decoupled two-stage geographic modeling strategy: `FarmerLocation` (stored as `latitude`, `longitude` via GPS, search, or map-tap without requiring manual coordinate typing or polygon drawing) $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` (circular buffer with default 100 m radius for Sentinel-2 regional aggregation). Documented approximate area limitations (never exact cadastral boundary), internal non-configurability in MVP, reusability for multi-temporal historical analysis, and forward compatibility with future precise field polygon drawing (Phase 9).
   - **1D.2 Geographic Geometry Helper Implementation & Verification (`DEC-007`):** Created `app/satellite/geometry.py` implementing `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry` with validation for latitude [-90, 90], longitude [-180, 180], radius > 0, and rejection of invalid/non-finite types. Exported `create_analysis_region` and `DEFAULT_ANALYSIS_RADIUS_M` in `app/satellite/__init__.py`. Created and passed 35 unit tests in `tests/unit/test_satellite_geometry.py`. Confirmed client-side geometry proxy instantiation without server-side calls or `.getInfo()`.
+  - **1D.3 Live Earth Engine Region Query & Verification (`DEC-007`):** Verified `create_analysis_region()` in live Earth Engine Sentinel-2 queries in `tests/integration/test_earth_engine_connectivity.py` (Ludhiana fixture `[75.7196, 30.9157]`, 100 m radius; Aug 2026 clouds < 20% returned `image_count=1`; pre-Sentinel-2 dates Jan 1990 returned `image_count=0`). All 5 live integration tests passed. Documented limitations (100 m circular region is an approximate local satellite observation area, not an exact farm boundary, and may sample neighboring plots, roads, trees, water, or structures; polygon/cadastral/adaptive region support remains future work).
 - **Strict Scope Boundaries Maintained:**
   - `app/satellite/client.py` does **NOT** exist yet.
-  - Earth Engine production client, MCP tool integration, NDVI band math, regional statistics, Dynamic World, weather data fusion, crop prediction, and farmer-facing workflows remain deferred to subsequent phases.
+  - Earth Engine production client, Sentinel-2 data pipeline and cloud masking (1E), NDVI band math (1F), regional summary statistics (1G), Dynamic World, weather data fusion, crop health prediction, and farmer-facing UI workflows remain deferred to subsequent phases.
 
 ### 🟡 Planned Phases
 - **Phase 1 (Earth Engine Foundation):** Local environment setup (1B), connectivity test (1C), geometry definition (1D), Sentinel-2 pipeline (1E), NDVI calculation (1F), regional statistics (1G), and reliability testing (1H).

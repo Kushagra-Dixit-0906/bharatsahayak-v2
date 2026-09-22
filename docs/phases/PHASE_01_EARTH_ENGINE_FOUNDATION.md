@@ -1,16 +1,16 @@
 # Phase 1 — Earth Engine Foundation
 
 > **Phase 1 Execution Record, Architectural Integration Design, and Sub-Roadmap.**  
-> *Status: 🟡 IN PROGRESS | Active Subphase: 1D (1D.1 & 1D.2 Complete, 1D.3 Planned)*
+> *Status: 🟡 IN PROGRESS | Active Subphase: 1D Complete (1D.1–1D.3), Next Subphase: 1E*
 
 ---
 
 ## 📌 Resume Status
 
 - **Phase Status:** 🟡 **IN PROGRESS**
-- **Last Completed Substep:** **1D.2 — Geographic Geometry Helper Implementation & Verification** (Subphase 1D: Geographic Region Definition)
-- **Current Active Substep:** **1D.3 — Live Earth Engine Region Query & Checkpoint** (🟡 PLANNED)
-- **Next Action:** Perform bounded live Earth Engine region query verification with real collection bounds and complete Phase 1D checkpoint.
+- **Last Completed Substep:** **1D.3 — Live Earth Engine Region Query Verification & Checkpoint** (Subphase 1D: Geographic Region Definition Complete)
+- **Current Active Substep:** **1E — Sentinel-2 Data Pipeline** (🟡 PLANNED)
+- **Next Action:** Implement Sentinel-2 collection selection, spatial/temporal filtering, QA60/SCL cloud masking, and scene metadata extraction in Subphase 1E.
 - **Verified Fact / Boundary:**
   - **Phase 1B Completed (1B.1–1B.10):** Local environment setup, `earthengine-api` 1.7.43 installed via `uv add` (`DEC-005`), ADC authentication verified (`DEC-006`), project `bharatsahayak-v2` initialized, bounded Sentinel-2 catalog query verified, zero credential leakage audited.
   - **Phase 1C Completed (1C.1–1C.8):**
@@ -21,12 +21,17 @@
     - 6 focused unit tests in `tests/unit/test_satellite_types.py` passed (1C.6).
     - 3 live Earth Engine integration tests in `tests/integration/test_earth_engine_connectivity.py` passed (0 skipped, 6 non-blocking framework warnings) validating success, no_data, and error mappings (1C.7).
     - Phase 1C documentation and checkpoint recorded (1C.8).
-  - **Phase 1D Progress (1D.1 & 1D.2 Complete):**
+  - **Phase 1D Completed (1D.1–1D.3):**
     - **1D.1 Completed:** Formulated and documented `DEC-007: Geographic Analysis Region Strategy` establishing the decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` model with a default 100 m circular buffer for local Sentinel-2 aggregation.
     - **1D.2 Completed:** Created [`app/satellite/geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/geometry.py) implementing `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry` with coordinate and radius validation. Exported in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py). Verified with 35 unit tests in [`tests/unit/test_satellite_geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_geometry.py) and verified non-network client-side geometry proxy instantiation without `.getInfo()` or server-side calls.
+    - **1D.3 Completed:** Verified `create_analysis_region()` in live Earth Engine Sentinel-2 queries in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py). Successful query over Ludhiana test fixture (`[75.7196, 30.9157]`, 100 m radius, Aug 2026, clouds < 20%) returned `image_count=1` mapped to `EarthEngineResult(status="success")`. Pre-Sentinel-2 date query (Jan 1990) returned `image_count=0` mapped to `EarthEngineResult(status="no_data")`. All 5 live integration tests passed.
+  - **Limitations & Future Roadmap:**
+    - The 100 m circular region is an approximate local satellite observation area, **not** an exact farm boundary.
+    - It may include neighboring plots, field bunds, roads, trees, water/irrigation channels, or rural structures.
+    - Polygon/cadastral/adaptive region support remains future work.
   - **Strict Scope Boundaries:**
-    - Earth Engine production client is **NOT** implemented yet.
-    - `app/satellite/client.py` does **NOT** exist yet.
+    - Earth Engine production client is **NOT** implemented yet (`app/satellite/client.py` does **NOT** exist yet).
+    - Sentinel-2 data pipeline & cloud masking (1E) is **NOT** implemented yet.
     - Sentinel-2 NDVI band math is **NOT** implemented yet.
     - Regional NDVI summary statistics are **NOT** implemented yet.
     - Dynamic World LULC is **NOT** implemented yet.
@@ -334,8 +339,33 @@ Establish the architectural strategy and geometric transformations for convertin
   - Farmer-facing UI and interactive map components are **NOT** implemented yet.
   - Field polygon drawing is **NOT** implemented yet.
 
-#### 1D.3 Live Earth Engine Region Query & Checkpoint — 🟡 PLANNED
-- Execute bounded Live Earth Engine test query applying `create_analysis_region` geometry to a real Sentinel-2 collection and record the Phase 1D checkpoint.
+#### 1D.3 Live Earth Engine Region Query Verification & Checkpoint — 🟢 COMPLETE
+- **Live Integration Testing:**
+  - Extended [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) with live region query tests using `create_analysis_region()`.
+  - **Test 4 (`test_earth_engine_region_query_success`):**
+    - Geometry: `create_analysis_region(latitude=30.9157, longitude=75.7196, radius_m=100.0)`
+    - Dataset: `COPERNICUS/S2_SR_HARMONIZED`
+    - Date Filter: `2026-08-01` to `2026-08-31`
+    - Cloud Filter: `CLOUDY_PIXEL_PERCENTAGE < 20`
+    - Spatial Filter: `.filterBounds(region)`
+    - Server Evaluation: Evaluated via `collection.size().getInfo()` against project `bharatsahayak-v2`.
+    - Result: Returned **`image_count = 1`** scene, cleanly mapping to `EarthEngineResult(status="success", dataset="COPERNICUS/S2_SR_HARMONIZED", image_count=1)`.
+  - **Test 5 (`test_earth_engine_region_query_no_data`):**
+    - Geometry: Same 100 m region over Ludhiana test fixture.
+    - Date Filter: Historical pre-Sentinel-2 date range (`1990-01-01` to `1990-01-02`).
+    - Result: Returned **`image_count = 0`** without API exceptions, cleanly mapping to `EarthEngineResult(status="no_data", dataset="COPERNICUS/S2_SR_HARMONIZED", image_count=0)`.
+  - **Test Suite Results:** **5 passed in 19.34s** (`uv run pytest tests/integration/test_earth_engine_connectivity.py`).
+- **Recorded Limitations:**
+  - The 100 m circular region is an approximate local satellite observation area, **not** an exact farm boundary.
+  - It may include neighboring plots, field bunds, farm roads, adjacent trees, water/irrigation channels, or rural structures.
+  - The analysis region must **never** be presented to the farmer as an exact cadastral or legal field boundary.
+  - Support for user-drawn field polygons (Phase 9), official cadastral land record integration (Bhulekh / Bhoomi), and adaptive acreage-scaled buffering remains future work.
+- **Strict Scope Boundaries Maintained:**
+  - Earth Engine production client is **NOT** implemented yet (`app/satellite/client.py` does **NOT** exist yet).
+  - Sentinel-2 data pipeline and cloud masking (1E) is **NOT** implemented yet.
+  - Sentinel-2 NDVI band math is **NOT** implemented yet.
+  - Regional NDVI summary statistics are **NOT** implemented yet.
+  - Crop health prediction, historical trend analysis, Gemini prompt reasoning, MCP tool upgrades, and farmer-facing UI/polygon drawing remain future work.
 
 ---
 
@@ -373,17 +403,11 @@ Establish the architectural strategy and geometric transformations for convertin
   - Verified 6 unit tests in `tests/unit/test_satellite_types.py`.
   - Verified 3 live integration tests in `tests/integration/test_earth_engine_connectivity.py`.
   - Completed Phase 1C documentation checkpoint.
-- ✅ **1D.1 Completed:**
-  - Formulated and documented `DEC-007: Geographic Analysis Region Strategy` in `docs/DECISION_LOG.md`.
-  - Defined decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` model with default 100 m circular buffer.
-  - Documented approximation limitations and future field polygon compatibility.
-- ✅ **1D.2 Completed:**
-  - Implemented `app/satellite/geometry.py` with `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry`.
-  - Validated coordinates and radius bounds with non-finite/invalid input rejection.
-  - Exported `create_analysis_region` and `DEFAULT_ANALYSIS_RADIUS_M` in `app/satellite/__init__.py`.
-  - Verified 35 unit tests in `tests/unit/test_satellite_geometry.py` (35 passed).
-  - Confirmed non-network client-side geometry proxy instantiation without server-side calls.
-- 🟡 **1D.3 Next:** Live Earth Engine region query verification and Phase 1D checkpoint.
+- ✅ **1D Completed (1D.1–1D.3):**
+  - **1D.1 Completed:** Formulated and documented `DEC-007: Geographic Analysis Region Strategy` in `docs/DECISION_LOG.md` (decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` with 100 m default circular buffer).
+  - **1D.2 Completed:** Implemented `app/satellite/geometry.py` with `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry` and coordinate/radius validation. Exported in `app/satellite/__init__.py`. Passed 35 unit tests in `tests/unit/test_satellite_geometry.py`. Verified non-network client-side geometry proxy instantiation without server-side calls.
+  - **1D.3 Completed:** Verified geometry helper with live Earth Engine Sentinel-2 queries in `tests/integration/test_earth_engine_connectivity.py`. Successful query returned `image_count=1`, no-data query returned `image_count=0`. 5 live integration tests passed. Documented approximation limitations and future polygon/cadastral roadmap.
+- 🟡 **1E Next:** Sentinel-2 Data Pipeline (collection selection, spatial/temporal filtering, QA60/SCL cloud masking).
 
 ---
 
@@ -406,4 +430,5 @@ Establish the architectural strategy and geometric transformations for convertin
 - **Subphase 1A (Architecture & Integration Design):** 🟢 **COMPLETE**
 - **Subphase 1B (Local Earth Engine Environment & Verification):** 🟢 **COMPLETE (1B.1–1B.10 Complete)**
 - **Subphase 1C (Earth Engine Connectivity & Result Contract):** 🟢 **COMPLETE (1C.1–1C.8 Complete)**
-- **Subphase 1D (Geographic Region Definition):** 🟡 **IN PROGRESS (1D.1 & 1D.2 Complete, 1D.3 Planned)**
+- **Subphase 1D (Geographic Region Definition):** 🟢 **COMPLETE (1D.1–1D.3 Complete)**
+- **Subphase 1E (Sentinel-2 Data Pipeline):** 🟡 **PLANNED**

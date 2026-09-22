@@ -18,10 +18,14 @@ import os
 import ee
 import pytest
 
+from app.satellite.geometry import create_analysis_region
 from app.satellite.types import EarthEngineError, EarthEngineResult
 
 TEST_POINT = [75.7196, 30.9157]  # [longitude, latitude] near Ludhiana, Punjab
+PUNJAB_LATITUDE = 30.9157
+PUNJAB_LONGITUDE = 75.7196
 TEST_DATASET = "COPERNICUS/S2_SR_HARMONIZED"
+
 
 
 @pytest.fixture(scope="module")
@@ -114,3 +118,62 @@ def test_earth_engine_connectivity_error(ee_session: str) -> None:
     assert len(result.error.message) > 0
     assert result.dataset is None
     assert result.image_count is None
+
+
+def test_earth_engine_region_query_success(ee_session: str) -> None:
+    """Test 4 (REGION SUCCESS): Bounded query using create_analysis_region() returns Sentinel-2 images."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    collection = (
+        ee.ImageCollection(TEST_DATASET)
+        .filterBounds(region)
+        .filterDate("2026-08-01", "2026-08-31")
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 20))
+    )
+
+    image_count = int(collection.size().getInfo())
+    assert image_count > 0, "Expected at least 1 image for the analysis region query"
+
+    result = EarthEngineResult(
+        status="success",
+        dataset=TEST_DATASET,
+        image_count=image_count,
+    )
+
+    assert result.status == "success"
+    assert result.dataset == TEST_DATASET
+    assert result.image_count == image_count
+    assert result.image_count > 0
+    assert result.error is None
+
+
+def test_earth_engine_region_query_no_data(ee_session: str) -> None:
+    """Test 5 (REGION NO DATA): Valid region query over pre-Sentinel-2 dates returns image_count=0."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    collection = (
+        ee.ImageCollection(TEST_DATASET)
+        .filterBounds(region)
+        .filterDate("1990-01-01", "1990-01-02")
+    )
+
+    image_count = int(collection.size().getInfo())
+    assert image_count == 0, "Expected exactly 0 images for pre-Sentinel-2 date range"
+
+    result = EarthEngineResult(
+        status="no_data",
+        dataset=TEST_DATASET,
+        image_count=0,
+        error=None,
+    )
+
+    assert result.status == "no_data"
+    assert result.dataset == TEST_DATASET
+    assert result.image_count == 0
+    assert result.error is None

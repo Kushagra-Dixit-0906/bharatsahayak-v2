@@ -315,7 +315,7 @@ AnalysisRegion (Geometry: Circular Buffer / Future Polygon)
 - **Multi-Temporal Trend Comparison:** Consistent `AnalysisRegion` definitions allow multi-year NDVI trend comparisons across an identical spatial mask.
 
 #### 📊 Current Status & Next Steps
-- **Status:** 🟢 **IMPLEMENTED & VERIFIED (Subphases 1D.1 & 1D.2 Complete)**
+- **Status:** 🟢 **IMPLEMENTED & LIVE VERIFIED (Subphases 1D.1–1D.3 Complete)**
 - **Verified Implementation (Phase 1D.2):**
   - Created [`app/satellite/geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/geometry.py) implementing `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry`.
   - Validates `latitude ∈ [-90, 90]`, `longitude ∈ [-180, 180]`, `radius_m > 0`, and rejects non-finite/invalid types (NaN, inf, strings, None, booleans).
@@ -324,13 +324,22 @@ AnalysisRegion (Geometry: Circular Buffer / Future Polygon)
   - Exported `create_analysis_region` and `DEFAULT_ANALYSIS_RADIUS_M` in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py).
   - Created and passed 35 unit tests in [`tests/unit/test_satellite_geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_geometry.py) (covering valid Punjab coordinates, custom radius, boundary coordinates, and comprehensive invalid inputs).
   - Local non-network verification confirmed: returned type is `<class 'ee.geometry.Geometry'>`, `isinstance(region, ee.Geometry)` is `True`, geometry name is `"Geometry"`, default radius constant is `100.0`, and zero server-side `.getInfo()` or network calls were executed.
+- **Live Earth Engine Verification (Phase 1D.3):**
+  - Integrated `create_analysis_region()` into live Sentinel-2 collection queries in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py).
+  - Verified successful query (`[75.7196, 30.9157]`, 100 m radius, `COPERNICUS/S2_SR_HARMONIZED`, August 2026, clouds < 20%) returned `image_count=1` mapped cleanly to `EarthEngineResult(status="success")`.
+  - Verified no-data query (pre-Sentinel-2 dates Jan 1990) returned `image_count=0` mapped cleanly to `EarthEngineResult(status="no_data")`.
+  - Verified test suite: all 5 live integration tests passed.
+- **Documented Limitations:**
+  - The 100 m circular region is an approximate local satellite observation area, **not** an exact farm boundary.
+  - It may include neighboring plots, field bunds, roads, trees, water/irrigation channels, or structures.
+  - Polygon/cadastral/adaptive region support remains future work.
 - **Strict Scope Boundary Preserved:**
   - DEC-007 is a **region-definition and geometry-construction helper only**.
-  - No Sentinel-2 query pipeline is implemented yet.
-  - No NDVI band math or summary statistics are implemented yet.
+  - No Sentinel-2 data extraction or cloud masking pipeline is implemented yet (Subphase 1E).
+  - No NDVI band math or summary statistics are implemented yet (Subphases 1F & 1G).
   - No historical analysis or baseline models are implemented yet.
   - No MCP tool integration is implemented yet.
   - No `client.py` exists yet.
   - No farmer-facing UI or map component is implemented yet.
   - No field polygon drawing is implemented yet.
-- **Next Step (Subphase 1D.3 / Checkpoint):** Live Earth Engine region query verification and Phase 1D checkpoint.
+- **Next Step:** Subphase 1E — Sentinel-2 Data Pipeline (collection selection, spatial/temporal filtering, QA60/SCL cloud masking).
