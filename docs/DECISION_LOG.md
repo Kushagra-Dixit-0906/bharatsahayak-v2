@@ -342,4 +342,82 @@ AnalysisRegion (Geometry: Circular Buffer / Future Polygon)
   - No `client.py` exists yet.
   - No farmer-facing UI or map component is implemented yet.
   - No field polygon drawing is implemented yet.
-- **Next Step:** Subphase 1E — Sentinel-2 Data Pipeline (collection selection, spatial/temporal filtering, QA60/SCL cloud masking).
+- **Next Step:** Subphase 1E — Sentinel-2 Data Pipeline (🟢 Completed via DEC-008).
+
+---
+
+### DEC-008: Sentinel-2 Surface Reflectance Imagery Selection Pipeline
+
+- **Decision ID:** `DEC-008`
+- **Date / Context:** Phase 1E Sentinel-2 Data Pipeline (Subphase 1E Implementation & Live Verification)
+
+#### 📸 Before Snapshot
+Prior to DEC-008, Phase 1D established geographic analysis region construction (`DEC-007`, `create_analysis_region()`) and minimal live integration connectivity. However, the system lacked a structured, reproducible data pipeline to discover, filter, order, and select operational Sentinel-2 Surface Reflectance observations for downstream NDVI band computation.
+
+#### 📜 Decision
+Implement a dedicated, deterministic Sentinel-2 Surface Reflectance imagery selection pipeline ([`app/satellite/sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/sentinel2.py)) that:
+
+1. **Dataset Selection:**
+   - Standardizes on `COPERNICUS/S2_SR_HARMONIZED` (Sentinel-2 Level-2A Bottom-of-Atmosphere Harmonized Surface Reflectance).
+2. **Spatial Bounding:**
+   - Filters spatial bounds using an existing `AnalysisRegion` (`ee.Geometry` created via `create_analysis_region()`).
+3. **Temporal Filtering & Lookback Window:**
+   - Provides a configurable lookback window defaulting to **30 days** (`DEFAULT_LOOKBACK_DAYS = 30`).
+   - Supports explicit `start_date` and `end_date` parameters (accepting ISO strings, `datetime.date`, or `datetime.datetime` objects) with automatic validation (`start_date <= end_date`, `lookback_days > 0`).
+4. **Scene-Level Cloud Filtering:**
+   - Filters candidate scenes using `CLOUDY_PIXEL_PERCENTAGE < max_cloud_percentage` with a configurable threshold defaulting to **20.0%** (`DEFAULT_MAX_CLOUD_PERCENTAGE = 20.0`).
+5. **Deterministic Candidate Ordering:**
+   - Orders candidate scenes strictly descending by acquisition timestamp (`.sort("system:time_start", False)` — newest-first).
+6. **Observation Selection:**
+   - Selects the **most recent usable image** (`.first()`). The term *"best image"* is explicitly avoided in favor of the technically accurate *"most recent usable image"*.
+7. **Structured Result Envelopes (`EarthEngineResult`):**
+   - **`status="success"`:** Usable candidate images exist; extracts structured observation metadata ([`Sentinel2ImageMetadata`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py#L34-L44)) including `image_id`, `acquisition_date` (ISO-8601 UTC string), `cloud_percentage`, `spacecraft_name`, `mgrs_tile`, `product_id`, and `system_time_start`.
+   - **`status="no_data"`:** Zero usable candidate scenes match spatial, temporal, or cloud constraints (`image_count = 0`). Missing imagery is strictly represented as `no_data`, **never** as NDVI=0.
+   - **`status="error"`:** Encapsulates underlying Earth Engine SDK (`ee.EEException`) and runtime errors into [`EarthEngineError`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py#L24-L29).
+8. **Downstream Pipeline Helper:**
+   - Exposes `get_most_recent_sentinel2_image()` returning the un-evaluated `ee.Image` proxy for downstream band mathematics in Phase 1F without duplicating collection filtering.
+
+#### 💡 Rationale (Why Chosen)
+- **Freshest Agricultural State:** Newest-first sorting ensures that downstream vegetation indices evaluate the most current field conditions available within the cloud-filtered window.
+- **Reproducible Temporal Filtering:** Standardized lookback and date resolution ensure consistent behavior across live advisory workflows and historical verification.
+- **Clean Architectural Separation:** Isolates collection querying and scene discovery from pixel-level index calculations (Phase 1F) and zonal statistical reductions (Phase 1G).
+
+#### ⚖️ Trade-offs
+- **Fixed Lookback vs. Dynamic Cloud Expansion:** A fixed 30-day lookback provides fresh data during clear periods, but may encounter zero usable scenes during persistent monsoon cloud cover (handled cleanly via `no_data`).
+- **Scene-Level vs. Pixel-Level Filtering:** Pre-filtering at the collection level via `CLOUDY_PIXEL_PERCENTAGE` discards heavily clouded whole granules quickly before performing expensive server-side pixel masking.
+
+#### ⚠️ Limitations
+- **Scene-Level Cloud Metadata:** The `cloud_percentage` in `Sentinel2ImageMetadata` reflects cloudiness across the entire Sentinel-2 tile (~100 km $\times$ 100 km), **not** the localized cloud cover specifically over the 100 m farm parcel.
+- **Pixel-Level Cloud Masking:** Fine-grained pixel masking (using `QA60` or Scene Classification `SCL` bands) is deferred to subsequent computation phases.
+- **Never Claims Farm Health:** Imagery selection merely delivers an atmospherically corrected satellite raster; it does not compute vegetative indices or crop health.
+
+#### 🔮 Future Upgrade Impact
+- **Phase 1F (NDVI Band Math):** Directly consumes `get_most_recent_sentinel2_image()` for $(\text{B8}-\text{B4})/(\text{B8}+\text{B4})$ computation.
+- **Phase 1G (Regional Statistics):** Applies zonal reducers (mean, median, min, max) over the selected observation across the `AnalysisRegion`.
+- **Phase 2+ (Multi-Temporal Analysis):** The collection builder (`get_sentinel2_collection`) can be reused for multi-temporal compositing and historical trend generation.
+
+#### 📊 Current Status & Next Steps
+- **Status:** 🟢 **IMPLEMENTED & LIVE VERIFIED (Subphase 1E Complete)**
+- **Verified Implementation:**
+  - [`app/satellite/sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/sentinel2.py) created with `get_sentinel2_collection()`, `select_most_recent_sentinel2_image()`, `get_most_recent_sentinel2_image()`, and `resolve_date_range()`.
+  - [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py) updated with `Sentinel2ImageMetadata` and `SatelliteImageMetadata`.
+  - [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py) updated to export all Sentinel-2 pipeline components.
+- **Unit Test Verification:**
+  - 46 unit tests in [`tests/unit/test_satellite_sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_sentinel2.py) passed (covering constants, date parsing, lookback bounds, client-side proxy creation, parameter validation, and metadata serialization).
+- **Live Earth Engine Verification:**
+  - 4 integration tests (Tests 6–9) in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) passed:
+    - **Success Query:** Ludhiana test fixture (`[75.7196, 30.9157]`, 100m radius, Aug 2026, cloud < 20%) selected scene `2026-08-16T05:50:41.321000+00:00` (`Sentinel-2A`, cloud $\approx 10.995\%$, `image_count = 1`).
+    - **No-Data Query:** Pre-Sentinel-2 date range (Jan 1990) returned `image_count = 0` mapped cleanly to `status="no_data"`.
+    - **Candidate Ordering:** Verified candidate scenes over 2 months are ordered descending by timestamp and the newest scene is selected.
+    - **Error Handling:** Verified invalid dataset ID produces `status="error"` with `EEException`.
+  - Full suite: **105 tests passed**.
+- **Strict Scope Boundaries Maintained:**
+  - NDVI band math is **NOT** implemented yet (Subphase 1F).
+  - Regional NDVI summary statistics are **NOT** implemented yet (Subphase 1G).
+  - Pixel-level cloud masking is **NOT** implemented yet.
+  - Historical baseline comparison is **NOT** implemented yet.
+  - Multi-temporal time-series is **NOT** implemented yet.
+  - Dynamic World / NDWI are **NOT** implemented yet.
+  - MCP tool integration is **NOT** implemented yet.
+  - Farmer UI is **NOT** implemented yet.
+- **Next Step:** Subphase 1F — NDVI Calculation (Red B4, NIR B8 normalized difference band math and theoretical range validation).

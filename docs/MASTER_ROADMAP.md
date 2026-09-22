@@ -81,12 +81,12 @@ graph TD
     - **1D.1 Geographic Analysis Region Strategy (`DEC-007` 🟢 COMPLETE):** Adopted decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` strategy with a default 100 m circular buffer for Sentinel-2 regional aggregation. Documented approximate area limitations (never exact cadastral boundary), non-configurable MVP parameter, historical analysis reusability, and future field polygon compatibility.
     - **1D.2 Geometry Helper & Validation (`DEC-007` 🟢 COMPLETE):** Implemented `app/satellite/geometry.py` (`create_analysis_region`), exported in `app/satellite/__init__.py`. Validates lat [-90, 90], lon [-180, 180], radius > 0 with non-finite/invalid input rejection. Verified with 35 unit tests in `tests/unit/test_satellite_geometry.py` and confirmed non-network client-side geometry proxy instantiation without server calls.
     - **1D.3 Live Earth Engine Region Query & Checkpoint (`DEC-007` 🟢 COMPLETE):** Verified `create_analysis_region()` in live Earth Engine Sentinel-2 queries in `tests/integration/test_earth_engine_connectivity.py` (Ludhiana fixture `[75.7196, 30.9157]`, 100 m radius, Aug 2026 clouds < 20% returned `image_count=1`; pre-Sentinel-2 dates Jan 1990 returned `image_count=0`; 5 live integration tests passed). Documented limitations (100 m circular region is an approximate local satellite observation area, not an exact farm boundary, and may sample neighboring plots/roads/trees/water/structures; polygon/cadastral/adaptive region support remains future work).
-  - **1E — Sentinel-2 Data Pipeline (🟡 PLANNED):**
-    - Select Copernicus Sentinel-2 Level-2A (Surface Reflectance) collection.
-    - Implement spatial location filtering.
-    - Implement temporal date filtering (recent seasonal window).
-    - Implement image selection and cloud masking (`QA60` / SCL band filtering).
-    - Validate retrieved imagery metadata and scene quality.
+  - **1E — Sentinel-2 Data Pipeline (🟢 COMPLETE / DEC-008):**
+    - Standardized on `COPERNICUS/S2_SR_HARMONIZED` (Level-2A Surface Reflectance) with spatial bounding via `AnalysisRegion` (`ee.Geometry`).
+    - Implemented configurable temporal lookback (default 30 days) and configurable scene cloud filtering (`CLOUDY_PIXEL_PERCENTAGE < 20%`).
+    - Implemented candidate sorting descending by acquisition timestamp (newest-first) and selection of the most recent usable observation (`.first()`).
+    - Extracted structured `Sentinel2ImageMetadata` model and standardized `EarthEngineResult` envelopes (`success`, `no_data`, `error`).
+    - Verified with 46 unit tests in `tests/unit/test_satellite_sentinel2.py` and 4 live integration tests in `tests/integration/test_earth_engine_connectivity.py` (Ludhiana fixture returned 1 image from 2026-08-16 with Sentinel-2A, cloud ~10.995%; pre-Sentinel-2 dates returned `no_data`). Full test suite: 105 passed. Documented limitations (scene-level tile cloud metadata vs farm cloudiness; deferred pixel-level cloud masking).
   - **1F — NDVI Calculation (🟡 PLANNED):**
     - Identify Red (B4) and Near-Infrared (B8) spectral bands.
     - Implement normalized difference calculation: $\text{NDVI} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$.

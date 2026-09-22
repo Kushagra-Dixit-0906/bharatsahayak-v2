@@ -17,22 +17,42 @@ from .geometry import (
     DEFAULT_ANALYSIS_RADIUS_M,
     create_analysis_region,
 )
+from .sentinel2 import (
+    DEFAULT_LOOKBACK_DAYS,
+    DEFAULT_MAX_CLOUD_PERCENTAGE,
+    SENTINEL2_SR_HARMONIZED,
+    get_most_recent_sentinel2_image,
+    get_sentinel2_collection,
+    resolve_date_range,
+    select_most_recent_sentinel2_image,
+)
 from .types import (
     EarthEngineError,
     EarthEngineResult,
     EarthEngineStatus,
     SatelliteError,
+    SatelliteImageMetadata,
     SatelliteResult,
     SatelliteStatus,
+    Sentinel2ImageMetadata,
 )
 
 __all__ = [
     "DEFAULT_ANALYSIS_RADIUS_M",
+    "DEFAULT_LOOKBACK_DAYS",
+    "DEFAULT_MAX_CLOUD_PERCENTAGE",
+    "SENTINEL2_SR_HARMONIZED",
     "create_analysis_region",
+    "get_most_recent_sentinel2_image",
+    "get_sentinel2_collection",
+    "resolve_date_range",
+    "select_most_recent_sentinel2_image",
     "EarthEngineError",
     "EarthEngineResult",
     "EarthEngineStatus",
     "SatelliteError",
+    "SatelliteImageMetadata",
     "SatelliteResult",
     "SatelliteStatus",
+    "Sentinel2ImageMetadata",
 ]

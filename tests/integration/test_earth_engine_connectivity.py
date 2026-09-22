@@ -19,7 +19,15 @@ import ee
 import pytest
 
 from app.satellite.geometry import create_analysis_region
-from app.satellite.types import EarthEngineError, EarthEngineResult
+from app.satellite.sentinel2 import (
+    get_sentinel2_collection,
+    select_most_recent_sentinel2_image,
+)
+from app.satellite.types import (
+    EarthEngineError,
+    EarthEngineResult,
+    Sentinel2ImageMetadata,
+)
 
 TEST_POINT = [75.7196, 30.9157]  # [longitude, latitude] near Ludhiana, Punjab
 PUNJAB_LATITUDE = 30.9157
@@ -177,3 +185,120 @@ def test_earth_engine_region_query_no_data(ee_session: str) -> None:
     assert result.dataset == TEST_DATASET
     assert result.image_count == 0
     assert result.error is None
+
+
+def test_select_most_recent_sentinel2_image_success(ee_session: str) -> None:
+    """Test 6 (PIPELINE SUCCESS): select_most_recent_sentinel2_image selects newest usable image and metadata."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    result = select_most_recent_sentinel2_image(
+        region=region,
+        start_date="2026-08-01",
+        end_date="2026-08-31",
+        max_cloud_percentage=20.0,
+    )
+
+    assert result.status == "success"
+    assert result.dataset == TEST_DATASET
+    assert result.image_count == 1
+    assert result.error is None
+    assert result.data is not None
+
+    metadata = result.data
+    assert isinstance(metadata, Sentinel2ImageMetadata)
+    assert metadata.image_id.startswith("COPERNICUS/S2_SR_HARMONIZED/")
+    assert "2026-08-16" in metadata.acquisition_date
+    assert 0.0 <= metadata.cloud_percentage < 20.0
+    assert metadata.spacecraft_name == "Sentinel-2A"
+    assert metadata.system_time_start is not None
+
+
+def test_select_most_recent_sentinel2_image_no_data(ee_session: str) -> None:
+    """Test 7 (PIPELINE NO DATA): pre-Sentinel-2 query returns status='no_data' with zero images without exception."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    result = select_most_recent_sentinel2_image(
+        region=region,
+        start_date="1990-01-01",
+        end_date="1990-01-02",
+        max_cloud_percentage=20.0,
+    )
+
+    assert result.status == "no_data"
+    assert result.dataset == TEST_DATASET
+    assert result.image_count == 0
+    assert result.data is None
+    assert result.error is None
+
+
+def test_sentinel2_candidate_ordering_and_most_recent_selection(
+    ee_session: str,
+) -> None:
+    """Test 8 (ORDERING & SELECTION): Candidate images are ordered newest-first and select_most_recent selects the newest."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    # Search over 2 months with cloud < 50% to obtain multiple candidate scenes
+    start_date = "2026-07-01"
+    end_date = "2026-08-31"
+    max_cloud = 50.0
+
+    collection = get_sentinel2_collection(
+        region=region,
+        start_date=start_date,
+        end_date=end_date,
+        max_cloud_percentage=max_cloud,
+    )
+
+    candidate_count = int(collection.size().getInfo())
+    assert candidate_count >= 2, f"Expected multiple candidate scenes, got {candidate_count}"
+
+    timestamps = collection.aggregate_array("system:time_start").getInfo()
+    assert len(timestamps) == candidate_count
+
+    # Verify candidate images are strictly ordered descending (newest-first)
+    for i in range(len(timestamps) - 1):
+        assert timestamps[i] >= timestamps[i + 1], (
+            f"Candidate timestamps are not ordered descending: {timestamps[i]} < {timestamps[i + 1]}"
+        )
+
+    # Call selection pipeline
+    result = select_most_recent_sentinel2_image(
+        region=region,
+        start_date=start_date,
+        end_date=end_date,
+        max_cloud_percentage=max_cloud,
+    )
+
+    assert result.status == "success"
+    assert result.image_count == candidate_count
+    assert result.data is not None
+    # Verify the selected image corresponds to the newest candidate
+    assert result.data.system_time_start == timestamps[0]
+
+
+def test_select_most_recent_sentinel2_image_error(ee_session: str) -> None:
+    """Test 9 (PIPELINE ERROR): Invalid dataset ID produces EarthEngineResult(status='error')."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    result = select_most_recent_sentinel2_image(
+        region=region,
+        dataset="NON_EXISTENT/INVALID_DATASET_12345",
+    )
+
+    assert result.status == "error"
+    assert result.error is not None
+    assert result.error.type == "EEException"
+    assert len(result.error.message) > 0
+    assert result.data is None

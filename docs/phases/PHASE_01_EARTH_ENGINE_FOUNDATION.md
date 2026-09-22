@@ -1,16 +1,16 @@
 # Phase 1 — Earth Engine Foundation
 
 > **Phase 1 Execution Record, Architectural Integration Design, and Sub-Roadmap.**  
-> *Status: 🟡 IN PROGRESS | Active Subphase: 1D Complete (1D.1–1D.3), Next Subphase: 1E*
+> *Status: 🟡 IN PROGRESS | Active Subphase: 1E Complete, Next Subphase: 1F*
 
 ---
 
 ## 📌 Resume Status
 
 - **Phase Status:** 🟡 **IN PROGRESS**
-- **Last Completed Substep:** **1D.3 — Live Earth Engine Region Query Verification & Checkpoint** (Subphase 1D: Geographic Region Definition Complete)
-- **Current Active Substep:** **1E — Sentinel-2 Data Pipeline** (🟡 PLANNED)
-- **Next Action:** Implement Sentinel-2 collection selection, spatial/temporal filtering, QA60/SCL cloud masking, and scene metadata extraction in Subphase 1E.
+- **Last Completed Substep:** **1E — Sentinel-2 Data Pipeline Implementation & Live Verification (`DEC-008`)**
+- **Current Active Substep:** **1F — NDVI Calculation** (🟡 PLANNED)
+- **Next Action:** Implement Normalized Difference Vegetation Index ($\text{NDVI} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$) band math, single-band image generation, and theoretical range validation ($-1.0$ to $+1.0$) in Subphase 1F.
 - **Verified Fact / Boundary:**
   - **Phase 1B Completed (1B.1–1B.10):** Local environment setup, `earthengine-api` 1.7.43 installed via `uv add` (`DEC-005`), ADC authentication verified (`DEC-006`), project `bharatsahayak-v2` initialized, bounded Sentinel-2 catalog query verified, zero credential leakage audited.
   - **Phase 1C Completed (1C.1–1C.8):**
@@ -25,16 +25,22 @@
     - **1D.1 Completed:** Formulated and documented `DEC-007: Geographic Analysis Region Strategy` establishing the decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` model with a default 100 m circular buffer for local Sentinel-2 aggregation.
     - **1D.2 Completed:** Created [`app/satellite/geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/geometry.py) implementing `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry` with coordinate and radius validation. Exported in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py). Verified with 35 unit tests in [`tests/unit/test_satellite_geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_geometry.py) and verified non-network client-side geometry proxy instantiation without `.getInfo()` or server-side calls.
     - **1D.3 Completed:** Verified `create_analysis_region()` in live Earth Engine Sentinel-2 queries in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py). Successful query over Ludhiana test fixture (`[75.7196, 30.9157]`, 100 m radius, Aug 2026, clouds < 20%) returned `image_count=1` mapped to `EarthEngineResult(status="success")`. Pre-Sentinel-2 date query (Jan 1990) returned `image_count=0` mapped to `EarthEngineResult(status="no_data")`. All 5 live integration tests passed.
+  - **Phase 1E Completed (`DEC-008`):**
+    - Implemented [`app/satellite/sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/sentinel2.py) with `get_sentinel2_collection()`, `select_most_recent_sentinel2_image()`, `get_most_recent_sentinel2_image()`, and `resolve_date_range()`.
+    - Standardized on `COPERNICUS/S2_SR_HARMONIZED` with `AnalysisRegion` spatial bounding, configurable lookback (default 30 days), and configurable scene cloud filtering (`CLOUDY_PIXEL_PERCENTAGE < 20%`).
+    - Sorted candidates descending by timestamp (newest-first) and selected the most recent usable observation.
+    - Extracted structured [`Sentinel2ImageMetadata`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py#L34-L44) returning `EarthEngineResult` envelopes (`success`, `no_data`, `error`).
+    - Verified with 46 unit tests in [`tests/unit/test_satellite_sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_sentinel2.py) and 4 live integration tests in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) (success query selected scene on 2026-08-16 with Sentinel-2A, cloud $\approx 10.995\%$; pre-Sentinel-2 query returned `no_data`). Full test suite: **105 passed**.
   - **Limitations & Future Roadmap:**
     - The 100 m circular region is an approximate local satellite observation area, **not** an exact farm boundary.
-    - It may include neighboring plots, field bunds, roads, trees, water/irrigation channels, or rural structures.
+    - `cloud_percentage` is scene-level tile metadata, **not** localized cloud cover specifically over the 100 m farm parcel.
+    - Pixel-level cloud masking (`QA60` / `SCL`) is deferred to subsequent calculation phases.
     - Polygon/cadastral/adaptive region support remains future work.
   - **Strict Scope Boundaries:**
     - Earth Engine production client is **NOT** implemented yet (`app/satellite/client.py` does **NOT** exist yet).
-    - Sentinel-2 data pipeline & cloud masking (1E) is **NOT** implemented yet.
-    - Sentinel-2 NDVI band math is **NOT** implemented yet.
-    - Regional NDVI summary statistics are **NOT** implemented yet.
-    - Dynamic World LULC is **NOT** implemented yet.
+    - Sentinel-2 NDVI band math is **NOT** implemented yet (Subphase 1F).
+    - Regional NDVI summary statistics are **NOT** implemented yet (Subphase 1G).
+    - Dynamic World LULC and NDWI are **NOT** implemented yet.
     - Weather data fusion and predictive models are **NOT** implemented yet.
     - Gemini prompt reasoning and MCP integration are **NOT** implemented yet.
     - Field polygon drawing is **NOT** implemented yet.
@@ -362,10 +368,45 @@ Establish the architectural strategy and geometric transformations for convertin
   - Support for user-drawn field polygons (Phase 9), official cadastral land record integration (Bhulekh / Bhoomi), and adaptive acreage-scaled buffering remains future work.
 - **Strict Scope Boundaries Maintained:**
   - Earth Engine production client is **NOT** implemented yet (`app/satellite/client.py` does **NOT** exist yet).
-  - Sentinel-2 data pipeline and cloud masking (1E) is **NOT** implemented yet.
-  - Sentinel-2 NDVI band math is **NOT** implemented yet.
-  - Regional NDVI summary statistics are **NOT** implemented yet.
+  - Sentinel-2 NDVI band math is **NOT** implemented yet (Subphase 1F).
+  - Regional NDVI summary statistics are **NOT** implemented yet (Subphase 1G).
   - Crop health prediction, historical trend analysis, Gemini prompt reasoning, MCP tool upgrades, and farmer-facing UI/polygon drawing remain future work.
+
+---
+
+## 🛰️ 1E — Sentinel-2 Data Pipeline
+
+### Goal
+Implement a dedicated, deterministic Sentinel-2 Surface Reflectance imagery selection pipeline (`DEC-008`), bounding candidates by spatial `AnalysisRegion` and temporal lookback window, filtering cloudy scenes, sorting newest-first, selecting the most recent usable observation, and extracting structured metadata for downstream NDVI calculation.
+
+### Substep Breakdown & Execution Record
+
+#### 1E.1 Sentinel-2 Imagery Selection Pipeline (`DEC-008`) — 🟢 COMPLETE
+- **Code Implementation:**
+  - Created [`app/satellite/sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/sentinel2.py) implementing:
+    - `get_sentinel2_collection(region, start_date, end_date, lookback_days=30, max_cloud_percentage=20.0, dataset='COPERNICUS/S2_SR_HARMONIZED') -> ee.ImageCollection`: Constructs spatially and temporally bounded, cloud-filtered collection sorted descending by acquisition time (`system:time_start`).
+    - `select_most_recent_sentinel2_image(...) -> EarthEngineResult`: Evaluates candidate scenes, selects `.first()`, extracts structured metadata into `Sentinel2ImageMetadata`, and handles `no_data` (`image_count = 0`) and errors cleanly.
+    - `get_most_recent_sentinel2_image(...) -> ee.Image`: Returns the un-evaluated `ee.Image` proxy for downstream band mathematics in Phase 1F.
+    - `resolve_date_range(...) -> tuple[str, str]`: Standardizes and validates ISO string, date, and datetime inputs with positive lookback calculation.
+  - Updated [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py) adding [`Sentinel2ImageMetadata`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py#L34-L44) and `SatelliteImageMetadata` alias.
+  - Exported all pipeline functions, constants, and types in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py).
+- **Unit Test Verification:**
+  - Created [`tests/unit/test_satellite_sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_sentinel2.py) containing **46 unit tests**.
+  - Verified: constant definitions, date parsing across multiple formats, lookback date calculations, start/end ordering validation, client-side proxy instantiation, parameter bounds checking, Pydantic model serialization, and error encapsulation.
+  - Execution result: **46 passed** (`uv run pytest tests/unit/test_satellite_sentinel2.py -v`).
+- **Live Earth Engine Integration Testing:**
+  - Extended [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) with 4 live pipeline tests (Tests 6–9):
+    - **Test 6 (`test_select_most_recent_sentinel2_image_success`):** Over Ludhiana test fixture (`[75.7196, 30.9157]`, 100m radius, Aug 2026, cloud < 20%), returned `image_count = 1` scene from `2026-08-16T05:50:41.321000+00:00` (`Sentinel-2A`, cloud $\approx 10.995\%$) with `status="success"`.
+    - **Test 7 (`test_select_most_recent_sentinel2_image_no_data`):** Over historical pre-Sentinel-2 dates (Jan 1990), returned `image_count = 0` mapped cleanly to `status="no_data"`.
+    - **Test 8 (`test_sentinel2_candidate_ordering_and_most_recent_selection`):** Verified multiple candidate scenes over 2 months are sorted strictly descending by acquisition timestamp and that `select_most_recent_sentinel2_image()` selects the newest candidate.
+    - **Test 9 (`test_select_most_recent_sentinel2_image_error`):** Verified invalid asset IDs produce `status="error"` with `EEException` details.
+  - Total test suite: **105 passed** in 70.95s.
+- **Documented Limitations & Scope Boundaries:**
+  - **Scene-Level Cloud Metadata:** `cloud_percentage` represents cloud cover across the entire Sentinel-2 tile (`CLOUDY_PIXEL_PERCENTAGE`), **not** localized cloudiness specifically over the 100 m farm parcel.
+  - **Pixel-Level Cloud Masking:** Fine-grained pixel masking (`QA60` / `SCL`) is deferred to subsequent calculation phases.
+  - **Terminology:** Avoids subjective terms like *"best image"*; strictly uses *"most recent usable image"*.
+  - **Missing Imagery:** Missing observations are strictly represented as `no_data`, **never** as NDVI=0.
+  - **Strict Scope Preserved:** NDVI band math (Phase 1F), regional NDVI summary statistics (Phase 1G), multi-temporal time-series, historical baseline comparisons, Dynamic World / NDWI, MCP server tool upgrades, and farmer UI components remain deferred.
 
 ---
 
@@ -407,7 +448,13 @@ Establish the architectural strategy and geometric transformations for convertin
   - **1D.1 Completed:** Formulated and documented `DEC-007: Geographic Analysis Region Strategy` in `docs/DECISION_LOG.md` (decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` with 100 m default circular buffer).
   - **1D.2 Completed:** Implemented `app/satellite/geometry.py` with `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry` and coordinate/radius validation. Exported in `app/satellite/__init__.py`. Passed 35 unit tests in `tests/unit/test_satellite_geometry.py`. Verified non-network client-side geometry proxy instantiation without server-side calls.
   - **1D.3 Completed:** Verified geometry helper with live Earth Engine Sentinel-2 queries in `tests/integration/test_earth_engine_connectivity.py`. Successful query returned `image_count=1`, no-data query returned `image_count=0`. 5 live integration tests passed. Documented approximation limitations and future polygon/cadastral roadmap.
-- 🟡 **1E Next:** Sentinel-2 Data Pipeline (collection selection, spatial/temporal filtering, QA60/SCL cloud masking).
+- ✅ **1E Completed (`DEC-008`):**
+  - Implemented `app/satellite/sentinel2.py` (`get_sentinel2_collection`, `select_most_recent_sentinel2_image`, `get_most_recent_sentinel2_image`, `resolve_date_range`).
+  - Standardized on `COPERNICUS/S2_SR_HARMONIZED`, `AnalysisRegion` bounds, configurable lookback (default 30 days), and scene cloud filter (`CLOUDY_PIXEL_PERCENTAGE < 20%`).
+  - Implemented newest-first candidate ordering and most recent usable image selection.
+  - Created `Sentinel2ImageMetadata` model and updated `EarthEngineResult` contracts.
+  - Verified 46 unit tests in `tests/unit/test_satellite_sentinel2.py` and 4 live integration tests in `tests/integration/test_earth_engine_connectivity.py`. 105 total tests passed.
+- 🟡 **1F Next:** NDVI Calculation (Red B4, NIR B8 normalized difference band math and theoretical range validation).
 
 ---
 
@@ -431,4 +478,5 @@ Establish the architectural strategy and geometric transformations for convertin
 - **Subphase 1B (Local Earth Engine Environment & Verification):** 🟢 **COMPLETE (1B.1–1B.10 Complete)**
 - **Subphase 1C (Earth Engine Connectivity & Result Contract):** 🟢 **COMPLETE (1C.1–1C.8 Complete)**
 - **Subphase 1D (Geographic Region Definition):** 🟢 **COMPLETE (1D.1–1D.3 Complete)**
-- **Subphase 1E (Sentinel-2 Data Pipeline):** 🟡 **PLANNED**
+- **Subphase 1E (Sentinel-2 Data Pipeline):** 🟢 **COMPLETE**
+- **Subphase 1F (NDVI Calculation):** 🟡 **PLANNED**

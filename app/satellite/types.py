@@ -31,6 +31,21 @@ class EarthEngineError(BaseModel):
 SatelliteError = EarthEngineError
 
 
+class Sentinel2ImageMetadata(BaseModel):
+    """Structured metadata for a selected Sentinel-2 satellite observation."""
+
+    image_id: str
+    acquisition_date: str
+    cloud_percentage: float = Field(ge=0.0, le=100.0)
+    spacecraft_name: str | None = None
+    mgrs_tile: str | None = None
+    product_id: str | None = None
+    system_time_start: int | None = None
+
+
+SatelliteImageMetadata = Sentinel2ImageMetadata
+
+
 class EarthEngineResult(BaseModel):
     """Minimal result contract for Earth Engine operations."""
 
