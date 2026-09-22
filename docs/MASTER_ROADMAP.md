@@ -77,11 +77,10 @@ graph TD
     - **1C.6 Pydantic Result Contract (🟢 COMPLETE):** Created `app/satellite/__init__.py` and `app/satellite/types.py` (`EarthEngineResult`, `EarthEngineError`, `EarthEngineStatus`). Verified with 6 unit tests in `tests/unit/test_satellite_types.py`.
     - **1C.7 Live Integration Tests (🟢 COMPLETE):** Created `tests/integration/test_earth_engine_connectivity.py` with 3 passing live integration tests (0 skipped, 6 non-blocking framework warnings).
     - **1C.8 Documentation & Checkpoint (🟢 COMPLETE):** Recorded Phase 1C deliverables and verified boundaries.
-  - **1D — Geographic Region Definition (🟡 IN PROGRESS / 1D.1 Complete, 1D.2 Planned):**
+  - **1D — Geographic Region Definition (🟡 IN PROGRESS / 1D.1 & 1D.2 Complete, 1D.3 Planned):**
     - **1D.1 Geographic Analysis Region Strategy (`DEC-007` 🟢 COMPLETE):** Adopted decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` strategy with a default 100 m circular buffer for Sentinel-2 regional aggregation. Documented approximate area limitations (never exact cadastral boundary), non-configurable MVP parameter, historical analysis reusability, and future field polygon compatibility.
-    - **1D.2 Coordinate Validation (🟡 PLANNED):** Validate latitude/longitude coordinate bounds (India spatial bounds: approx. Lat 6°N–38°N, Lon 68°E–98°E).
-    - **1D.3 Geometry Helpers & Buffer Construction (🟡 PLANNED):** Define geometric data models and helper functions to construct Earth Engine `ee.Geometry.Point` and `buffer(100)` instances.
-    - **1D.4 Live Earth Engine Region Query (🟡 PLANNED):** Test bounded region queries against Earth Engine with validation and error handling.
+    - **1D.2 Geometry Helper & Validation (`DEC-007` 🟢 COMPLETE):** Implemented `app/satellite/geometry.py` (`create_analysis_region`), exported in `app/satellite/__init__.py`. Validates lat [-90, 90], lon [-180, 180], radius > 0 with non-finite/invalid input rejection. Verified with 35 unit tests in `tests/unit/test_satellite_geometry.py` and confirmed non-network client-side geometry proxy instantiation without server calls.
+    - **1D.3 Live Earth Engine Region Query & Checkpoint (🟡 PLANNED):** Test bounded region queries against Earth Engine with real image collections and finalize Phase 1D checkpoint.
   - **1E — Sentinel-2 Data Pipeline (🟡 PLANNED):**
     - Select Copernicus Sentinel-2 Level-2A (Surface Reflectance) collection.
     - Implement spatial location filtering.

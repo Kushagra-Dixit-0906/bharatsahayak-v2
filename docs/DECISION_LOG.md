@@ -315,6 +315,22 @@ AnalysisRegion (Geometry: Circular Buffer / Future Polygon)
 - **Multi-Temporal Trend Comparison:** Consistent `AnalysisRegion` definitions allow multi-year NDVI trend comparisons across an identical spatial mask.
 
 #### 📊 Current Status & Next Steps
-- **Status:** 🟢 **DECISION RECORDED (Subphase 1D.1 Complete)**
-- **Strict Scope Boundary:** DEC-007 is a **region-definition decision only**. It does **NOT** mean that Sentinel-2 NDVI calculation, historical analysis, weather data fusion, crop disease prediction, Gemini reasoning, or MCP tool integration are implemented.
-- **Next Step (Subphase 1D.2):** Define coordinate boundary validation (India geographic bounding box) and geometric helper specifications in `app/satellite/` without premature code implementation.
+- **Status:** 🟢 **IMPLEMENTED & VERIFIED (Subphases 1D.1 & 1D.2 Complete)**
+- **Verified Implementation (Phase 1D.2):**
+  - Created [`app/satellite/geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/geometry.py) implementing `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry`.
+  - Validates `latitude ∈ [-90, 90]`, `longitude ∈ [-180, 180]`, `radius_m > 0`, and rejects non-finite/invalid types (NaN, inf, strings, None, booleans).
+  - Constructs `ee.Geometry.Point([longitude, latitude]).buffer(radius_m)` in `[longitude, latitude]` order.
+  - Default radius constant: `DEFAULT_ANALYSIS_RADIUS_M = 100.0` meters.
+  - Exported `create_analysis_region` and `DEFAULT_ANALYSIS_RADIUS_M` in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py).
+  - Created and passed 35 unit tests in [`tests/unit/test_satellite_geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_geometry.py) (covering valid Punjab coordinates, custom radius, boundary coordinates, and comprehensive invalid inputs).
+  - Local non-network verification confirmed: returned type is `<class 'ee.geometry.Geometry'>`, `isinstance(region, ee.Geometry)` is `True`, geometry name is `"Geometry"`, default radius constant is `100.0`, and zero server-side `.getInfo()` or network calls were executed.
+- **Strict Scope Boundary Preserved:**
+  - DEC-007 is a **region-definition and geometry-construction helper only**.
+  - No Sentinel-2 query pipeline is implemented yet.
+  - No NDVI band math or summary statistics are implemented yet.
+  - No historical analysis or baseline models are implemented yet.
+  - No MCP tool integration is implemented yet.
+  - No `client.py` exists yet.
+  - No farmer-facing UI or map component is implemented yet.
+  - No field polygon drawing is implemented yet.
+- **Next Step (Subphase 1D.3 / Checkpoint):** Live Earth Engine region query verification and Phase 1D checkpoint.

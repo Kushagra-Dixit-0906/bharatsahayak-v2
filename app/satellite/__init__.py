@@ -13,6 +13,10 @@
 # limitations under the License.
 """Satellite and Earth Engine modules for BharatSahayak."""
 
+from .geometry import (
+    DEFAULT_ANALYSIS_RADIUS_M,
+    create_analysis_region,
+)
 from .types import (
     EarthEngineError,
     EarthEngineResult,
@@ -23,6 +27,8 @@ from .types import (
 )
 
 __all__ = [
+    "DEFAULT_ANALYSIS_RADIUS_M",
+    "create_analysis_region",
     "EarthEngineError",
     "EarthEngineResult",
     "EarthEngineStatus",

@@ -1,16 +1,16 @@
 # Phase 1 — Earth Engine Foundation
 
 > **Phase 1 Execution Record, Architectural Integration Design, and Sub-Roadmap.**  
-> *Status: 🟡 IN PROGRESS | Active Subphase: 1D (1D.1 Complete, 1D.2 Planned)*
+> *Status: 🟡 IN PROGRESS | Active Subphase: 1D (1D.1 & 1D.2 Complete, 1D.3 Planned)*
 
 ---
 
 ## 📌 Resume Status
 
 - **Phase Status:** 🟡 **IN PROGRESS**
-- **Last Completed Substep:** **1D.1 — Geographic Analysis Region Strategy (`DEC-007`)** (Subphase 1D: Geographic Region Definition)
-- **Current Active Substep:** **1D.2 — Geographic Coordinate Validation & Geometry Helper Design** (🟡 PLANNED)
-- **Next Action:** Formulate coordinate validation rules (India spatial bounds) and geometry helper specifications for `AnalysisRegion` before implementation.
+- **Last Completed Substep:** **1D.2 — Geographic Geometry Helper Implementation & Verification** (Subphase 1D: Geographic Region Definition)
+- **Current Active Substep:** **1D.3 — Live Earth Engine Region Query & Checkpoint** (🟡 PLANNED)
+- **Next Action:** Perform bounded live Earth Engine region query verification with real collection bounds and complete Phase 1D checkpoint.
 - **Verified Fact / Boundary:**
   - **Phase 1B Completed (1B.1–1B.10):** Local environment setup, `earthengine-api` 1.7.43 installed via `uv add` (`DEC-005`), ADC authentication verified (`DEC-006`), project `bharatsahayak-v2` initialized, bounded Sentinel-2 catalog query verified, zero credential leakage audited.
   - **Phase 1C Completed (1C.1–1C.8):**
@@ -21,8 +21,9 @@
     - 6 focused unit tests in `tests/unit/test_satellite_types.py` passed (1C.6).
     - 3 live Earth Engine integration tests in `tests/integration/test_earth_engine_connectivity.py` passed (0 skipped, 6 non-blocking framework warnings) validating success, no_data, and error mappings (1C.7).
     - Phase 1C documentation and checkpoint recorded (1C.8).
-  - **Phase 1D Progress (1D.1):**
-    - Formulated and documented `DEC-007: Geographic Analysis Region Strategy` establishing the decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` model with a default 100 m circular buffer for local Sentinel-2 aggregation.
+  - **Phase 1D Progress (1D.1 & 1D.2 Complete):**
+    - **1D.1 Completed:** Formulated and documented `DEC-007: Geographic Analysis Region Strategy` establishing the decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` model with a default 100 m circular buffer for local Sentinel-2 aggregation.
+    - **1D.2 Completed:** Created [`app/satellite/geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/geometry.py) implementing `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry` with coordinate and radius validation. Exported in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py). Verified with 35 unit tests in [`tests/unit/test_satellite_geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_geometry.py) and verified non-network client-side geometry proxy instantiation without `.getInfo()` or server-side calls.
   - **Strict Scope Boundaries:**
     - Earth Engine production client is **NOT** implemented yet.
     - `app/satellite/client.py` does **NOT** exist yet.
@@ -70,7 +71,7 @@ Prior to the execution of Phase 1 implementation steps, the verified application
 graph TD
     S1A["1A: Architecture & Integration Design\n(DEC-004) 🟢 COMPLETE"] --> S1B["1B: Local Environment & Verification\n(1B.1–1B.10 Complete) 🟢 COMPLETE"]
     S1B --> S1C["1C: EE Connectivity & Result Contract\n(1C.1–1C.8 Complete) 🟢 COMPLETE"]
-    S1C --> S1D["1D: Geographic Region Definition\n(1D.1 DEC-007 Complete) 🟡 IN PROGRESS"]
+    S1C --> S1D["1D: Geographic Region Definition\n(1D.1–1D.2 Complete) 🟡 IN PROGRESS"]
     S1D --> S1E["1E: Sentinel-2 Ingestion & Cloud Mask 🟡 PLANNED"]
     S1E --> S1F["1F: NDVI Calculation 🟡 PLANNED"]
     S1F --> S1G["1G: Regional NDVI Statistics 🟡 PLANNED"]
@@ -85,7 +86,7 @@ graph TD
 | **1A** | **Earth Engine Architecture & Integration Design** | Analyze Earth Engine role, auth models, quota, integration boundaries (Options A/B/C), and record `DEC-004`. | 🟢 **COMPLETE** |
 | **1B** | **Local Earth Engine Environment & Verification** | Add `earthengine-api` via `uv` (`DEC-005`), configure local environment, authenticate developer ADC (`DEC-006`), initialize project `bharatsahayak-v2`, verify bounded Sentinel-2 catalog connectivity, audit credentials, and record documentation. | 🟢 **COMPLETE (1B.1–1B.10 Complete)** |
 | **1C** | **Earth Engine Connectivity & Result Contract** | Execute minimal calculation (1C.1), observe SDK error translation on invalid asset (1C.2), verify zero-data behavior (1C.3), define result boundary (1C.4/1C.5), implement Pydantic result contract in `app/satellite/` (1C.6), and verify via unit and live integration tests (1C.6/1C.7), document checkpoint (1C.8). | 🟢 **COMPLETE (1C.1–1C.8 Complete)** |
-| **1D** | **Geographic Region Definition** | Formulate point-to-region geometry strategy (`DEC-007` 🟢 COMPLETE), validate Indian coordinate boundaries, design geometry helpers, test region queries against Earth Engine. | 🟡 **IN PROGRESS (1D.1 Complete, 1D.2 Planned)** |
+| **1D** | **Geographic Region Definition** | Formulate point-to-region geometry strategy (`DEC-007` 🟢), implement geometry helpers in `app/satellite/geometry.py` (`1D.2` 🟢), validate coordinates & radius, test live region queries against Earth Engine. | 🟡 **IN PROGRESS (1D.1 & 1D.2 Complete, 1D.3 Planned)** |
 | **1E** | **Sentinel-2 Data Pipeline** | Ingest Sentinel-2 Level-2A collection, apply spatial/temporal filters and `QA60`/SCL cloud masks, validate scene metadata. | 🟡 PLANNED |
 | **1F** | **NDVI Calculation** | Extract Red (B4) and NIR (B8) bands, compute $\text{NDVI} = \frac{\text{B8}-\text{B4}}{\text{B8}+\text{B4}}$, validate value ranges ($-1.0$ to $+1.0$). | 🟡 PLANNED |
 | **1G** | **Regional NDVI Statistics** | Implement zonal reducers across farm geometry computing **mean**, **median**, **min**, **max**, and format structured JSON output. | 🟡 PLANNED |
@@ -292,14 +293,49 @@ Establish the architectural strategy and geometric transformations for convertin
 - **Recorded Decision:** Logged as [`DEC-007`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/docs/DECISION_LOG.md#DEC-007) in `docs/DECISION_LOG.md`.
 - **Strict Scope Boundary:** DEC-007 is a **region-definition decision only**. It does **NOT** mean that Sentinel-2 NDVI, historical analysis, weather fusion, prediction, Gemini reasoning, or MCP integration are implemented.
 
-#### 1D.2 Coordinate Validation (India Bounds) — 🟡 PLANNED
-- Formulate spatial boundary rules ensuring coordinates fall within the geographic bounds of India (approx. Lat 6°N–38°N, Lon 68°E–98°E).
+#### 1D.2 Geographic Geometry Helper Implementation & Unit Verification — 🟢 COMPLETE
+- **Code Implementation:**
+  - Created [`app/satellite/geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/geometry.py) implementing `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry`.
+  - Built-in validation ensures:
+    - `latitude ∈ [-90, 90]` (decimal degrees)
+    - `longitude ∈ [-180, 180]` (decimal degrees)
+    - `radius_m > 0` (strictly positive finite meters)
+    - Invalid and non-finite types (NaN, inf, -inf, strings, None, booleans) raise `ValueError`.
+  - Geometry construction: Constructs `ee.Geometry.Point([float(longitude), float(latitude)]).buffer(float(radius_m))` adhering to Earth Engine's `[x, y]` coordinate syntax.
+  - Constant defined: `DEFAULT_ANALYSIS_RADIUS_M = 100.0` meters (`DEC-007`).
+  - Module exports: Exported `create_analysis_region` and `DEFAULT_ANALYSIS_RADIUS_M` in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py).
+  - Docstrings thoroughly describe `FarmerLocation`, `Region Resolution`, `AnalysisRegion`, and document that the 100 m buffer is an approximate local satellite observation area, **not** an exact farm boundary.
+- **Unit Test Verification:**
+  - Created [`tests/unit/test_satellite_geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_geometry.py) containing **35 test cases**.
+  - Test coverage:
+    - Valid Punjab farm coordinates (`[75.7196, 30.9157]`) with default radius.
+    - Custom radius values (`250.0m`, `50m`).
+    - Coordinate boundary limits (`[-90, 90]`, `[-180, 180]`, `(0, 0)`).
+    - Invalid latitude parameterized checks (out-of-bounds, NaN, inf, -inf, string, None, True).
+    - Invalid longitude parameterized checks (out-of-bounds, NaN, inf, -inf, string, None, False).
+    - Invalid radius parameterized checks (`0`, `0.0`, `-1`, `-100.0`, `-0.0001`, NaN, inf, -inf, string, None, True).
+    - Default radius constant validation (`DEFAULT_ANALYSIS_RADIUS_M == 100.0`).
+  - Execution result: **35 passed in 7.20s** (`uv run pytest tests/unit/test_satellite_geometry.py -v`).
+- **Local Non-Network Verification:**
+  - Executed client-side instantiation script over `latitude=30.9157`, `longitude=75.7196`, `radius_m=100`.
+  - Verified outputs:
+    - Python type: `<class 'ee.geometry.Geometry'>`
+    - `isinstance(region, ee.Geometry)`: `True`
+    - Geometry name: `"Geometry"`
+    - Default radius constant: `100.0`
+    - Confirmed: **Zero `.getInfo()` or server-side Earth Engine network calls were executed.**
+- **Strict Scope Boundaries Maintained:**
+  - Sentinel-2 query pipeline is **NOT** implemented yet.
+  - NDVI band math is **NOT** implemented yet.
+  - Regional summary statistics are **NOT** implemented yet.
+  - Multi-temporal historical analysis is **NOT** implemented yet.
+  - MCP tool integration is **NOT** implemented yet.
+  - `app/satellite/client.py` does **NOT** exist yet.
+  - Farmer-facing UI and interactive map components are **NOT** implemented yet.
+  - Field polygon drawing is **NOT** implemented yet.
 
-#### 1D.3 Geometry Helpers & Circular Buffer Definition — 🟡 PLANNED
-- Define geometric data models and helper functions to construct Earth Engine `ee.Geometry.Point` and `ee.Geometry.Point.buffer(100)` instances.
-
-#### 1D.4 Live Earth Engine Region Query Verification — 🟡 PLANNED
-- Test bounded region queries against Earth Engine with validation across valid Indian coordinates and graceful error handling for invalid geometries.
+#### 1D.3 Live Earth Engine Region Query & Checkpoint — 🟡 PLANNED
+- Execute bounded Live Earth Engine test query applying `create_analysis_region` geometry to a real Sentinel-2 collection and record the Phase 1D checkpoint.
 
 ---
 
@@ -341,7 +377,13 @@ Establish the architectural strategy and geometric transformations for convertin
   - Formulated and documented `DEC-007: Geographic Analysis Region Strategy` in `docs/DECISION_LOG.md`.
   - Defined decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` model with default 100 m circular buffer.
   - Documented approximation limitations and future field polygon compatibility.
-- 🟡 **1D.2 Next:** Geographic coordinate boundary validation and geometry helper design.
+- ✅ **1D.2 Completed:**
+  - Implemented `app/satellite/geometry.py` with `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry`.
+  - Validated coordinates and radius bounds with non-finite/invalid input rejection.
+  - Exported `create_analysis_region` and `DEFAULT_ANALYSIS_RADIUS_M` in `app/satellite/__init__.py`.
+  - Verified 35 unit tests in `tests/unit/test_satellite_geometry.py` (35 passed).
+  - Confirmed non-network client-side geometry proxy instantiation without server-side calls.
+- 🟡 **1D.3 Next:** Live Earth Engine region query verification and Phase 1D checkpoint.
 
 ---
 
@@ -364,4 +406,4 @@ Establish the architectural strategy and geometric transformations for convertin
 - **Subphase 1A (Architecture & Integration Design):** 🟢 **COMPLETE**
 - **Subphase 1B (Local Earth Engine Environment & Verification):** 🟢 **COMPLETE (1B.1–1B.10 Complete)**
 - **Subphase 1C (Earth Engine Connectivity & Result Contract):** 🟢 **COMPLETE (1C.1–1C.8 Complete)**
-- **Subphase 1D (Geographic Region Definition):** 🟡 **IN PROGRESS (1D.1 Complete, 1D.2 Planned)**
+- **Subphase 1D (Geographic Region Definition):** 🟡 **IN PROGRESS (1D.1 & 1D.2 Complete, 1D.3 Planned)**
