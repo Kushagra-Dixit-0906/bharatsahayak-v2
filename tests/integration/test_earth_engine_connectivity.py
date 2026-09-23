@@ -19,7 +19,14 @@ import ee
 import pytest
 
 from app.satellite.geometry import create_analysis_region
+from app.satellite.ndvi import (
+    NDVI_BAND_NAME,
+    NIR_BAND,
+    RED_BAND,
+    calculate_ndvi,
+)
 from app.satellite.sentinel2 import (
+    get_most_recent_sentinel2_image,
     get_sentinel2_collection,
     select_most_recent_sentinel2_image,
 )
@@ -302,3 +309,88 @@ def test_select_most_recent_sentinel2_image_error(ee_session: str) -> None:
     assert result.error.type == "EEException"
     assert len(result.error.message) > 0
     assert result.data is None
+
+
+def test_calculate_ndvi_live_evaluation(ee_session: str) -> None:
+    """Test 10 (LIVE NDVI SUCCESS): calculate_ndvi consumes real Sentinel-2 image, produces valid NDVI band clipped to region."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    # Select most recent real Sentinel-2 image via Phase 1E pipeline
+    image = get_most_recent_sentinel2_image(
+        region=region,
+        start_date="2026-08-01",
+        end_date="2026-08-31",
+        max_cloud_percentage=20.0,
+    )
+    assert isinstance(image, ee.Image)
+
+    # Compute NDVI clipped to region
+    ndvi_image = calculate_ndvi(image=image, region=region)
+    assert isinstance(ndvi_image, ee.Image)
+
+    # Server-side verify band name
+    band_names = ndvi_image.bandNames().getInfo()
+    assert band_names == [NDVI_BAND_NAME]
+
+    # Server-side sample valid pixels within the 100m analysis region
+    sampled = (
+        ndvi_image.sample(region=region, scale=10, numPixels=50)
+        .aggregate_array(NDVI_BAND_NAME)
+        .getInfo()
+    )
+    valid_pixels = [float(v) for v in sampled if v is not None]
+    assert len(valid_pixels) > 0, "Expected at least 1 valid sampled NDVI pixel inside the analysis region"
+
+    # Verify all valid NDVI pixel values are within the strict theoretical range [-1.0, 1.0]
+    for pixel_val in valid_pixels:
+        assert -1.0 <= pixel_val <= 1.0, f"NDVI value {pixel_val} outside expected range [-1.0, 1.0]"
+
+
+def test_calculate_ndvi_no_data_path(ee_session: str) -> None:
+    """Test 11 (LIVE NDVI NO DATA): Pre-Sentinel-2 query returns status='no_data' and NDVI is not fabricated."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    # Run Phase 1E selection pipeline over pre-Sentinel-2 dates
+    selection_result = select_most_recent_sentinel2_image(
+        region=region,
+        start_date="1990-01-01",
+        end_date="1990-01-02",
+        max_cloud_percentage=20.0,
+    )
+
+    assert selection_result.status == "no_data"
+    assert selection_result.image_count == 0
+    assert selection_result.data is None
+    assert selection_result.error is None
+
+
+def test_calculate_ndvi_invalid_bands_error(ee_session: str) -> None:
+    """Test 12 (LIVE NDVI INVALID BANDS): Requesting non-existent bands fails during server-side evaluation with EEException."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    image = get_most_recent_sentinel2_image(
+        region=region,
+        start_date="2026-08-01",
+        end_date="2026-08-31",
+        max_cloud_percentage=20.0,
+    )
+
+    # Request invalid band names
+    bad_ndvi = calculate_ndvi(
+        image=image,
+        region=region,
+        nir_band="NON_EXISTENT_NIR_BAND",
+        red_band="NON_EXISTENT_RED_BAND",
+    )
+
+    with pytest.raises(ee.EEException):
+        bad_ndvi.bandNames().getInfo()

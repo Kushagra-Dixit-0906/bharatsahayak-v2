@@ -420,4 +420,87 @@ Implement a dedicated, deterministic Sentinel-2 Surface Reflectance imagery sele
   - Dynamic World / NDWI are **NOT** implemented yet.
   - MCP tool integration is **NOT** implemented yet.
   - Farmer UI is **NOT** implemented yet.
-- **Next Step:** Subphase 1F — NDVI Calculation (Red B4, NIR B8 normalized difference band math and theoretical range validation).
+- **Next Step:** Subphase 1F — NDVI Calculation (🟢 Completed via DEC-009).
+
+---
+
+### DEC-009: Locked Normalized Difference Vegetation Index (NDVI) Calculation Strategy
+
+- **Decision ID:** `DEC-009`
+- **Date / Context:** Phase 1F NDVI Calculation (Subphase 1F Implementation & Live Verification)
+
+#### 📸 Before Snapshot
+Prior to DEC-009, Phase 1E established the Sentinel-2 Surface Reflectance imagery selection pipeline (`DEC-008`), delivering un-evaluated `ee.Image` observations and structured metadata. However, the system lacked a dedicated, validated band mathematics module to compute the Normalized Difference Vegetation Index ($\text{NDVI}$), bind NIR (B8) and Red (B4) bands, clip the raster extent to the `AnalysisRegion`, and enforce strict mathematical range constraints without premature reduction or classification.
+
+#### 📜 Decision
+Implement a dedicated, deterministic NDVI computation module ([`app/satellite/ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/ndvi.py)) that:
+
+1. **Input Pipeline Ingestion:**
+   - Consumes the un-evaluated Sentinel-2 Level-2A (`COPERNICUS/S2_SR_HARMONIZED`) image selected via Phase 1E (`get_most_recent_sentinel2_image()` / `select_most_recent_sentinel2_image()`).
+2. **Analysis Region Bounding & Clipping:**
+   - Accepts the existing `AnalysisRegion` (`ee.Geometry` created via `create_analysis_region()`) and clips the resulting NDVI image to that exact spatial footprint (`.clip(region)`).
+3. **Band Selection:**
+   - Red Band: `B4` (Visible Red, ~665 nm, 10m spatial resolution).
+   - Near-Infrared (NIR) Band: `B8` (Broad NIR, ~842 nm, 10m spatial resolution).
+4. **Earth Engine Calculation Engine:**
+   - Computes normalized difference natively using:
+     $$\text{NDVI} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$$
+     executed via `image.normalizedDifference(["B8", "B4"])`.
+   - Explicitly avoids manually implementing algebraic expression trees (`image.expression()`) in favor of Earth Engine's optimized native C++ operator.
+5. **Band Naming Standard:**
+   - Renames the resulting single output band from default `'nd'` to `'NDVI'` (`.rename("NDVI")`).
+6. **Reflectance Scaling Cancellation:**
+   - Explicitly omits manual multiplication by the Sentinel-2 reflectance scale factor ($0.0001$).
+   - **Mathematical Principle:** Because the scale factor is a constant multiplier across all Surface Reflectance bands, it factors out and cancels identically in the normalized ratio:
+     $$\frac{(0.0001 \cdot \text{B8}) - (0.0001 \cdot \text{B4})}{(0.0001 \cdot \text{B8}) + (0.0001 \cdot \text{B4})} = \frac{0.0001 \cdot (\text{B8} - \text{B4})}{0.0001 \cdot (\text{B8} + \text{B4})} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$$
+7. **Pixel / Cloud Masking Boundary:**
+   - Does **NOT** introduce fine-grained pixel-level cloud masking (`QA60` / `SCL`) in Phase 1F.
+   - Phase 1E's scene-level collection filter (`CLOUDY_PIXEL_PERCENTAGE < 20%`) remains the active filter.
+8. **Preservation of Invalid & Masked Pixels:**
+   - Preserves native Earth Engine masked pixels (where either band is sensor-masked or $\text{B8} + \text{B4} = 0$) without artificially replacing invalid values with zero.
+   - Missing observations (such as pre-Sentinel-2 date windows) return `status="no_data"` via Phase 1E without fabricating artificial NDVI rasters.
+9. **Output Contract:**
+   - Returns an un-evaluated `ee.Image` proxy containing the single `'NDVI'` band.
+   - Strictly defers zonal statistical reductions (**mean**, **median**, **min**, **max**) to Phase 1G.
+10. **Strict Semantic & Architectural Isolation:**
+    - Explicitly prohibits crop-health interpretations or arbitrary classification thresholds (e.g. *"NDVI > 0.5 = healthy"*).
+    - Excludes Gemini prompt reasoning, MCP tool upgrades, and farmer UI modifications from this phase.
+
+#### 💡 Rationale (Why Chosen)
+- **Numerical Robustness:** Earth Engine's native `normalizedDifference` method handles division-by-zero safely by automatically masking pixels where the denominator is zero.
+- **Computational Efficiency:** Client-side proxy creation remains zero-latency; pixel calculations execute in parallel on Google's geospatial cluster only when downstream zonal reducers or sampling are invoked.
+- **Exact Spatial Extent:** Explicit `.clip(region)` ensures downstream reducers compute statistics strictly over the farmer's designated 100m observation circle.
+- **Clean Architectural Scoping:** Isolates band mathematics from statistical reduction (Phase 1G), preventing monolithic functions and maintaining single-responsibility modules.
+
+#### ⚖️ Trade-offs
+- **Scene-Level vs Local Cloud Sampling:** Operating under the scene-level `<20%` cloud filter means localized clouds over the 100m parcel are not yet masked pixel-by-pixel until fine-grained QA60/SCL masking is implemented.
+- **Unreduced Raster Output:** Returning an `ee.Image` requires a subsequent reduction step (Phase 1G) before structured JSON dictionaries can be fed to LLM tools.
+
+#### ⚠️ Limitations
+- **Vegetative Reflectance vs Crop Health:** NDVI is an optical index reflecting chlorophyll absorption and cellular structure reflection; it must **never** be presented as definitive proof of crop health, disease diagnosis, or yield prediction on its own.
+- **Approximate Observation Envelope:** The 100m circular buffer is an approximate local satellite observation area, **not** an exact farm boundary.
+
+#### 🔮 Future Upgrade Impact
+- **Phase 1G (Regional Statistics):** Applies zonal reducers (mean, median, min, max) over the unreduced `ee.Image` generated in Phase 1F.
+- **Phase 2+ (Multi-Temporal Analysis):** Reuses `calculate_ndvi` across multi-temporal image collections to compute historical NDVI deltas.
+- **Phase 3 (Additional Indices):** Provides the architectural blueprint for companion indices (e.g. NDWI via `normalizedDifference(["B3", "B8"])`, EVI, SAVI).
+
+#### 📊 Current Status & Next Steps
+- **Status:** 🟢 **IMPLEMENTED & LIVE VERIFIED (Subphase 1F Complete)**
+- **Verified Implementation:**
+  - [`app/satellite/ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/ndvi.py) created with `calculate_ndvi()`, `compute_ndvi`, `NDVI_BAND_NAME = "NDVI"`, `NIR_BAND = "B8"`, `RED_BAND = "B4"`.
+  - [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py) updated to export all NDVI calculation components.
+- **Unit Test Verification:**
+  - 29 unit tests in [`tests/unit/test_satellite_ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_ndvi.py) passed (covering constants, client proxy instantiation, region clipping, custom band names, alias parity, and comprehensive parameter validation).
+- **Live Earth Engine Verification:**
+  - 3 integration tests (Tests 10–12) in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) passed:
+    - **Live NDVI Success (Test 10):** Consumed real Sentinel-2A scene (`2026-08-16T05:50:41`) selected via Phase 1E over Ludhiana fixture (`[75.7196, 30.9157]`, 100m radius), verified output is `ee.Image`, confirmed band name is `["NDVI"]`, and verified server-side sampled pixels strictly fall within $[-1.0, 1.0]$.
+    - **No-Data Path (Test 11):** Pre-Sentinel-2 date query returned `status="no_data"` without calculating or fabricating NDVI data.
+    - **Invalid Bands (Test 12):** Query with non-existent band names raised `ee.EEException` during server-side evaluation.
+  - Full test suite: **146 passed** (0 failures).
+- **Strict Scope Boundaries Maintained:**
+  - Regional NDVI summary statistics (mean, median, min, max) are **NOT** implemented yet (Subphase 1G).
+  - Crop-health classification thresholds are **NOT** implemented yet.
+  - Pixel-level cloud masking (QA60/SCL) is **NOT** implemented yet.
+  - MCP tool upgrades, Gemini reasoning, and farmer UI components remain deferred.
+- **Next Step:** Subphase 1G — Regional NDVI Statistics (Earth Engine zonal reducers computing mean, median, min, max over farm geometry).

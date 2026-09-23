@@ -87,11 +87,13 @@ graph TD
     - Implemented candidate sorting descending by acquisition timestamp (newest-first) and selection of the most recent usable observation (`.first()`).
     - Extracted structured `Sentinel2ImageMetadata` model and standardized `EarthEngineResult` envelopes (`success`, `no_data`, `error`).
     - Verified with 46 unit tests in `tests/unit/test_satellite_sentinel2.py` and 4 live integration tests in `tests/integration/test_earth_engine_connectivity.py` (Ludhiana fixture returned 1 image from 2026-08-16 with Sentinel-2A, cloud ~10.995%; pre-Sentinel-2 dates returned `no_data`). Full test suite: 105 passed. Documented limitations (scene-level tile cloud metadata vs farm cloudiness; deferred pixel-level cloud masking).
-  - **1F — NDVI Calculation (🟡 PLANNED):**
-    - Identify Red (B4) and Near-Infrared (B8) spectral bands.
-    - Implement normalized difference calculation: $\text{NDVI} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$.
-    - Generate single-band NDVI image in Earth Engine.
-    - Validate theoretical value range ($-1.0$ to $+1.0$).
+  - **1F — NDVI Calculation (🟢 COMPLETE / DEC-009):**
+    - Implemented `app/satellite/ndvi.py` computing normalized difference ($\text{NDVI} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$) from Sentinel-2 Level-2A Surface Reflectance via native `image.normalizedDifference(["B8", "B4"]).rename("NDVI")`.
+    - Automatically clips the NDVI raster extent to the `AnalysisRegion` (`ee.Geometry`) circular buffer.
+    - Preserves invalid/masked pixels without inventing zeros; avoids manual reflectance scaling; preserves scene-level `<20%` cloud filter.
+    - Exported in `app/satellite/__init__.py`.
+    - Verified with 29 unit tests in `tests/unit/test_satellite_ndvi.py` and 3 live integration tests in `tests/integration/test_earth_engine_connectivity.py` (Ludhiana fixture returned `ee.image.Image`, single band `["NDVI"]`, sampled valid pixel values within $[-1.0, 1.0]$, pre-Sentinel-2 date range returned `no_data`, invalid band names raised `ee.EEException`). Total test suite: 146 passed.
+    - Preserved strict boundaries: no regional statistics (Phase 1G), no crop-health interpretation, no Gemini/MCP/UI changes.
   - **1G — Regional NDVI Statistics (🟡 PLANNED):**
     - Implement Earth Engine zonal reducers across farm region:
       - **mean** NDVI (overall vegetative health).

@@ -17,6 +17,13 @@ from .geometry import (
     DEFAULT_ANALYSIS_RADIUS_M,
     create_analysis_region,
 )
+from .ndvi import (
+    NDVI_BAND_NAME,
+    NIR_BAND,
+    RED_BAND,
+    calculate_ndvi,
+    compute_ndvi,
+)
 from .sentinel2 import (
     DEFAULT_LOOKBACK_DAYS,
     DEFAULT_MAX_CLOUD_PERCENTAGE,
@@ -41,7 +48,12 @@ __all__ = [
     "DEFAULT_ANALYSIS_RADIUS_M",
     "DEFAULT_LOOKBACK_DAYS",
     "DEFAULT_MAX_CLOUD_PERCENTAGE",
+    "NDVI_BAND_NAME",
+    "NIR_BAND",
+    "RED_BAND",
     "SENTINEL2_SR_HARMONIZED",
+    "calculate_ndvi",
+    "compute_ndvi",
     "create_analysis_region",
     "get_most_recent_sentinel2_image",
     "get_sentinel2_collection",
