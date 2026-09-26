@@ -73,3 +73,57 @@ class EarthEngineResult(BaseModel):
 
 
 SatelliteResult = EarthEngineResult
+
+
+class ObservationQualityEvidence(BaseModel):
+    """Operational policy thresholds and verification evidence for satellite observation quality."""
+
+    quality_dataset: str = "GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"
+    min_usable_coverage_threshold: float = Field(default=0.70, ge=0.0, le=1.0)
+    max_scene_cloud_threshold: float = Field(default=20.0, ge=0.0, le=100.0)
+    quality_mask_applied: bool
+    is_usable: bool
+
+
+SatelliteQualityEvidence = ObservationQualityEvidence
+
+
+class ObservationFreshness(BaseModel):
+    """Evidence-only temporal reference and derived age for a satellite observation."""
+
+    reference_date: str
+    observation_age_days: int = Field(ge=0)
+    lookback_window_days: int = Field(default=30, gt=0)
+
+
+SatelliteFreshness = ObservationFreshness
+
+
+class AnalysisRegionMetadata(BaseModel):
+    """Geographic footprint, buffer geometry, and spatial reduction parameters."""
+
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
+    radius_m: float = Field(default=100.0, gt=0.0)
+    geometry_type: str = Field(default="PointBuffer")
+    scale_m: float = Field(default=10.0, gt=0.0)
+
+
+SatelliteRegionMetadata = AnalysisRegionMetadata
+
+
+class RegionalNdviAnalysis(BaseModel):
+    """Authoritative domain payload packaging observation provenance, quality evidence,
+
+    freshness, spatial sampling region, and regional NDVI summary statistics.
+    """
+
+    observation: Sentinel2ImageMetadata
+    quality: ObservationQualityEvidence
+    freshness: ObservationFreshness
+    region: AnalysisRegionMetadata
+    statistics: NdviRegionalStatistics
+    pipeline_version: str = Field(default="1.0.0")
+
+
+SatelliteRegionalAnalysis = RegionalNdviAnalysis

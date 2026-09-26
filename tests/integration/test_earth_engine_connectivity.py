@@ -38,13 +38,19 @@ from app.satellite.sentinel2 import (
     mask_observation_quality,
     select_most_recent_sentinel2_image,
 )
+from app.satellite.pipeline import analyze_regional_ndvi
 from app.satellite.types import (
+    AnalysisRegionMetadata,
     EarthEngineError,
     EarthEngineResult,
     NdviRegionalStatistics,
+    ObservationFreshness,
+    ObservationQualityEvidence,
+    RegionalNdviAnalysis,
     SatelliteRegionalStatistics,
     Sentinel2ImageMetadata,
 )
+
 
 TEST_POINT = [75.7196, 30.9157]  # [longitude, latitude] near Ludhiana, Punjab
 PUNJAB_LATITUDE = 30.9157
@@ -644,3 +650,126 @@ def test_calculate_ndvi_statistics_invalid_band_error(ee_session: str) -> None:
     assert result.error is not None
     assert result.error.type in ("EEException", "Exception")
     assert len(result.error.message) > 0
+
+
+def test_analyze_regional_ndvi_live_success(ee_session: str) -> None:
+    """Test 20 (LIVE PIPELINE SUCCESS): analyze_regional_ndvi over Punjab fixture returns valid RegionalNdviAnalysis."""
+    result = analyze_regional_ndvi(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+        start_date="2026-08-01",
+        end_date="2026-08-31",
+        lookback_days=30,
+    )
+
+    assert result.status == "success"
+    assert result.dataset == TEST_DATASET
+    assert result.image_count is not None and result.image_count >= 1
+    assert result.error is None
+    assert result.data is not None
+
+    analysis = result.data
+    assert isinstance(analysis, RegionalNdviAnalysis)
+    assert analysis.pipeline_version == "1.0.0"
+
+    # Observation metadata
+    obs = analysis.observation
+    assert isinstance(obs, Sentinel2ImageMetadata)
+    assert obs.image_id.startswith("COPERNICUS/S2_SR_HARMONIZED/")
+    assert "2026-08-16" in obs.acquisition_date
+    assert obs.spacecraft_name == "Sentinel-2A"
+    assert obs.clear_threshold == DEFAULT_CLEAR_THRESHOLD
+    assert obs.quality_band == DEFAULT_QUALITY_BAND
+    assert obs.usable_coverage_percentage is not None
+    assert obs.usable_coverage_percentage >= DEFAULT_MIN_USABLE_COVERAGE * 100.0
+
+    # Quality evidence
+    qual = analysis.quality
+    assert isinstance(qual, ObservationQualityEvidence)
+    assert qual.quality_dataset == CLOUD_SCORE_PLUS_S2_HARMONIZED
+    assert qual.min_usable_coverage_threshold == DEFAULT_MIN_USABLE_COVERAGE
+    assert qual.max_scene_cloud_threshold == 20.0
+    assert qual.quality_mask_applied is True
+    assert qual.is_usable is True
+
+    # Freshness
+    fresh = analysis.freshness
+    assert isinstance(fresh, ObservationFreshness)
+    assert fresh.reference_date == "2026-08-31"
+    assert fresh.observation_age_days == 15
+    assert fresh.lookback_window_days == 30
+
+    # Region metadata
+    reg = analysis.region
+    assert isinstance(reg, AnalysisRegionMetadata)
+    assert reg.latitude == PUNJAB_LATITUDE
+    assert reg.longitude == PUNJAB_LONGITUDE
+    assert reg.radius_m == 100.0
+    assert reg.geometry_type == "PointBuffer"
+    assert reg.scale_m == 10.0
+
+    # Regional statistics
+    stats = analysis.statistics
+    assert isinstance(stats, NdviRegionalStatistics)
+    assert -1.0 <= stats.min <= stats.mean <= stats.max <= 1.0
+    assert -1.0 <= stats.min <= stats.median <= stats.max <= 1.0
+    assert stats.valid_pixel_count is not None and stats.valid_pixel_count >= 1
+
+
+def test_analyze_regional_ndvi_live_pre_sentinel2_no_data(ee_session: str) -> None:
+    """Test 21 (LIVE PIPELINE NO DATA): Pre-Sentinel-2 date window returns clean status='no_data'."""
+    result = analyze_regional_ndvi(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+        start_date="1990-01-01",
+        end_date="1990-01-31",
+    )
+
+    assert result.status == "no_data"
+    assert result.dataset == TEST_DATASET
+    assert result.image_count == 0
+    assert result.data is None
+    assert result.error is None
+
+
+def test_analyze_regional_ndvi_live_strict_usable_coverage_rejection(ee_session: str) -> None:
+    """Test 22 (LIVE PIPELINE STRICT COVERAGE REJECTION): Pre-Sentinel-2 or strict coverage yields no_data."""
+    result = analyze_regional_ndvi(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+        start_date="1990-01-01",
+        end_date="1990-01-02",
+        min_usable_coverage=0.99,
+    )
+
+    assert result.status == "no_data"
+    assert result.dataset == TEST_DATASET
+    assert result.image_count == 0
+    assert result.data is None
+    assert result.error is None
+
+
+def test_analyze_regional_ndvi_live_statistical_envelope(ee_session: str) -> None:
+    """Test 23 (LIVE STATISTICAL ENVELOPE): Verifies strict mathematical envelope consistency on live result."""
+    result = analyze_regional_ndvi(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+        start_date="2026-08-01",
+        end_date="2026-08-31",
+    )
+
+    assert result.status == "success"
+    stats = result.data.statistics
+    eps = 1e-6
+
+    assert -1.0 <= stats.min <= 1.0
+    assert -1.0 <= stats.max <= 1.0
+    assert -1.0 <= stats.mean <= 1.0
+    assert -1.0 <= stats.median <= 1.0
+
+    assert stats.min - eps <= stats.mean <= stats.max + eps
+    assert stats.min - eps <= stats.median <= stats.max + eps

@@ -617,4 +617,521 @@ Prior to DEC-010:
   - Regional NDVI summary statistics (mean, median, min, max) are **NOT** implemented yet (Subphase 1G).
   - Crop-health classification thresholds are **NOT** implemented yet.
   - Gemini prompt reasoning, MCP tool changes, and farmer-facing UI components remain deferred.
-- **Next Step:** Subphase 1G — Regional NDVI Statistics (Earth Engine zonal reducers computing mean, median, min, max over farm geometry).
+- **Next Step:** Subphase 1G — Regional NDVI Statistics (🟢 Completed). Subphase 1H — Reliability & Data Quality (🟢 DEC-011 Formalized).
+
+---
+
+### DEC-011: Regional Satellite Observation Evidence & Analysis Contract
+
+- **Decision ID:** `DEC-011`
+- **Date / Context:** Phase 1H Reliability & Data Quality (Subphase 1H Architecture Decision & Contract Formalization)
+
+#### 📸 Before Snapshot
+Prior to DEC-011:
+- Phases 1A–1G successfully established isolated scientific and geospatial data-engineering building blocks in `app/satellite/`:
+  - `DEC-007` (Phase 1D): Spatial geometry construction via circular buffers (`create_analysis_region(latitude, longitude, radius_m)`).
+  - `DEC-008` & `DEC-010` (Phase 1E): Sentinel-2 Surface Reflectance imagery discovery (`COPERNICUS/S2_SR_HARMONIZED`), lookback windowing, coarse scene cloud filtering (`CLOUDY_PIXEL_PERCENTAGE < 20%`), Cloud Score+ pixel quality assessment (`GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED`, `cs_cdf >= 0.60`), local usable coverage validation (`MIN_USABLE_COVERAGE = 0.70`), and metadata extraction (`Sentinel2ImageMetadata`).
+  - `DEC-009` (Phase 1F): Pure NDVI band mathematics on unreduced rasters clipped to the analysis geometry (`calculate_ndvi()`).
+  - Phase 1G: Zonal summary statistical reductions over valid unmasked pixels (`calculate_ndvi_statistics()`, returning `NdviRegionalStatistics` containing `mean`, `median`, `min`, `max`, and `valid_pixel_count`).
+- However, the system lacked a unified, authoritative, strongly typed domain contract that packages satellite observation provenance, observation-quality evidence, temporal freshness, analysis-region spatial metadata, and NDVI regional summary statistics into one cohesive result.
+- Without a formal contract, downstream callers (FastMCP tool handlers, Gemini 2.5 Flash agent reasoning graphs, and multi-source data fusion pipelines in Phases 4 & 5) would be forced to coordinate multiple low-level functions manually. This created severe architectural risks:
+  1. *Untyped dictionary soup:* Loss of schema validation and type safety.
+  2. *Split-brain observation queries:* Invoking image selection and NDVI computation separately could accidentally select different satellite passes.
+  3. *Attribute duplication & drift:* Repeating acquisition dates or quality thresholds across multiple objects without a single authoritative owner.
+  4. *Synthetic confidence scores:* Temptation to invent arbitrary aggregate confidence numbers without mathematical or empirical calibration.
+  5. *Premature agronomic interpretation:* Misclassifying raw optical measurements into crop health or disease diagnoses at the data layer.
+
+---
+
+#### 1. Context
+BharatSahayak V2 is currently at **Phase 1H — Reliability & Data Quality** (Git Checkpoint: `87903f0 — build: complete Phase 1G regional NDVI statistics`).
+
+Phases 1A through 1G are fully complete, verified, and locked:
+- **Phase 1A (`DEC-004`):** Decoupled Earth Engine computation into a dedicated `app/satellite/` engine behind the MCP capability interface.
+- **Phase 1B (`DEC-005`, `DEC-006`):** Standardized dependency management via `uv` and established local developer ADC authentication.
+- **Phase 1C:** Defined standard result contract envelopes (`EarthEngineResult`, `EarthEngineError`, and `EarthEngineStatus = Literal["success", "no_data", "error"]`).
+- **Phase 1D (`DEC-007`):** Formulated geographic region definition converting a farmer's point location into a 100m circular analysis buffer (`AnalysisRegion`).
+- **Phase 1E (`DEC-008`, `DEC-010`):** Ingested Sentinel-2 Harmonized Level-2A surface reflectance, evaluated Cloud Score+ clear-sky usability (`cs_cdf >= 0.60`), enforced 70% parcel usable coverage, and extracted structured `Sentinel2ImageMetadata`.
+- **Phase 1F (`DEC-009`):** Computed Normalized Difference Vegetation Index ($\text{NDVI} = \frac{\text{B8}-\text{B4}}{\text{B8}+\text{B4}}$) using native Earth Engine normalized difference, preserving unmasked rasters in $[-1.0, 1.0]$.
+- **Phase 1G:** Implemented combined server-side zonal reducers computing **mean**, **median**, **min**, **max**, and `valid_pixel_count` as `NdviRegionalStatistics`.
+
+Phase 1H addresses reliability, edge cases, and the unified analysis domain contract before exposing the capability through FastMCP and agent tools.
+
+---
+
+#### 2. Problem Statement
+To deliver satellite intelligence to multi-agent reasoning systems, the application must package raw Earth Observation (EO) data into an interpretable, reliable, and verifiable payload. However, satellite data is physically complex: observations have varying sensor acquisition times, orbital swaths, cloud/shadow occlusions, spatial bounding parameters, and sample pixel counts.
+
+The core problem is: **How should BharatSahayak structure, validate, and orchestrate the delivery of regional satellite evidence so that downstream consumers receive complete provenance, quality evidence, freshness, and statistical measurements without data duplication, split-brain queries, or premature classification?**
+
+Specifically, the design must overcome six critical failure modes:
+1. **Schema Fragility:** Relying on untyped Python dicts causes key mismatches, silent typos, and broken contracts across agent boundaries.
+2. **Monolithic "God Object":** Flattening 30+ disparate parameters into one massive model tightly couples unrelated concerns (e.g. satellite orbital telemetry with spatial geometry).
+3. **Data Duplication & Inconsistency:** Duplicating `acquisition_date` across metadata and freshness models or duplicating quality thresholds creates ambiguity over the single source of truth.
+4. **Split-Brain Observation Queries:** Calling discovery in one place and then independently fetching the "most recent image" downstream risks race conditions or temporal skew where metadata and NDVI statistics originate from different satellite passes.
+5. **Synthetic "Confidence Scores":** Fabricating an uncalibrated composite number (e.g. `confidence: 0.92`) misleads users and LLMs with fake mathematical certainty.
+6. **Premature Agronomic Interpretation:** Tagging raw NDVI with labels like "stressed", "diseased", or "healthy" at the data extraction layer violates separation of concerns, as true crop diagnosis requires seasonal, crop-type, and meteorological context.
+
+---
+
+#### 3. Architectural Goals
+- **Type-Safe Compositional Domain Model:** Structure the output as a Pydantic v2 domain model (`RegionalNdviAnalysis`) composed of distinct, single-responsibility sub-models.
+- **Single Authoritative Observation Pipeline:** Ensure the pipeline selects the authoritative Sentinel-2 observation *exactly once* during candidate qualification and flows that exact image proxy and metadata through band math, quality masking, and regional statistical reduction without redundant selection queries.
+- **Zero Field Duplication:** Establish strict, unambiguous field ownership so every empirical measurement and operational parameter has exactly one canonical owner.
+- **Explicit Multi-Dimensional Evidence:** Base reliability on transparent empirical evidence—provenance, pixel-level quality thresholds, temporal freshness days, and valid pixel counts—rather than synthetic confidence heuristics or binary freshness classifications.
+- **Strict Separation of Measurement from Interpretation:** Treat NDVI statistics strictly as radiometric measurements; leave agronomic diagnosis to downstream specialized agents (Phase 5).
+- **Backward Compatibility:** Maintain complete compatibility with `EarthEngineResult` envelopes and existing Phase 1A–1G contracts.
+- **Forward Extensibility:** Ensure the payload seamlessly accommodates future companion indices (NDWI in Phase 3), land-use classifications (Dynamic World in Phase 3), historical baseline deltas (Phase 2+), and multi-source fusion (Phase 4).
+
+---
+
+#### 4. Non-Goals
+- **No modification of Phase 1A–1G implementations:** The existing `calculate_ndvi()`, `calculate_ndvi_statistics()`, `create_analysis_region()`, and `select_most_recent_sentinel2_image()` functions and `NdviRegionalStatistics` models remain intact.
+- **No crop health classification or diagnosis:** DEC-011 explicitly prohibits classifying crop health, disease, pest stress, irrigation need, or yield predictions.
+- **No synthetic confidence score or binary freshness classification:** DEC-011 will not compute or return an aggregate scalar confidence score or binary `is_fresh` flag.
+- **No multi-temporal time-series baseline modeling:** Multi-year trend comparison and anomaly detection are deferred to Phase 2+ / Future Backlog.
+- **No MCP server or UI modifications in this subphase:** Wiring to FastMCP (`app/mcp_server.py`) and UI map components is scheduled for subsequent subphases.
+- **No intermediate client-server `.getInfo()` evaluations:** Intermediate band math and masking must remain client-side proxies; server evaluation happens strictly at the final reduction step.
+
+---
+
+#### 5. Existing Contracts (Inspected & Verified)
+The following contracts in [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py) are verified and preserved:
+
+- **`EarthEngineStatus`**: `Literal["success", "no_data", "error"]`
+- **`EarthEngineError`**: `BaseModel` with `type: str`, `message: str`.
+- **`Sentinel2ImageMetadata`**:
+  - `image_id: str` (Earth Engine asset ID)
+  - `acquisition_date: str` (ISO-8601 UTC timestamp string)
+  - `cloud_percentage: float` (Scene-level `CLOUDY_PIXEL_PERCENTAGE`, `[0.0, 100.0]`)
+  - `spacecraft_name: str | None` (e.g. `"Sentinel-2A"`, `"Sentinel-2B"`)
+  - `mgrs_tile: str | None` (e.g. `"43RER"`)
+  - `product_id: str | None` (ESA Level-2A product ID string)
+  - `system_time_start: int | None` (Unix epoch milliseconds)
+  - `usable_coverage_percentage: float | None` (Parcel-level clear pixel percentage, `[0.0, 100.0]`)
+  - `clear_threshold: float | None` (Clear score threshold applied, `[0.0, 1.0]`)
+  - `quality_band: str | None` (Quality band identifier, e.g. `"cs_cdf"`)
+- **`AnalysisRegion`**: `ee.Geometry` circular buffer generated via `create_analysis_region(latitude, longitude, radius_m)`.
+- **`NdviRegionalStatistics`**:
+  - `mean: float` (`[-1.0, 1.0]`)
+  - `median: float` (`[-1.0, 1.0]`)
+  - `min: float` (`[-1.0, 1.0]`)
+  - `max: float` (`[-1.0, 1.0]`)
+  - `valid_pixel_count: int | None` (`ge=0`)
+- **`EarthEngineResult`**: Universal result envelope containing `status: EarthEngineStatus`, `dataset: str | None`, `image_count: int | None`, `data: Any | None`, `error: EarthEngineError | None`.
+
+---
+
+#### 6. Proposed Contract & Composition
+The authoritative domain contract adopts a layered, compositional architecture:
+
+```text
+RegionalNdviAnalysis (BaseModel)
+├── observation: Sentinel2ImageMetadata
+├── quality: ObservationQualityEvidence
+├── freshness: ObservationFreshness
+├── region: AnalysisRegionMetadata
+├── statistics: NdviRegionalStatistics
+└── pipeline_version: str = "1.0.0"
+```
+
+```mermaid
+classDiagram
+    class RegionalNdviAnalysis {
+        +Sentinel2ImageMetadata observation
+        +ObservationQualityEvidence quality
+        +ObservationFreshness freshness
+        +AnalysisRegionMetadata region
+        +NdviRegionalStatistics statistics
+        +str pipeline_version
+    }
+    class Sentinel2ImageMetadata {
+        +str image_id
+        +str acquisition_date
+        +float cloud_percentage
+        +str spacecraft_name
+        +str mgrs_tile
+        +str product_id
+        +int system_time_start
+        +float usable_coverage_percentage
+        +float clear_threshold
+        +str quality_band
+    }
+    class ObservationQualityEvidence {
+        +str quality_dataset
+        +float min_usable_coverage_threshold
+        +float max_scene_cloud_threshold
+        +bool quality_mask_applied
+        +bool is_usable
+    }
+    class ObservationFreshness {
+        +str reference_date
+        +int observation_age_days
+        +int lookback_window_days
+    }
+    class AnalysisRegionMetadata {
+        +float latitude
+        +float longitude
+        +float radius_m
+        +str geometry_type
+        +float scale_m
+    }
+    class NdviRegionalStatistics {
+        +float mean
+        +float median
+        +float min
+        +float max
+        +int valid_pixel_count
+    }
+
+    RegionalNdviAnalysis *-- Sentinel2ImageMetadata : observation
+    RegionalNdviAnalysis *-- ObservationQualityEvidence : quality
+    RegionalNdviAnalysis *-- ObservationFreshness : freshness
+    RegionalNdviAnalysis *-- AnalysisRegionMetadata : region
+    RegionalNdviAnalysis *-- NdviRegionalStatistics : statistics
+```
+
+---
+
+#### 7. Responsibility of Each Model & Field Ownership Decisions
+
+To avoid ambiguity, redundancy, and field drift, every property has a single canonical owner:
+
+```text
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                FIELD OWNERSHIP MATRIX                                  │
+├──────────────────────────────┬──────────────────────────────┬──────────────────────────┤
+│ Field Category               │ Canonical Owner Model        │ Field Name(s)            │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────┤
+│ Satellite Observation & Lineage│ Sentinel2ImageMetadata      │ image_id, product_id,   │
+│                              │                              │ spacecraft_name, mgrs_tile│
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────┤
+│ Sensor Acquisition Timestamp │ Sentinel2ImageMetadata      │ acquisition_date,        │
+│                              │                              │ system_time_start        │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────┤
+│ Measured Scene Cloud Cover   │ Sentinel2ImageMetadata      │ cloud_percentage         │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────┤
+│ Measured Parcel Usable Cover │ Sentinel2ImageMetadata      │ usable_coverage_percentage│
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────┤
+│ Image Clear Threshold / Band │ Sentinel2ImageMetadata      │ clear_threshold,         │
+│                              │                              │ quality_band             │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────┤
+│ Quality Filtering Criteria   │ ObservationQualityEvidence   │ quality_dataset,         │
+│ & Policy Evidence            │                              │ min_usable_coverage_threshold,│
+│                              │                              │ max_scene_cloud_threshold,│
+│                              │                              │ quality_mask_applied,    │
+│                              │                              │ is_usable                │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────┤
+│ Temporal Reference Context   │ ObservationFreshness         │ reference_date,          │
+│ & Derived Timeliness         │                              │ observation_age_days,    │
+│                              │                              │ lookback_window_days     │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────┤
+│ Geographic Bounds & Sampling │ AnalysisRegionMetadata       │ latitude, longitude,     │
+│ Parameters                   │                              │ radius_m, geometry_type, │
+│                              │                              │ scale_m                  │
+├──────────────────────────────┼──────────────────────────────┼──────────────────────────┤
+│ Mathematical NDVI Statistics │ NdviRegionalStatistics       │ mean, median, min, max,  │
+│                              │                              │ valid_pixel_count        │
+└──────────────────────────────┴──────────────────────────────┴──────────────────────────┘
+```
+
+##### Model Specifications:
+
+1. **`Sentinel2ImageMetadata` (Existing — Observation Provenance & Measured Attributes):**
+   - Holds empirical physical and telemetry properties extracted directly from the satellite asset.
+   - `image_id`: Unique Earth Engine asset ID (e.g. `"COPERNICUS/S2_SR_HARMONIZED/20260816T055041_..."`).
+   - `acquisition_date`: Canonical ISO-8601 UTC timestamp of the satellite capture.
+   - `cloud_percentage`: Measured scene-level cloud percentage across the entire ~100x100 km granule (`[0.0, 100.0]`).
+   - `usable_coverage_percentage`: Measured percentage of unoccluded pixels within the local `AnalysisRegion` (`[0.0, 100.0]`).
+   - `clear_threshold`: The clear-sky quality cutoff applied (`0.60`).
+   - `quality_band`: The quality band used (`"cs_cdf"`).
+   - `spacecraft_name`, `mgrs_tile`, `product_id`, `system_time_start`: Full orbital provenance.
+
+2. **`ObservationQualityEvidence` (New — Filtering Policy Criteria & Verification Evidence):**
+   - Holds the quality policy parameters and operational evidence that governed candidate qualification.
+   - **Does NOT duplicate** `cloud_percentage`, `usable_coverage_percentage`, `clear_threshold`, or `quality_band`.
+   - `quality_dataset: str = "GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"`: Quality dataset source.
+   - `min_usable_coverage_threshold: float = Field(default=0.70, ge=0.0, le=1.0)`: Configured operational minimum parcel coverage ratio required for usability.
+   - `max_scene_cloud_threshold: float = Field(default=20.0, ge=0.0, le=100.0)`: Configured maximum scene cloud threshold for catalog pre-filtering.
+   - `quality_mask_applied: bool`: Explicit confirmation that sub-threshold pixels were masked prior to NDVI math (required field without default).
+   - `is_usable: bool`: Operational validation flag confirming that both scene and parcel quality criteria were satisfied (required field without default).
+
+3. **`ObservationFreshness` (New — Evidence-Only Temporal Reference & Timeliness):**
+   - Holds the temporal context and derived age of the observation relative to a designated baseline.
+   - **Does NOT duplicate** `acquisition_date` and does **NOT** impose a binary `is_fresh` classification.
+   - `reference_date: str`: Canonical ISO-8601 date string (`"YYYY-MM-DD"`) against which freshness was evaluated (caller-supplied `end_date`, or current UTC date if omitted).
+   - `observation_age_days: int = Field(ge=0)`: Computed integer calendar days between `acquisition_date` and `reference_date`.
+   - `lookback_window_days: int = Field(default=30, gt=0)`: Configured search window length.
+
+4. **`AnalysisRegionMetadata` (New — Spatial Footprint & Reduction Sampling Context):**
+   - Holds the geographic location, buffer geometry, and raster sampling parameters.
+   - `latitude: float = Field(ge=-90.0, le=90.0)`: Center latitude in decimal degrees.
+   - `longitude: float = Field(ge=-180.0, le=180.0)`: Center longitude in decimal degrees.
+   - `radius_m: float = Field(default=100.0, gt=0.0)`: Circular buffer radius in meters.
+   - `geometry_type: str = "PointBuffer"`: Spatial geometry descriptor (extensible to `"Polygon"` in Phase 9).
+   - `scale_m: float = Field(default=10.0, gt=0.0)`: Zonal reduction scale in meters (Sentinel-2 10m native optical resolution).
+
+5. **`NdviRegionalStatistics` (Existing — Unmodified Phase 1G Zonal Measurement Layer):**
+   - Holds the reduced NDVI summary statistics across valid unmasked pixels.
+   - `mean: float = Field(ge=-1.0, le=1.0)`: Mean NDVI.
+   - `median: float = Field(ge=-1.0, le=1.0)`: Median NDVI.
+   - `min: float = Field(ge=-1.0, le=1.0)`: Minimum NDVI.
+   - `max: float = Field(ge=-1.0, le=1.0)`: Maximum NDVI.
+   - `valid_pixel_count: int | None = Field(default=None, ge=0)`: Count of valid unmasked pixels contributing to the reduction.
+
+6. **`RegionalNdviAnalysis` (New — Root Domain Contract):**
+   - Unifies all sub-models into a single strongly typed payload.
+   - `observation: Sentinel2ImageMetadata`
+   - `quality: ObservationQualityEvidence`
+   - `freshness: ObservationFreshness`
+   - `region: AnalysisRegionMetadata`
+   - `statistics: NdviRegionalStatistics`
+   - `pipeline_version: str = "1.0.0"`
+
+---
+
+#### 8. Provenance Design
+Satellite data provenance is critical for auditability, legal defensibility, scientific repeatability, and hallucination prevention in LLMs:
+- **Constellation & Instrument:** Copernicus Sentinel-2 MultiSpectral Instrument (MSI), Level-2A Bottom-of-Atmosphere (BOA) Surface Reflectance (`COPERNICUS/S2_SR_HARMONIZED`).
+- **Granule Identification:** Captured via `image_id` (Earth Engine system index), `product_id` (ESA official product archive ID), and `mgrs_tile` (Military Grid Reference System 100x100 km tile ID, e.g. `43RER` for Punjab).
+- **Spacecraft Identity:** Recorded as `spacecraft_name` (`"Sentinel-2A"` or `"Sentinel-2B"`).
+- **Temporal Anchor:** Precise UTC millisecond epoch `system_time_start` and formatted ISO-8601 string `acquisition_date`.
+- **Reproducibility Guarantee:** Given the `image_id`, `latitude`, `longitude`, `radius_m`, and `scale_m`, any third party or test suite can reproduce the identical NDVI raster and statistical reduction.
+
+---
+
+#### 9. Observation-Quality Evidence Design
+
+##### Why Scene-Level Cloud Percentage is Not Sufficient by Itself:
+- Sentinel-2 Level-2A granules cover approximately $100 \times 100 \text{ km}$ ($10,000 \text{ km}^2$).
+- The scene-level attribute `CLOUDY_PIXEL_PERCENTAGE` is a coarse aggregate across this entire $10,000 \text{ km}^2$ footprint.
+- For a smallholder farm analysis (e.g. 100-meter radius circular buffer $\approx 0.0314 \text{ km}^2$, or $3.14 \text{ hectares}$), scene-level cloud percentage creates two distinct failure modes:
+  1. *False Positive Cloud Rejection:* A granule with 30% scene cloud cover may have clear optical visibility over the specific farm plot in Punjab. Rejecting the scene based purely on scene-level cloud percentage would needlessly discard valid, usable agricultural observations.
+  2. *False Negative Cloud Contamination:* A granule with only 10% overall cloud cover may happen to have a localized cumulus cloud, thin cirrus plume, or cloud shadow positioned directly over the farmer's $100 \text{ m}$ observation circle. Trusting scene-level cloud cover would result in calculating NDVI on cloud/shadow-corrupted reflectance, severely depressing or distorting vegetation values and misleading downstream advisories.
+- Therefore, scene-level cloud percentage functions strictly as a candidate discovery pre-filter (to discard overwhelmingly cloudy granules without expensive computation), while pixel-level Cloud Score+ evaluated within `AnalysisRegion` is mandatory for observation usability.
+
+##### Nature of Cloud Score+ and Regional Usable Coverage:
+- Cloud Score+ (`GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED`, `cs_cdf` band) is a machine-learning quality model trained on Sentinel-2 optical imagery.
+- The `cs_cdf` band provides a cumulative distribution function (CDF) clear-sky quality score between $0.0$ and $1.0$ for every $10\text{ m}$ pixel. Higher scores represent higher clear-sky optical clarity. The value `clear_threshold = 0.60` serves as an empirical cutoff for clear-sky pixel usability, capturing diffuse cloud edges, cirrus, and cloud shadows.
+- **Engineering Acceptance Criterion (70% Threshold):** Enforcing `usable_coverage_percentage >= 70.0%` (`MIN_USABLE_COVERAGE = 0.70`) is an *operational engineering acceptance threshold* to ensure sufficient spatial data density across the 100m circular buffer before proceeding with NDVI reduction.
+  - **Explicit Caution:** 70% usable coverage is an operational filtering heuristic, **not** a mathematical guarantee of representative spatial sampling, crop uniformity, or agricultural reliability. A parcel meeting 70% coverage may still have clear pixels concentrated on one quadrant or include field bunds.
+- **Strict Separation of Concerns:**
+  1. *Observed Coverage:* Measured clear pixel percentage on the selected image inside `AnalysisRegion` (`usable_coverage_percentage` on `Sentinel2ImageMetadata`).
+  2. *Policy & Threshold Evidence:* Configured operational thresholds used to qualify candidates and mask pixels (`min_usable_coverage_threshold = 0.70`, `clear_threshold = 0.60`, `max_scene_cloud_threshold = 20.0` on `ObservationQualityEvidence`).
+  3. *Agronomic Interpretation:* Biological/agricultural evaluation of crop condition, which is strictly decoupled and never inferred by the satellite layer.
+
+##### Why Masked Pixels Must Remain Excluded from Statistics:
+- When pixels are masked by Cloud Score+ (`cs_cdf < clear_threshold`) or sensor edge/nodata conditions, replacing masked pixels with $0.0$ (or interpolating them artificially) would corrupt the statistical distribution:
+  - Replacing with $0.0$ would artificially depress the mean and median NDVI, creating fake "severe crop stress" signals for an otherwise healthy field.
+  - Interpolating/imputing values from neighboring pixels without physical grounding invents synthetic optical reflectance.
+- By preserving native Earth Engine null/masked states, the zonal reducer (`ee.Reducer.mean().combine(...)`) strictly aggregates only over genuine, physically measured, clear-sky surface reflectance pixels.
+
+---
+
+#### 10. Freshness Design
+
+##### Why Freshness is Separate from Quality:
+- Observation Quality measures the *optical and physical fidelity* of the imagery (how clear, cloud-free, and uncorrupted the spectral reflectance is).
+- Observation Freshness measures the *temporal relevance and latency* of the observation relative to a reference decision date (how many days have elapsed since the satellite overpass).
+- These are strictly orthogonal dimensions:
+  - A satellite image acquired 28 days ago during a clear winter week may have $100\%$ usable coverage (flawless quality), but represent outdated crop growth stages (low freshness).
+  - A satellite image acquired yesterday may have $72\%$ usable coverage through broken monsoon clouds (high freshness, but marginal quality).
+- Conflating freshness and quality into a single metric obscures these vital nuances from agentic reasoning and decision workflows.
+
+##### Evidence-Only Freshness Contract:
+- `ObservationFreshness` delivers strictly empirical temporal evidence (`reference_date`, `observation_age_days`, `lookback_window_days`) without classifying the observation as binary "fresh" or "stale" (`is_fresh` is omitted).
+- **Rationale:** Freshness requirements depend on external agricultural context (crop variety, growth velocity, and decision urgency). For instance, an 8-day-old observation may be timely for long-cycle sugarcane or rabi wheat, but stale for fast-growing leafy vegetables during active pest outbreak. Downstream multi-agent reasoning (Phase 5) evaluates timeliness against specific crop calendars.
+- **Reference Date Semantics:**
+  - *Caller-Supplied `end_date`:* When a specific `end_date` is provided (e.g. for historical backtesting), the resolved `end_date` serves as the `reference_date`.
+  - *Default (No `end_date`):* When `end_date` is omitted, `reference_date` is the current UTC calendar date (`datetime.now(timezone.utc).date().isoformat()`).
+  - *Derived `observation_age_days`:* Calculated deterministically as `(reference_date - acquisition_date).days`. If the satellite timestamp falls on the reference date, `observation_age_days = 0`.
+
+---
+
+#### 11. Analysis-Region Metadata Design
+- **Spatial Definition:** The analysis footprint is defined by `latitude` (decimal degrees in `[-90.0, 90.0]`), `longitude` (decimal degrees in `[-180.0, 180.0]`), and `radius_m` (meters, strictly `> 0.0`, default `100.0`).
+- **Engineering Sampling Envelope:** As locked in `DEC-007`, the 100m circular buffer is an engineering choice for local Sentinel-2 spatial sampling (~3.14 hectares covering ~314 pixels of 10m resolution). It represents an approximate local observation area that may encompass adjacent field bunds, farm paths, or trees, and must **never** be described as an exact cadastral property boundary.
+- **Zonal Scale:** The reduction `scale_m` defaults to `10.0` meters, matching Sentinel-2 MSI Band 4 (Red) and Band 8 (NIR) native spatial resolution.
+
+---
+
+#### 12. NDVI Statistics Integration
+
+##### Preservation of Phase 1G Statistics Contract & Statistical Cross-Field Invariant:
+- The existing `NdviRegionalStatistics` model (`mean`, `median`, `min`, `max`, `valid_pixel_count`) and single-pass server-side reducer (`ee.Reducer.mean().combine(median).combine(min).combine(max).combine(count)`) remain the authoritative measurement layer.
+- `NdviRegionalStatistics` remains unchanged with no added validators.
+- **Phase 1H Pipeline Statistical Invariant:** The statistical envelope conditions ($\text{min} \le \text{median} \le \text{max}$ and $\text{min} \le \text{mean} \le \text{max}$) are verified during Phase 1H pipeline assembly before constructing a successful `RegionalNdviAnalysis`, guaranteeing that any corrupted reduction anomaly is caught before model instantiation without modifying Phase 1G models.
+- `RegionalNdviAnalysis` nests `NdviRegionalStatistics` as its `statistics` attribute without modifying its fields or internal logic.
+
+##### Why `valid_pixel_count` Belongs to Statistical Evidence:
+- A 100m circular buffer has a theoretical geometric area of $\pi \times 100^2 \approx 31,416\text{ m}^2$, corresponding to approximately 314 raster cells of $10\text{ m} \times 10\text{ m}$.
+- However, the *actual* number of pixels entering the reducer varies dynamically due to:
+  1. Cloud Score+ quality masking (e.g., masking 15% cloudy pixels leaves ~267 valid pixels).
+  2. Sensor swath boundary clipping.
+  3. Denominator zero division masking ($\text{B8} + \text{B4} = 0$).
+- `valid_pixel_count` represents the empirical sample size ($N$) of the statistical distribution. Treating it as statistical evidence allows downstream agents to evaluate the statistical significance of the mean and median (e.g., distinguishing $N=314$ full coverage from $N=220$ partial coverage).
+
+---
+
+#### 13. Single-Authoritative-Observation Pipeline
+To prevent split-brain observation bugs and eliminate redundant queries, the entire analysis workflow executes as a single, deterministic pipeline:
+
+```text
+1. Resolve & Validate Inputs (Lat, Lon, Radius, Lookback, Date Range, Quality Thresholds)
+       ↓
+2. Create Analysis Region Geometry (ee.Geometry circular buffer via create_analysis_region)
+       ↓
+3. Discover & Qualify Candidate Collection:
+       - Link Cloud Score+ quality band (cs_cdf)
+       - Calculate regional usable coverage per scene using binary mask (cs_cdf >= clear_threshold)
+       - Filter candidates by scene cloud (< max_cloud_percentage) AND parcel coverage (USABLE_COVERAGE >= min_usable_coverage)
+       - Sort qualified candidates descending by system:time_start (newest-first)
+       ↓
+4. Evaluate Candidate Count & Select Authoritative Image:
+       ├── If image_count == 0 ──→ Return EarthEngineResult(status="no_data", data=None)
+       └── If image_count > 0  ──→ Select EXACTLY ONE image proxy: authoritative_img = collection.first()
+                                        ↓
+5. Extract Image Metadata & Telemetry (single .getInfo() on authoritative_img properties)
+       ↓
+6. Apply Quality Mask to Authoritative Image:
+       - Apply consistent updateMask(cs_cdf >= clear_threshold) via mask_observation_quality
+       ↓
+7. Compute NDVI on Masked Authoritative Image & Clip (calculate_ndvi)
+       ↓
+8. Execute Combined Server-Side Zonal Reduction (calculate_ndvi_statistics)
+       ├── If stats is empty or valid_pixel_count == 0 ──→ Return EarthEngineResult(status="no_data", data=None)
+       └── If stats is valid ──→ Proceed to Assembly
+                                        ↓
+9. Compose Evidence Objects (ObservationQualityEvidence, ObservationFreshness, AnalysisRegionMetadata)
+       ↓
+10. Construct RegionalNdviAnalysis & Return EarthEngineResult(status="success", data=analysis)
+```
+
+##### Pipeline Invariants & Reconciliation:
+1. **Qualification Precedes Selection:** Candidate qualification in Step 3 already evaluates regional Cloud Score+ usable coverage on every candidate scene.
+2. **Single Authoritative Selection:** Step 4 selects `collection.first()`, which is already the newest observation meeting all quality gates. There is **no secondary or independent selection call**.
+3. **Consistent Quality Masking:** The pixel mask applied in Step 6 (`cs_cdf >= clear_threshold`) is identical to the condition used to evaluate qualifying coverage in Step 3. The masked raster derived from `authoritative_img` is the exact raster carried into NDVI calculation (Step 7) and zonal reduction (Step 8).
+
+---
+
+#### 14. Error and No-Data Semantics
+The contract enforces strict tripartite result semantics via `EarthEngineResult`:
+
+1. **`status="success"`:**
+   - A valid candidate observation was found, passed all configured data-quality gates, and produced valid NDVI regional statistics.
+   - A `RegionalNdviAnalysis` represents an observation that passed the configured data-quality gates and produced valid NDVI regional statistics.
+   - `data` contains an instance of `RegionalNdviAnalysis`.
+   - `error` is `None`.
+
+2. **`status="no_data"`:**
+   - The query executed successfully, but no scientifically valid observation could be produced.
+   - **Trigger Conditions:**
+     - Zero candidate images in the lookback window.
+     - Candidate images exist, but none satisfy `MIN_USABLE_COVERAGE >= 0.70` inside `AnalysisRegion`.
+     - Spatial reduction over the masked NDVI raster yields zero valid unmasked pixels (`valid_pixel_count == 0` or null mean).
+   - **Contract Guarantee:** `data` is `None`, `error` is `None`. Missing data is strictly represented as `no_data`, **never** as fabricated `NDVI=0.0`.
+
+3. **`status="error"`:**
+   - An unrecoverable exception occurred during remote Earth Engine API communication (e.g. `ee.EEException`, authentication error, computation timeout, or quota exceeded).
+   - `data` is `None`.
+   - `error` contains structured `EarthEngineError(type=..., message=...)`.
+
+4. **Local Validation Errors:**
+   - Invalid local inputs (e.g. latitude > 90, negative radius, invalid string types) raise synchronous `TypeError` or `ValueError` immediately before initiating any network or Earth Engine operations.
+
+---
+
+#### 15. Backward Compatibility
+- **Transport Envelope:** `EarthEngineResult` remains the universal result wrapper. Existing callers expecting `status`, `data`, and `error` continue to function without modification.
+- **Existing Types:** `Sentinel2ImageMetadata`, `NdviRegionalStatistics`, and `EarthEngineError` remain unchanged.
+- **Existing Functions:** `create_analysis_region()`, `get_sentinel2_collection()`, `select_most_recent_sentinel2_image()`, `get_most_recent_sentinel2_image()`, `calculate_ndvi()`, and `calculate_ndvi_statistics()` remain fully supported and unmodified.
+
+---
+
+#### 16. Extensibility for Future Milestones
+The compositional structure of `RegionalNdviAnalysis` is intentionally designed for straightforward expansion in upcoming roadmap phases:
+
+- **Phase 3 (Water / Moisture Index — NDWI):**
+  A companion `NdwiRegionalStatistics` model can be computed from $(\text{B3}-\text{B8})/(\text{B3}+\text{B8})$ on the same authoritative observation and attached as an optional `ndwi_statistics` field.
+- **Phase 3 (Dynamic World LULC):**
+  A `LandCoverDistribution` model (capturing pixel proportions for crops, trees, grass, flooded vegetation, built-up, bare ground, water) can be added as a compositional block.
+- **Phase 2+ (Multi-Temporal NDVI Time-Series & Anomaly Baselines):**
+  An optional `temporal_comparison` block (e.g. `historical_mean_ndvi`, `seasonal_z_score`, `year_over_year_delta`) can be attached without modifying the core instantaneous observation fields.
+- **Phase 4 (Multi-Source Data Fusion):**
+  `RegionalNdviAnalysis` will serve as the satellite intelligence component inside a larger `FarmContextPayload` alongside meteorological metrics (rainfall, temperature, humidity from ERA5 / Open-Meteo) and soil properties (pH, organic carbon from SoilGrids).
+- **Phase 5 (Gemini 2.5 Flash Agronomic Reasoning):**
+  The strongly typed JSON serialization provides unambiguous, hallucination-resistant grounding for multi-agent reasoning, ensuring LLMs receive explicit provenance, quality evidence, and measurement confidence without guesswork.
+
+---
+
+#### 17. Why this Architecture was Selected
+1. **Domain-Model Fidelity:** Separating observation metadata, quality evidence, freshness, region parameters, and statistical measurements mirrors the physical realities of remote sensing.
+2. **Deterministic Single Source of Truth:** Eliminating duplicated fields guarantees consistency across serialization and logging.
+3. **Auditability & Reproducibility:** Retaining full satellite asset IDs and reduction parameters allows exact historical replay.
+4. **Honest Uncertainty Communication:** Providing explicit quality evidence and valid pixel counts allows downstream agents to calibrate the strength of their recommendations rather than relying on fake confidence numbers.
+5. **Architectural Decoupling:** Isolating geospatial data engineering from agent reasoning preserves clean boundaries (`DEC-004`).
+
+---
+
+#### 18. Alternatives Considered
+
+| Alternative | Description | Pros | Cons | Verdict |
+| :--- | :--- | :--- | :--- | :--- |
+| **Alternative A: Untyped Dict Payload** | Return raw nested Python dictionaries from Earth Engine reducers directly to callers. | Quickest initial implementation; zero model definitions. | No type safety; no schema validation; prone to missing keys and runtime errors; no auto-completion. | ❌ **REJECTED** |
+| **Alternative B: Giant Generic `SatelliteObservation`** | Flatten all 30+ observation, quality, freshness, region, and statistical fields into one monolithic Pydantic model. | Single flat model structure. | Conflates unrelated concerns; high field bloat; forces field duplication; difficult to extend for NDWI/LULC. | ❌ **REJECTED** |
+| **Alternative C: Layered Compositional Typed Payload (`RegionalNdviAnalysis`)** | Compose strongly typed sub-models (`Sentinel2ImageMetadata`, `ObservationQualityEvidence`, `ObservationFreshness`, `AnalysisRegionMetadata`, `NdviRegionalStatistics`) under a root domain model. | Clean separation of concerns; zero duplication; type-safe; fully auditable; seamless future extensibility. | Requires defining modular Pydantic models and orchestration pipeline. | 🟢 **CHOSEN** |
+
+---
+
+#### 19. Risks and Mitigations
+
+| Risk | Impact | Mitigation Strategy |
+| :--- | :--- | :--- |
+| **Persistent Monsoon Cloud Cover** | Lookback window may contain zero scenes meeting 70% usable coverage, leading to consecutive `no_data` results. | Graceful `status="no_data"` return; support configurable `lookback_days` (e.g. extending from 30 to 45/60 days during peak Kharif monsoon); clear agent messaging explaining optical satellite cloud limitations. |
+| **Spatial Inexactness of Circular Buffer** | 100m circular buffer may sample non-crop pixels (bunds, roads, adjacent plots). | Document that 100m buffer is an approximate local observation envelope, not a cadastral parcel boundary; preserve `AnalysisRegionMetadata` so polygon boundaries can seamlessly replace buffers in Phase 9. |
+| **Earth Engine API Latency / Timeouts** | Live multi-agent queries could timeout if multiple Earth Engine server-side calls are executed sequentially. | Enforce single-pass combined reducer (`ee.Reducer.mean().combine(...)`) executed in one server roundtrip; keep intermediate operations as client-side proxies. |
+
+---
+
+#### 20. Testing Implications
+Implementation of DEC-011 in Phase 1H requires comprehensive test coverage:
+1. **Model Validation Unit Tests:** Verify valid instantiation, serialization/deserialization (`model_dump()`), bounds validation ($[-1, 1]$ for NDVI, $[0, 100]$ for percentages), and rejection of negative age/pixel counts across all new models.
+2. **Pipeline Orchestration Unit Tests:** Test `analyze_regional_ndvi()` using mocked Earth Engine calls covering:
+   - Success path returning fully populated `RegionalNdviAnalysis`.
+   - Zero candidate images returning `status="no_data"`.
+   - Zero qualifying candidates (<70% usable coverage) returning `status="no_data"`.
+   - Zero valid pixels in reduction returning `status="no_data"`.
+   - Earth Engine remote exceptions returning `status="error"`.
+   - Invalid coordinate/radius/date parameters raising `TypeError` / `ValueError`.
+3. **Live Earth Engine Integration Tests:** Validate end-to-end execution against live Earth Engine servers:
+   - Standard Punjab test fixture (`[75.7196, 30.9157]`, 100m radius, Aug 2026) returning `status="success"`.
+   - Pre-Sentinel-2 date query (Jan 1990) returning `status="no_data"`.
+
+---
+
+#### 21. Future Boundaries
+The scope of DEC-011 and Phase 1H is strictly confined to satellite observation evidence packaging:
+- **No Agronomic Interpretation:** Do not classify vegetation vigor as "healthy", "moderate", or "stressed" in `app/satellite/`.
+- **No LLM Prompts or Reasoning:** Keep prompt engineering and agent tool bindings strictly within `app/agent.py` and `app/mcp_server.py`.
+- **No Frontend Rendering:** Map visualization and UI cards remain in the UI layer (Phase 9).
+
+---
+
+#### 22. Final Decision
+**Adopt Option C: Layered Compositional Typed Domain Payload (`RegionalNdviAnalysis`).**
+BharatSahayak V2 standardizes on `RegionalNdviAnalysis` as the authoritative domain model for regional satellite observation evidence and NDVI analysis, composed of `Sentinel2ImageMetadata` (observation provenance), `ObservationQualityEvidence` (quality filtering criteria), `ObservationFreshness` (temporal timeliness), `AnalysisRegionMetadata` (spatial footprint), and `NdviRegionalStatistics` (zonal measurements), wrapped within the standard `EarthEngineResult` transport envelope.
+
+---
+
+#### 23. Implementation Plan for Phase 1H
+1. **Subphase 1H.1 — Architecture Decision Record (`DEC-011`):** 🟢 Complete (this document).
+2. **Subphase 1H.2 — Domain Types & Pydantic Models:** Implement `ObservationQualityEvidence`, `ObservationFreshness`, `AnalysisRegionMetadata`, and `RegionalNdviAnalysis` in `app/satellite/types.py`.
+3. **Subphase 1H.3 — Analysis Pipeline Orchestration:** Implement `analyze_regional_ndvi()` in `app/satellite/pipeline.py` executing the single-authoritative-observation pipeline.
+4. **Subphase 1H.4 — Module Exports:** Export all new types and pipeline functions in `app/satellite/__init__.py`.
+5. **Subphase 1H.5 — Unit Testing:** Create `tests/unit/test_satellite_pipeline.py` and extend `tests/unit/test_satellite_types.py` covering model validation, edge cases, and mocked pipeline paths.
+6. **Subphase 1H.6 — Live Earth Engine Integration Testing:** Add live end-to-end pipeline tests to `tests/integration/test_earth_engine_connectivity.py`.
+7. **Subphase 1H.7 — Documentation & Checkpoint:** Update `docs/phases/PHASE_01_EARTH_ENGINE_FOUNDATION.md` and `docs/CHANGELOG.md` and record verified Phase 1H Git checkpoint.
+
+---
+
+- **Status:** 🟢 **DECISION LOCKED & FORMALIZED (Phase 1H Architecture Decision Complete)**
