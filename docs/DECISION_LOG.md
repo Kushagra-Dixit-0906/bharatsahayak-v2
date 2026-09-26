@@ -1331,3 +1331,56 @@ Standardize on **Calendar-Date-Anchored Seasonal Windowing** in pure Python with
 - **Calendar vs Crop Sowing Offsets:** Does not adjust for dynamic monsoon shifts (e.g. if sowing occurred 2 weeks later in a prior year). Such agronomic interpretations remain deferred to Phase 5 agent reasoning.
 
 ---
+
+### DEC-016: Historical Satellite Collection Pipeline & Annual Pixel-Median Compositing
+
+- **Decision ID:** `DEC-016`
+- **Date / Context:** Phase 2C Historical Satellite Intelligence (Collection Querying, Observation Selection & Annual Compositing Strategy)
+
+#### 📸 Before Snapshot
+Prior to DEC-016, Phase 2A selected Option C (Annual Matched-Window Regional Observations) and Phase 2B defined the 31-day seasonal window $[S_h, E_h]$ for each target year $Y_h \in \{Y-1, Y-2, Y-3\}$, but the collection querying architecture, quality filtering, observation qualification vs selection criteria, compositing mathematics, and masked-pixel handling required to produce one representative annual regional NDVI observation were unspecified.
+
+#### 📜 Decision
+Establish the canonical **Historical Satellite Collection Pipeline & Annual Pixel-Median Compositing Strategy** using independent annual sub-pipelines, Phase 1 quality parity, temporal recency selection among usable scenes, and pixel-wise median NDVI compositing:
+
+1. **Three-Year Historical Horizon & Phase 2B Seasonal Matching:**
+   - For each historical target year $Y_h \in \{Y-1, Y-2, Y-3\}$, evaluate candidate satellite imagery within the discrete 31-day inclusive calendar window $[T_h - 15\text{ days}, T_h + 15\text{ days}]$ derived via Phase 2B (`DEC-015`).
+2. **Independent Annual Processing (Part A Architecture):**
+   - Execute collection querying, quality filtering, recency sorting, and compositing as independent, isolated sub-pipelines for each target year $Y_h$.
+   - Rejects complex server-side `ee.Join` / `ee.List.map()` collection grouping for the 3-year MVP to maximize simplicity, fault isolation, and unit testability.
+3. **Phase 1 Quality Gate Parity (Usability Qualification):**
+   - Reuses the identical Phase 1 quality policy (`DEC-010`): `COPERNICUS/S2_SR_HARMONIZED` linked with Cloud Score+ `GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED` (`cs_cdf >= 0.60`), coarse scene cloud $< 20.0\%$, and parcel `min_usable_coverage >= 0.70` (70% unmasked pixels in 100m `AnalysisRegion`).
+4. **Temporal Recency Selection among Usable Scenes:**
+   - Candidate observations meeting the quality gate are qualified as **usable**.
+   - Qualified usable observations are sorted by acquisition date descending (`system:time_start` newest-first), and the pipeline selects the **up to 3 most recent usable observations**.
+5. **Role of Usable Coverage (Gate/Evidence vs. Ranking):**
+   - `usable_coverage_percentage` functions strictly as a binary usability gate ($\ge 70\%$) and is preserved as empirical spatial evidence in metadata.
+   - Usable coverage is **not** used to rank or weight qualified observations. No synthetic quality scores, ranking formulas, or arbitrary weights are applied.
+6. **Bounded Selection Semantics ($N \in \{0, 1, 2, 3, >3\}$):**
+   - $N \ge 3 \to$ select 3 newest usable observations.
+   - $N = 2 \to$ select both 2 usable observations.
+   - $N = 1 \to$ select the 1 usable observation (accepted as valid annual observation; overall baseline guarded by Phase 2A $N_{\text{annual}} \ge 2 \land Y \ge 2$ rule).
+   - $N = 0 \to$ historical year returns `status="no_data"`.
+7. **Per-Scene NDVI Band Mathematics (NDVI-Before-Composite):**
+   - For each selected scene $i$, compute masked NDVI raster first: $\text{NDVI}_i = \frac{\text{B8}_i - \text{B4}_i}{\text{B8}_i + \text{B4}_i}$.
+   - Prevents synthetic cross-date band pairing artifacts caused by compositing raw reflectance bands ($\text{median}(\text{NDVI}) \ne \text{NDVI}(\text{median } B8, \text{median } B4)$).
+8. **Pixel-Wise Median NDVI Compositing:**
+   - Stack selected NDVI rasters into an `ee.ImageCollection` and composite via pixel-wise median (`ee.ImageCollection.median()`).
+   - Execute regional zonal reduction (`calculate_ndvi_statistics`) over the composite raster to preserve intra-parcel spatial structure ($\text{median}(\text{reduce}(I)) \ne \text{reduce}(\text{median}(I))$).
+9. **Masked-Pixel Preservation & Statistics Semantics:**
+   - Earth Engine's median reducer operates exclusively over valid unmasked pixels at each coordinate. If a pixel is valid in $\ge 1$ scene, it receives a valid median; if masked in all scenes, it remains masked.
+   - Masked pixels are strictly excluded from zonal reductions and **never converted to artificial zeros** ($\text{NULL} \ne 0.0$).
+   - `valid_pixel_count` reflects spatial pixels in the `AnalysisRegion` contributing valid data to the zonal reduction, not per-pixel observation depth.
+10. **Rejection of Synthetic Data & Scalar Confidence:**
+    - Prohibits scene duplication, synthetic temporal interpolation, and arbitrary scalar confidence scores in favor of transparent empirical evidence ($N_{\text{selected}}$, $N_{\text{available}}$, dates, coverage percentages).
+
+#### 💡 Rationale (Why Chosen)
+- **Mathematical & Spatial Integrity:** Combining pixel-level NDVI rasters via median before zonal reduction eliminates cloud leakage, preserves parcel spatial variance, and avoids non-linear ratio distortion.
+- **Architectural Simplicity & Fault Isolation:** Independent annual pipelines avoid monolithic server-side graph complexity while ensuring an error in one historical year does not abort baseline computation for other years.
+- **Phase 1 Extension:** Seamlessly extends Phase 1's temporal recency principle ("prefer recency among quality-passing scenes") to multi-scene seasonal compositing without introducing ad-hoc scoring heuristics.
+
+#### ⚖️ Trade-offs & Limitations
+- **MVP Temporal Sampling:** Selecting up to 3 newest usable scenes is a bounded operational sampling rule for the MVP; it does not claim that 3 observations is an optimal sample size or that recent scenes always capture peak vigor.
+- **Per-Pixel Observation Depth:** Per-pixel observation depth rasters are deferred for the MVP to maintain a lightweight compute graph.
+
+---

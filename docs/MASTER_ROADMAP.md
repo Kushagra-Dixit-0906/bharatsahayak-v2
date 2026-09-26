@@ -71,7 +71,7 @@ graph TD
 ---
 
 ### Phase 2: Historical Satellite Intelligence (3-Year Baseline & Anomaly Detection)
-- **Status:** 🟡 **IN PROGRESS (Subphases 2A & 2B Complete & Sealed; 2C Next / Pending)**
+- **Status:** 🟡 **IN PROGRESS (Subphases 2A, 2B & 2C Design Sealed; 2C Implementation Pending / Ready)**
 - **Purpose:** Extend the satellite foundation from an instantaneous observation to seasonally normalized 3-year historical comparative baselines and empirical anomaly evidence.
 - **Sub-Roadmap:**
   - **2A — Architecture & Design Review (🟢 COMPLETE & APPROVED / `DEC-012`, `DEC-013`, `DEC-014`):**
@@ -87,8 +87,13 @@ graph TD
     - Formalized simple leap-year calendar correctness (clamping Feb 29 $\to$ Feb 28 in common historical years).
     - Preserved strict UTC calendar-date basis and Earth Engine boundary contract `[start, end + 1 day)`.
     - Documented canonical 18-case edge matrix in `docs/phases/PHASE_02B_TEMPORAL_WINDOW_SEASONALITY.md`.
-  - **2C — Option C Historical Collection Pipeline (🟡 NEXT / PENDING):**
-    - Ingest historical Sentinel-2 collections grouped by calendar year with Phase 1 Cloud Score+ quality gates.
+  - **2C — Option C Historical Collection Pipeline (🟢 DESIGN APPROVED & SEALED / `DEC-016` / 🟡 READY FOR IMPLEMENTATION):**
+    - Formalized independent annual sub-pipelines for $Y-1, Y-2, Y-3$ across Phase 2B 31-day windows $[S_h, E_h]$.
+    - Reused exact Phase 1 Cloud Score+ quality gates (`cs_cdf >= 0.60`, scene cloud $<20\%$, `min_usable_coverage >= 0.70`).
+    - Standardized on temporal recency selection among usable observations (sorting newest-first, selecting up to 3 usable scenes: 3+ $\to$ 3, 2 $\to$ 2, 1 $\to$ 1, 0 $\to$ `no_data`).
+    - Standardized on pixel-wise median NDVI compositing (`ee.ImageCollection.median()`) over per-image masked NDVI rasters before zonal reduction.
+    - Preserved Earth Engine masked-pixel semantics (excluding masked pixels from reductions, never filling with artificial zeros).
+    - Documented canonical 19-case edge verification matrix in `docs/phases/PHASE_02C_HISTORICAL_COLLECTION_COMPOSITE.md`.
   - **2D — Multi-Year Baseline Computation Engine (🟡 PLANNED):**
     - Compute annual matched-window regional reductions and multi-year median/mean/std-dev baselines.
   - **2E — NDVI Anomaly Mathematics & Departure Verification (🟡 PLANNED):**

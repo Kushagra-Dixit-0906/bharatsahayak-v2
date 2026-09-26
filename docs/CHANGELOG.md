@@ -7,7 +7,7 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 2: Historical Satellite Intelligence (Subphases 2A & 2B Complete & Sealed; 2C Next / Pending)
+### 🟡 In Progress — Phase 2: Historical Satellite Intelligence (Subphases 2A, 2B & 2C Design Sealed; 2C Implementation Pending / Ready)
 - **Phase 2A Architecture & Design Review (🟢 COMPLETE & APPROVED / `DEC-012`, `DEC-013`, `DEC-014`):**
   - Conducted comprehensive architecture, data-engineering, and scientific review for historical comparative satellite intelligence.
   - Formulated and locked `DEC-012`: 3-year rolling operational historical horizon ($Y-1, Y-2, Y-3$) with Day-of-Year centered temporal windowing ($\text{Reference DOY} \pm 15\text{ days}$). Explicitly documented that DOY matching normalizes astronomical/calendar seasonality without claiming identical crop growth stage.
@@ -26,6 +26,19 @@
   - Evaluated and deferred complex phenological curve fitting and fractional DOY coordinates for the MVP.
   - Created canonical Phase 2B design record with 18-case edge verification matrix in `docs/phases/PHASE_02B_TEMPORAL_WINDOW_SEASONALITY.md`.
   - Confirmed zero application source-code, test, or dependency modifications.
+- **Phase 2C Historical Satellite Collection & Annual Composite Strategy (🟢 DESIGN APPROVED & SEALED / `DEC-016`):**
+  - Conducted master architectural design review and sealed the historical collection querying, observation selection, and compositing architecture for Option C (Annual Matched-Window Regional Observations).
+  - Formulated and locked `DEC-016`:
+    - **Independent Yearly Processing:** Selected independent annual sub-pipelines for the bounded 3-year historical horizon ($Y-1, Y-2, Y-3$) within their respective Phase 2B 31-day seasonal windows $[S_h, E_h]$, ensuring fault isolation and unit testability.
+    - **Phase 1 Quality Gate Reuse:** Reused exact Phase 1 quality gates (`COPERNICUS/S2_SR_HARMONIZED` linked with Cloud Score+ `cs_cdf >= 0.60`, scene cloud $<20\%$, and parcel `min_usable_coverage >= 0.70`).
+    - **Temporal Recency Selection among Usable Scenes:** Established that usable coverage percentage serves strictly as a binary qualification gate ($\ge 70\%$) and empirical metadata, not a ranking score. Qualifying usable observations are sorted by acquisition date descending (`system:time_start` newest-first), selecting up to 3 most recent usable observations.
+    - **Bounded Selection Rule:** Enforced bounded selection ($N \ge 3 \to 3$ newest; $N = 2 \to 2$; $N = 1 \to 1$; $N = 0 \to \text{status} = \text{"no\_data"}$). Formally accepted $N=1$ as a valid annual observation while relying on multi-year sufficiency ($N_{\text{annual}} \ge 2 \land Y \ge 2$) to guard baseline reliability.
+    - **Pixel-Wise Median NDVI Compositing:** For selected scenes, compute per-image masked NDVI rasters first, composite via pixel-wise median (`ee.ImageCollection.median()`), and execute regional zonal reduction over the composite raster. Preserved non-equivalence mathematical invariants.
+    - **Masked-Pixel Preservation:** Earth Engine's median reducer operates exclusively over unmasked pixels at each coordinate without filling nulls with artificial zeros ($\text{NULL} \ne 0.0$). `valid_pixel_count` reflects unmasked spatial pixels in the regional reduction.
+    - **No Synthetic Data:** Replaced synthetic observations and scalar confidence scores with transparent empirical evidence.
+    - **Materialization Constraints:** Bounded execution graph designed to minimize client-side materialization calls (targeting $\le 3$ `.getInfo()` calls).
+  - Created canonical Phase 2C design specification with 19-case test matrix in `docs/phases/PHASE_02C_HISTORICAL_COLLECTION_COMPOSITE.md`.
+  - Confirmed zero application source-code, test, or dependency modifications; implementation deferred to subsequent step.
 
 ### 🟢 Completed — Phase 1: Earth Engine Foundation (Subphases 1A–1K Complete & Sealed — `60f8d90`)
 - **Phase 1A Architecture & Integration Design (🟢 COMPLETE):**

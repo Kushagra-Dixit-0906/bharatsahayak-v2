@@ -1,9 +1,9 @@
 # Phase 2 — Historical Satellite Intelligence
 
 > **Canonical Record of Phase 2 Architecture, Design Decisions, Historical Baselines, and Anomaly Mathematics.**  
-> *Status: 🟢 PHASE 2A & 2B COMPLETE & SEALED (Subphases 2A & 2B Approved; 2C Next / Pending)*<br>
+> *Status: 🟢 PHASE 2A, 2B & 2C COMPLETE & SEALED (Subphases 2A, 2B, 2C Design Approved; 2C Implementation / 2D Design Next)*<br>
 > *Base Sealed Checkpoint: `60f8d90 — docs: finalize Phase 1 Earth Engine foundation documentation`*<br>
-> *Next Step: Subphase 2C — Option C Historical Collection Pipeline*
+> *Next Step: Subphase 2C Implementation / Subphase 2D Multi-Year Baseline Computation Engine*
 
 ---
 
@@ -293,7 +293,7 @@ EarthEngineResult
 Phase 2: Historical Satellite Intelligence
 ├── 2A: Architecture & Design Review (🟢 COMPLETE / APPROVED / DEC-012, DEC-013, DEC-014)
 ├── 2B: Temporal Window & Seasonality Strategy (🟢 COMPLETE / APPROVED / DEC-015)
-├── 2C: Option C Historical Collection Pipeline (🟡 NEXT / PENDING)
+├── 2C: Option C Historical Collection Pipeline (🟢 DESIGN APPROVED & SEALED / DEC-016 / 🟡 READY FOR IMPLEMENTATION)
 ├── 2D: Multi-Year Baseline Computation Engine (🟡 PLANNED)
 ├── 2E: Anomaly Mathematics & Departure Verification
 ├── 2F: Data Sufficiency & Sparse History Handlers (DEC-014 Formalized)
@@ -312,6 +312,7 @@ Phase 2: Historical Satellite Intelligence
 - **`DEC-013`:** Option C Annual Matched-Window Regional Observations & Primary Baseline / Anomaly Metrics.
 - **`DEC-014`:** Layered Historical Analysis Contract with Explicit Annual Observation Units & Sufficiency Guardrails.
 - **`DEC-015`:** Calendar-Date-Anchored Seasonal Windowing & Cross-Calendar-Year Target-Year Ownership Invariant.
+- **`DEC-016`:** Historical Satellite Collection Pipeline & Annual Pixel-Median Compositing (Independent yearly processing, Phase 1 quality gate parity, temporal recency selection up to 3 usable scenes, pixel-wise median NDVI compositing, masked-pixel preservation).
 
 ---
 
@@ -335,5 +336,5 @@ Phase 2: Historical Satellite Intelligence
 
 ## 16. Open Technical Questions for Implementation
 
-1. **Earth Engine Server-Side Aggregation Construct:** Determine whether Option C annual reductions are best implemented via `ee.Join` / `ee.ImageCollection.map` or via server-side filtered sub-collections within a combined compute graph. *(To be investigated in Phase 2C).*
+1. **Earth Engine Server-Side Aggregation Construct:** Formalized in Phase 2C (`DEC-016`) adopting independent annual sub-pipelines (Approach 1) for the bounded 3-year MVP to maximize simplicity, fault isolation, and unit testability. Sealed in `docs/phases/PHASE_02C_HISTORICAL_COLLECTION_COMPOSITE.md`.
 2. **Leap Year & Temporal Window Alignment:** Formalized in Phase 2B (`DEC-015`) using pure Python calendar-date-anchored seasonal windowing and cross-year target-year ownership. Sealed in `docs/phases/PHASE_02B_TEMPORAL_WINDOW_SEASONALITY.md`.
