@@ -10,7 +10,7 @@
 - **Phase Status:** 🟡 **IN PROGRESS**
 - **Last Completed Substep:** **1F — NDVI Calculation (`DEC-009`)**
 - **Current Active Substep:** **1G — Regional NDVI Statistics** (🟡 PLANNED)
-- **Next Action:** Implement Earth Engine zonal reducers across the `AnalysisRegion` computing **mean**, **median**, **min**, and **max** NDVI statistics, returning a structured JSON result contract in Subphase 1G.
+- **Next Action:** Implement Earth Engine zonal reducers across the `AnalysisRegion` computing **mean**, **median**, **min**, and **max** NDVI statistics, returning a structured JSON result contract in Subphase 1G, incorporating observation quality and cloud handling standards locked in `DEC-010`.
 - **Verified Fact / Boundary:**
   - **Phase 1B Completed (1B.1–1B.10):** Local environment setup, `earthengine-api` 1.7.43 installed via `uv add` (`DEC-005`), ADC authentication verified (`DEC-006`), project `bharatsahayak-v2` initialized, bounded Sentinel-2 catalog query verified, zero credential leakage audited.
   - **Phase 1C Completed (1C.1–1C.8):**
@@ -25,10 +25,11 @@
     - **1D.1 Completed:** Formulated and documented `DEC-007: Geographic Analysis Region Strategy` establishing the decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` model with a default 100 m circular buffer for local Sentinel-2 aggregation.
     - **1D.2 Completed:** Created [`app/satellite/geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/geometry.py) implementing `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry` with coordinate and radius validation. Exported in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py). Verified with 35 unit tests in [`tests/unit/test_satellite_geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_geometry.py) and verified non-network client-side geometry proxy instantiation without `.getInfo()` or server-side calls.
     - **1D.3 Completed:** Verified `create_analysis_region()` in live Earth Engine Sentinel-2 queries in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py). Successful query over Ludhiana test fixture (`[75.7196, 30.9157]`, 100 m radius, Aug 2026, clouds < 20%) returned `image_count=1` mapped to `EarthEngineResult(status="success")`. Pre-Sentinel-2 date query (Jan 1990) returned `image_count=0` mapped to `EarthEngineResult(status="no_data")`. All 5 live integration tests passed.
-  - **Phase 1E Completed (`DEC-008`):**
+  - **Phase 1E Completed (`DEC-008`, `DEC-010`):**
     - Implemented [`app/satellite/sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/sentinel2.py) with `get_sentinel2_collection()`, `select_most_recent_sentinel2_image()`, `get_most_recent_sentinel2_image()`, and `resolve_date_range()`.
-    - Standardized on `COPERNICUS/S2_SR_HARMONIZED` with `AnalysisRegion` spatial bounding, configurable lookback (default 30 days), and configurable scene cloud filtering (`CLOUDY_PIXEL_PERCENTAGE < 20%`).
-    - Sorted candidates descending by timestamp (newest-first) and selected the most recent usable observation.
+    - Standardized on `COPERNICUS/S2_SR_HARMONIZED` with `AnalysisRegion` spatial bounding, configurable lookback (default 30 days), and coarse scene cloud filtering (`CLOUDY_PIXEL_PERCENTAGE < 20%`).
+    - Established observation quality strategy (`DEC-010`): coarse scene pre-filter, primary pixel-level observation quality via Cloud Score+ (`GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED`, `cs_cdf` band, `CLEAR_THRESHOLD = 0.60`), local usable coverage validation inside `AnalysisRegion` (`MIN_USABLE_COVERAGE = 0.70`), and newest-to-oldest candidate iteration.
+    - Sorted candidates descending by timestamp (newest-first) and selected the newest usable observation meeting minimum usable coverage, falling back to structured `status="no_data"` on insufficient coverage.
     - Extracted structured [`Sentinel2ImageMetadata`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py#L34-L44) returning `EarthEngineResult` envelopes (`success`, `no_data`, `error`).
     - Verified with 46 unit tests in [`tests/unit/test_satellite_sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_sentinel2.py) and 4 live integration tests in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py). Total test suite: **105 passed**.
   - **Phase 1F Completed (`DEC-009`):**
@@ -36,14 +37,13 @@
     - Computes $\text{NDVI} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$ using Earth Engine's native `image.normalizedDifference(["B8", "B4"]).rename("NDVI")`.
     - Automatically clips the NDVI raster extent to the `AnalysisRegion` (`ee.Geometry`) if provided.
     - Preserves invalid/masked pixels without fabricating replacement zeros; avoids unnecessary manual reflectance scaling (multiplicative factors cancel out in ratio).
-    - Preserved active Phase 1E scene-level `<20%` cloud filter without introducing premature pixel-level cloud masking algorithms.
+    - Preserved active Phase 1E scene-level `<20%` cloud filter without introducing premature pixel-level cloud masking algorithms in 1F.
     - Verified with 29 unit tests in [`tests/unit/test_satellite_ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_ndvi.py) and 3 live integration tests in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) (Tests 10–12).
     - Live Ludhiana fixture verification selected Sentinel-2A scene from `2026-08-16`, confirmed output is `ee.image.Image`, single band `["NDVI"]`, sampled pixel values within $[-1.0, 1.0]$, pre-Sentinel-2 query returned `no_data` without fabricating data, and invalid band query produced `ee.EEException`.
     - Total test suite: **146 passed** (0 failed).
   - **Limitations & Future Roadmap:**
     - The 100 m circular region is an approximate local satellite observation area, **not** an exact farm boundary.
-    - `cloud_percentage` is scene-level tile metadata, **not** localized cloud cover specifically over the 100 m farm parcel.
-    - Pixel-level cloud masking (`QA60` / `SCL`) is deferred to subsequent calculation phases.
+    - Scene-level `CLOUDY_PIXEL_PERCENTAGE` is a coarse pre-filter; fine-grained parcel-level observation quality is governed by Cloud Score+ (`DEC-010`).
     - NDVI alone represents vegetative reflectance/greenness, **not** definitive crop health, disease diagnosis, or yield prediction.
     - Polygon/cadastral/adaptive region support remains future work.
   - **Strict Scope Boundaries:**
@@ -93,7 +93,7 @@ graph TD
     S1A["1A: Architecture & Integration Design\n(DEC-004) 🟢 COMPLETE"] --> S1B["1B: Local Environment & Verification\n(1B.1–1B.10 Complete) 🟢 COMPLETE"]
     S1B --> S1C["1C: EE Connectivity & Result Contract\n(1C.1–1C.8 Complete) 🟢 COMPLETE"]
     S1C --> S1D["1D: Geographic Region Definition\n(1D.1–1D.3 Complete) 🟢 COMPLETE"]
-    S1D --> S1E["1E: Sentinel-2 Data Pipeline\n(DEC-008) 🟢 COMPLETE"]
+    S1D --> S1E["1E: Sentinel-2 Pipeline & Observation Quality\n(DEC-008, DEC-010) 🟢 COMPLETE"]
     S1E --> S1F["1F: NDVI Calculation\n(DEC-009) 🟢 COMPLETE"]
     S1F --> S1G["1G: Regional NDVI Statistics 🟡 PLANNED"]
     S1G --> S1H["1H: Reliability & Data Quality 🟡 PLANNED"]
@@ -108,7 +108,7 @@ graph TD
 | **1B** | **Local Earth Engine Environment & Verification** | Add `earthengine-api` via `uv` (`DEC-005`), configure local environment, authenticate developer ADC (`DEC-006`), initialize project `bharatsahayak-v2`, verify bounded Sentinel-2 catalog connectivity, audit credentials, and record documentation. | 🟢 **COMPLETE (1B.1–1B.10 Complete)** |
 | **1C** | **Earth Engine Connectivity & Result Contract** | Execute minimal calculation (1C.1), observe SDK error translation on invalid asset (1C.2), verify zero-data behavior (1C.3), define result boundary (1C.4/1C.5), implement Pydantic result contract in `app/satellite/` (1C.6), and verify via unit and live integration tests (1C.6/1C.7), document checkpoint (1C.8). | 🟢 **COMPLETE (1C.1–1C.8 Complete)** |
 | **1D** | **Geographic Region Definition** | Formulate point-to-region geometry strategy (`DEC-007` 🟢), implement geometry helpers in `app/satellite/geometry.py` (`1D.2` 🟢), validate coordinates & radius, test live region queries against Earth Engine (`1D.3` 🟢). | 🟢 **COMPLETE (1D.1–1D.3 Complete)** |
-| **1E** | **Sentinel-2 Data Pipeline** | Ingest Sentinel-2 Level-2A collection (`COPERNICUS/S2_SR_HARMONIZED`), apply spatial/temporal filters and scene cloud filtering (`CLOUDY_PIXEL_PERCENTAGE < 20%`), order newest-first, select most recent usable scene, and extract structured metadata (`DEC-008`). | 🟢 **COMPLETE** |
+| **1E** | **Sentinel-2 Pipeline & Observation Quality** | Ingest Sentinel-2 Level-2A collection (`COPERNICUS/S2_SR_HARMONIZED`), apply spatial/temporal filters and coarse scene cloud filter (`<20%`), validate observation quality via Cloud Score+ (`cs_cdf >= 0.60`, usable coverage `>= 0.70`), order newest-first, select freshest usable scene, and extract structured metadata (`DEC-008`, `DEC-010`). | 🟢 **COMPLETE** |
 | **1F** | **NDVI Calculation** | Compute $\text{NDVI} = \frac{\text{B8}-\text{B4}}{\text{B8}+\text{B4}}$ using native `image.normalizedDifference(["B8", "B4"]).rename("NDVI")`, clip to `AnalysisRegion`, output unreduced `ee.Image`, validate $[-1.0, 1.0]$ range (`DEC-009`). | 🟢 **COMPLETE** |
 | **1G** | **Regional NDVI Statistics** | Implement zonal reducers across farm geometry computing **mean**, **median**, **min**, **max**, and format structured JSON output. | 🟡 PLANNED |
 | **1H** | **Reliability & Data Quality** | Implement edge-case handlers for out-of-bounds coordinates, heavy clouds, zero-pixel reductions, API timeouts, and quota limits. | 🟡 PLANNED |
@@ -142,7 +142,7 @@ Dedicated Earth Engine Module / Service (app/satellite/)
         ↓
 Copernicus Sentinel-2 Level-2A Collection
         ↓
-Cloud Masking (QA60 / SCL)
+Observation Quality (Cloud Score+ cs_cdf >= 0.60) / Quality Masking
         ↓
 NDVI Band Math ((B8 - B4) / (B8 + B4))
         ↓
@@ -412,11 +412,11 @@ Implement a dedicated, deterministic Sentinel-2 Surface Reflectance imagery sele
     - **Test 9 (`test_select_most_recent_sentinel2_image_error`):** Verified invalid asset IDs produce `status="error"` with `EEException` details.
   - Total test suite: **105 passed** in 70.95s.
 - **Documented Limitations & Scope Boundaries:**
-  - **Scene-Level Cloud Metadata:** `cloud_percentage` represents cloud cover across the entire Sentinel-2 tile (`CLOUDY_PIXEL_PERCENTAGE`), **not** localized cloudiness specifically over the 100 m farm parcel.
-  - **Pixel-Level Cloud Masking:** Fine-grained pixel masking (`QA60` / `SCL`) is deferred to subsequent calculation phases.
+  - **Scene-Level Cloud Metadata vs Observation Quality:** `cloud_percentage` represents scene-level metadata (`CLOUDY_PIXEL_PERCENTAGE`). Fine-grained parcel-level observation quality is governed by Cloud Score+ (`DEC-010`).
+  - **Observation Quality Strategy Locked:** Pixel-level observation quality via Cloud Score+ `GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED` (`cs_cdf >= 0.60`, parcel usable coverage `>= 0.70`) is locked in `DEC-010` and conceptually part of the imagery selection pipeline.
   - **Terminology:** Avoids subjective terms like *"best image"*; strictly uses *"most recent usable image"*.
-  - **Missing Imagery:** Missing observations are strictly represented as `no_data`, **never** as NDVI=0.
-  - **Strict Scope Preserved:** NDVI band math (Phase 1F), regional NDVI summary statistics (Phase 1G), multi-temporal time-series, historical baseline comparisons, Dynamic World / NDWI, MCP server tool upgrades, and farmer UI components remain deferred.
+  - **Missing Imagery:** Missing observations or scenes with insufficient usable coverage are strictly represented as `no_data`, **never** as NDVI=0.
+  - **Strict Scope Preserved:** Regional NDVI summary statistics (Phase 1G), multi-temporal time-series, historical baseline comparisons, Dynamic World / NDWI, MCP server tool upgrades, and farmer UI components remain deferred.
 
 ---
 
@@ -469,7 +469,7 @@ Implement Normalized Difference Vegetation Index ($\text{NDVI}$) calculation for
   - Total test suite: **146 passed** (0 failed) in 112.44s.
 - **Documented Limitations & Scope Boundaries:**
   - **NDVI is a Reflectance Metric, Not Direct Crop Health:** NDVI measures vegetative greenness and relative photosynthetic vigor. It does **not** constitute an agronomic diagnosis, pest identification, or yield prediction on its own.
-  - **Cloud Masking Scope:** Scene-level filtering (`CLOUDY_PIXEL_PERCENTAGE < 20%`) from Phase 1E remains active. Fine-grained pixel-level masking (`QA60` / `SCL`) is deferred.
+  - **Observation Quality Decoupling:** In accordance with `DEC-010`, observation quality validation is decoupled from pure NDVI band mathematics. Phase 1F focuses strictly on computing normalized difference and raster clipping.
   - **Approximate Geometry:** The 100m circular buffer is an approximate local satellite observation envelope, **not** an exact farm boundary.
   - **Strict Scope Boundaries Maintained:**
     - Zonal statistical reductions (mean, median, min, max) are **NOT** implemented yet (Subphase 1G).
@@ -516,9 +516,10 @@ Implement Normalized Difference Vegetation Index ($\text{NDVI}$) calculation for
   - **1D.1 Completed:** Formulated and documented `DEC-007: Geographic Analysis Region Strategy` in `docs/DECISION_LOG.md` (decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` with 100 m default circular buffer).
   - **1D.2 Completed:** Implemented `app/satellite/geometry.py` with `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry` and coordinate/radius validation. Exported in `app/satellite/__init__.py`. Passed 35 unit tests in `tests/unit/test_satellite_geometry.py`. Verified non-network client-side geometry proxy instantiation without server-side calls.
   - **1D.3 Completed:** Verified geometry helper with live Earth Engine Sentinel-2 queries in `tests/integration/test_earth_engine_connectivity.py`. Successful query returned `image_count=1`, no-data query returned `image_count=0`. 5 live integration tests passed. Documented approximation limitations and future polygon/cadastral roadmap.
-- ✅ **1E Completed (`DEC-008`):**
+- ✅ **1E Completed (`DEC-008`, `DEC-010`):**
   - Implemented `app/satellite/sentinel2.py` (`get_sentinel2_collection`, `select_most_recent_sentinel2_image`, `get_most_recent_sentinel2_image`, `resolve_date_range`).
   - Standardized on `COPERNICUS/S2_SR_HARMONIZED`, `AnalysisRegion` bounds, configurable lookback (default 30 days), and scene cloud filter (`CLOUDY_PIXEL_PERCENTAGE < 20%`).
+  - Established observation quality strategy (`DEC-010`): Cloud Score+ `cs_cdf >= 0.60`, parcel usable coverage `>= 0.70`, newest-to-oldest candidate search, and structured `no_data` fallback.
   - Implemented newest-first candidate ordering and most recent usable image selection.
   - Created `Sentinel2ImageMetadata` model and updated `EarthEngineResult` contracts.
   - Verified 46 unit tests in `tests/unit/test_satellite_sentinel2.py` and 4 live integration tests in `tests/integration/test_earth_engine_connectivity.py`. 105 total tests passed.
@@ -551,6 +552,6 @@ Implement Normalized Difference Vegetation Index ($\text{NDVI}$) calculation for
 - **Subphase 1B (Local Earth Engine Environment & Verification):** 🟢 **COMPLETE (1B.1–1B.10 Complete)**
 - **Subphase 1C (Earth Engine Connectivity & Result Contract):** 🟢 **COMPLETE (1C.1–1C.8 Complete)**
 - **Subphase 1D (Geographic Region Definition):** 🟢 **COMPLETE (1D.1–1D.3 Complete)**
-- **Subphase 1E (Sentinel-2 Data Pipeline):** 🟢 **COMPLETE**
+- **Subphase 1E (Sentinel-2 Data Pipeline & Observation Quality):** 🟢 **COMPLETE**
 - **Subphase 1F (NDVI Calculation):** 🟢 **COMPLETE**
 - **Subphase 1G (Regional NDVI Statistics):** 🟡 **PLANNED**

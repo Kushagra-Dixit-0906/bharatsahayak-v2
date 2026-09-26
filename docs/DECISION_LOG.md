@@ -138,7 +138,7 @@
           ↓
   Copernicus Sentinel-2 Collection (Harmonized Level-2A)
           ↓
-  Cloud Masking (QA60 / SCL Filtering)
+  Observation Quality (Cloud Score+ cs_cdf >= 0.60) / Quality Masking
           ↓
   NDVI Calculation ((B8 - B4) / (B8 + B4))
           ↓
@@ -387,7 +387,7 @@ Implement a dedicated, deterministic Sentinel-2 Surface Reflectance imagery sele
 - **Scene-Level vs. Pixel-Level Filtering:** Pre-filtering at the collection level via `CLOUDY_PIXEL_PERCENTAGE` discards heavily clouded whole granules quickly before performing expensive server-side pixel masking.
 
 #### ⚠️ Limitations
-- **Scene-Level Cloud Metadata:** The `cloud_percentage` in `Sentinel2ImageMetadata` reflects cloudiness across the entire Sentinel-2 tile (~100 km $\times$ 100 km), **not** the localized cloud cover specifically over the 100 m farm parcel.
+- **Scene-Level Cloud Metadata:** The `cloud_percentage` in `Sentinel2ImageMetadata` reflects cloudiness across the entire Sentinel-2 scene/granule metadata (`CLOUDY_PIXEL_PERCENTAGE`), **not** the localized cloud cover specifically over the 100 m farm parcel.
 - **Pixel-Level Cloud Masking:** Fine-grained pixel masking (using `QA60` or Scene Classification `SCL` bands) is deferred to subsequent computation phases.
 - **Never Claims Farm Health:** Imagery selection merely delivers an atmospherically corrected satellite raster; it does not compute vegetative indices or crop health.
 
@@ -473,7 +473,7 @@ Implement a dedicated, deterministic NDVI computation module ([`app/satellite/nd
 - **Clean Architectural Scoping:** Isolates band mathematics from statistical reduction (Phase 1G), preventing monolithic functions and maintaining single-responsibility modules.
 
 #### ⚖️ Trade-offs
-- **Scene-Level vs Local Cloud Sampling:** Operating under the scene-level `<20%` cloud filter means localized clouds over the 100m parcel are not yet masked pixel-by-pixel until fine-grained QA60/SCL masking is implemented.
+- **Scene-Level vs Local Cloud Sampling:** Operating under the scene-level `<20%` cloud filter in Phase 1F means localized clouds over the 100m parcel are not yet masked pixel-by-pixel until observation quality masking (locked in `DEC-010`) is integrated.
 - **Unreduced Raster Output:** Returning an `ee.Image` requires a subsequent reduction step (Phase 1G) before structured JSON dictionaries can be fed to LLM tools.
 
 #### ⚠️ Limitations
@@ -501,6 +501,100 @@ Implement a dedicated, deterministic NDVI computation module ([`app/satellite/nd
 - **Strict Scope Boundaries Maintained:**
   - Regional NDVI summary statistics (mean, median, min, max) are **NOT** implemented yet (Subphase 1G).
   - Crop-health classification thresholds are **NOT** implemented yet.
-  - Pixel-level cloud masking (QA60/SCL) is **NOT** implemented yet.
+  - Pixel-level cloud/observation quality masking is **NOT** implemented yet.
   - MCP tool upgrades, Gemini reasoning, and farmer UI components remain deferred.
-- **Next Step:** Subphase 1G — Regional NDVI Statistics (Earth Engine zonal reducers computing mean, median, min, max over farm geometry).
+- **Next Step:** Subphase 1G — Regional NDVI Statistics (Earth Engine zonal reducers computing mean, median, min, max over farm geometry), incorporating the observation quality strategy established in DEC-010.
+
+---
+
+### DEC-010: Sentinel-2 Observation Quality and Cloud/Shadow Handling Strategy
+
+- **Decision ID:** `DEC-010`
+- **Date / Context:** Phase 1 Earth Engine Foundation (Observation Quality, Cloud & Shadow Handling Architecture)
+
+#### 📸 Before Snapshot
+Prior to DEC-010:
+- Phase 1E (`DEC-008`) established Sentinel-2 imagery selection using `COPERNICUS/S2_SR_HARMONIZED` with a coarse scene-level pre-filter (`CLOUDY_PIXEL_PERCENTAGE < 20%`), selecting the newest scene within a 30-day lookback window.
+- Phase 1F (`DEC-009`) implemented unreduced NDVI calculation (`calculate_ndvi`) clipped to the `AnalysisRegion`.
+- However, the system relied solely on scene-level metadata (`CLOUDY_PIXEL_PERCENTAGE`), which evaluates cloud cover across the entire Sentinel-2 scene/granule. This provided no guarantee that the farmer's localized 100 m circular `AnalysisRegion` was free of clouds, cirrus, or cloud shadows.
+- Without pixel-level quality masking and parcel-level usable coverage thresholding, cloud- or shadow-contaminated pixels could corrupt NDVI calculations or produce misleading vegetative signals.
+
+#### 📜 Locked Decisions
+
+1. **Primary Surface-Reflectance Dataset Continuity:**
+   - Continue using `COPERNICUS/S2_SR_HARMONIZED` as the primary Sentinel-2 Level-2A surface-reflectance dataset.
+
+2. **Coarse Scene-Level Pre-Filter Retention:**
+   - Retain the existing scene-level `CLOUDY_PIXEL_PERCENTAGE < 20%` filter as a coarse candidate pre-filter.
+   - **Architectural Principle:** The scene filter serves strictly as an upfront catalog query optimization to prune heavily overcast scenes; it is **never** treated as a guarantee that the farmer's specific parcel is cloud-free.
+
+3. **Primary Pixel-Level Quality Mechanism (Cloud Score+):**
+   - Add Google Earth Engine Cloud Score+ S2_HARMONIZED V1 (`GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED`) as the primary pixel-level observation-quality mechanism.
+
+4. **Quality Band Standard:**
+   - Use the Cloud Score+ `cs_cdf` (cumulative distribution function) quality band initially, linking quality masks directly to Sentinel-2 Harmonized scene IDs.
+
+5. **Clear-Pixel Usability Threshold:**
+   - Standardize on `CLEAR_THRESHOLD = 0.60` as a configurable default threshold.
+   - **Explicit Documentation Requirement:** `CLEAR_THRESHOLD = 0.60` is an empirical engineering starting threshold for clear-sky observation usability; it is **not** a mathematical claim that 0.60 represents "60% clear".
+
+6. **Strict Pixel Masking Rule:**
+   - Pixels with `cs_cdf < CLEAR_THRESHOLD` must be masked out and must **never** contribute fabricated, interpolated, or corrupted NDVI values to downstream analysis.
+
+7. **Parcel-Level Usable Coverage Calculation:**
+   - Calculate usable-pixel coverage percentage specifically **inside the farmer's `AnalysisRegion`**, not across the entire Sentinel-2 scene.
+
+8. **Minimum Usable Coverage Threshold:**
+   - Standardize on `MIN_USABLE_COVERAGE = 0.70` (70% usable pixels within `AnalysisRegion`) as a configurable default threshold.
+   - **Explicit Documentation Requirement:** `MIN_USABLE_COVERAGE = 0.70` is an MVP operational data-quality threshold to ensure sufficient spatial representation over the 100 m buffer, **not** a universal scientific or agronomic constant.
+
+9. **Candidate Search & Usable Selection Strategy:**
+   - Iterate candidate observations sorted strictly newest-to-oldest (descending acquisition timestamp).
+   - Select the **newest candidate observation that satisfies the minimum usable coverage threshold (`MIN_USABLE_COVERAGE`)**.
+
+10. **Strict Zero-Data / Insufficient Coverage Handling:**
+    - If no candidate observation within the lookback window (default 30 days) satisfies `MIN_USABLE_COVERAGE`, return a structured `status="no_data"` result contract.
+    - Do **not** calculate NDVI from an insufficient, heavily occluded observation, and do **not** fabricate NDVI=0.
+
+11. **Exclusion of Secondary / Alternative Masking Layers in MVP:**
+    - Do **not** add Sentinel-2 Cloud Probability (`COPERNICUS/S2_CLOUD_PROBABILITY`), `QA60` bitmask, Scene Classification Layer (`SCL`), or custom geometrical cloud-shadow projection algorithms as additional mandatory quality layers at this stage.
+
+12. **Modular Observation Quality Architecture:**
+    - Keep cloud and observation quality validation modular and encapsulated so alternative quality mechanisms (or future versions) can be benchmarked and substituted without modifying or redesigning the core NDVI computation module (`app/satellite/ndvi.py`).
+
+13. **Conceptual Phase Boundary Realignment:**
+    - **Phase 1E (Imagery Selection & Observation Quality):** Conceptually encompasses observation querying, Cloud Score+ quality assessment, pixel masking, parcel usable-coverage validation, newest usable scene selection, and metadata extraction.
+    - **Phase 1F (NDVI Calculation):** Remains dedicated to pure band mathematics ($\text{NDVI} = \frac{\text{B8}-\text{B4}}{\text{B8}+\text{B4}}$), region clipping, and unreduced `ee.Image` output.
+    - **Phase 1G (Regional NDVI Statistics):** Remains dedicated to Earth Engine zonal statistical reductions (**mean**, **median**, **min**, **max**) over the validated, masked observation raster.
+
+14. **Strict Isolation from Agricultural & Domain Context:**
+    - Keep seasonal context (Kharif, Rabi, Zaid), weather forecasts, soil parameters, water indices (NDWI), historical multi-year NDVI baselines, crop calendars, and mandi market prices strictly **outside** the satellite quality module.
+    - These domain attributes will be integrated as independent contextual inputs in Phase 4 (Data Fusion) and Phase 5 (Gemini Agricultural Reasoning).
+
+#### 💡 Rationale (Why Chosen)
+- **Superior Pixel-Level Accuracy over Legacy Masks:** Cloud Score+ is a state-of-the-art machine-learning quality model specifically trained on Sentinel-2 Harmonized Level-2A imagery. It captures diffuse clouds, thin cirrus, and cloud shadows simultaneously, whereas legacy heuristic masks (`QA60`, `SCL`) suffer from coarse spatial resolution (60m for QA60) and high false-positive rates over bright soils and urban fringes.
+- **Local Parcel Truth vs Scene Metadata:** A Sentinel-2 scene may report 15% overall cloud cover while an isolated cloud sits directly over the farmer's 100 m parcel; conversely, a 30% cloudy scene may have a crystal-clear window over the parcel. Computing usable coverage over `AnalysisRegion` guarantees localized data integrity.
+- **Temporal Freshness with Quality Guarantee:** Iterating newest-to-oldest ensures farmers receive the most recent available observation without sacrificing minimum spatial data validity.
+- **Honest Uncertainty Communication:** Returning structured `no_data` when heavy monsoon clouds persist prevents downstream LLMs from generating hallucinations or flawed agronomic advice based on compromised reflectance.
+
+#### ⚖️ Trade-offs
+- **Collection Linking Requirement:** Cloud Score+ requires joining or linking the `GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED` collection with `COPERNICUS/S2_SR_HARMONIZED` by system index/timestamp.
+- **Potential Lookback Fallback:** In persistent monsoon cloud conditions, requiring 70% usable coverage may cause the selector to reach further back in the 30-day window or return `no_data`.
+
+#### ⚠️ Limitations
+- **Empirical Thresholds:** The starting values `CLEAR_THRESHOLD = 0.60` and `MIN_USABLE_COVERAGE = 0.70` are operational heuristics for MVP smallholder advisory and should be empirically tuned across Indian agro-climatic zones in later evaluation phases.
+- **Optical Sensor Physics:** No optical cloud scoring algorithm can see through opaque monsoon storm clouds; radar (Sentinel-1 SAR) or weather model imputation would be required for all-weather monitoring (deferred).
+
+#### 🔮 Future Upgrade Impact
+- **Phase 1G (Regional NDVI Statistics):** Consumes validated, masked Sentinel-2 images with guaranteed minimum usable coverage.
+- **Phase 2+ (Multi-Temporal Analysis):** Cloud Score+ masking can be applied uniformly across multi-temporal image collections for clean time-series compositing.
+- **Phase 3 (Water & Additional Indices):** Reuses the same Cloud Score+ quality masking pipeline for NDWI, EVI, and SAVI calculations.
+
+#### 📊 Current Status & Next Steps
+- **Status:** 🟢 **DECISION LOCKED (Documentation & Boundaries Recorded)**
+- **Strict Scope Boundaries Maintained:**
+  - Implementation code in `app/satellite/` has **NOT** been modified.
+  - Phase 1G implementation has **NOT** started.
+  - Cloud Score+ implementation is **NOT** active yet in runtime.
+  - MCP tools, Gemini prompts, and UI components remain deferred.
+- **Next Step:** Incorporate observation quality specifications into the satellite pipeline and proceed with Subphase 1G — Regional NDVI Statistics.

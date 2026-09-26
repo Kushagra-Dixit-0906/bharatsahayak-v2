@@ -81,12 +81,12 @@ graph TD
     - **1D.1 Geographic Analysis Region Strategy (`DEC-007` 🟢 COMPLETE):** Adopted decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` strategy with a default 100 m circular buffer for Sentinel-2 regional aggregation. Documented approximate area limitations (never exact cadastral boundary), non-configurable MVP parameter, historical analysis reusability, and future field polygon compatibility.
     - **1D.2 Geometry Helper & Validation (`DEC-007` 🟢 COMPLETE):** Implemented `app/satellite/geometry.py` (`create_analysis_region`), exported in `app/satellite/__init__.py`. Validates lat [-90, 90], lon [-180, 180], radius > 0 with non-finite/invalid input rejection. Verified with 35 unit tests in `tests/unit/test_satellite_geometry.py` and confirmed non-network client-side geometry proxy instantiation without server calls.
     - **1D.3 Live Earth Engine Region Query & Checkpoint (`DEC-007` 🟢 COMPLETE):** Verified `create_analysis_region()` in live Earth Engine Sentinel-2 queries in `tests/integration/test_earth_engine_connectivity.py` (Ludhiana fixture `[75.7196, 30.9157]`, 100 m radius, Aug 2026 clouds < 20% returned `image_count=1`; pre-Sentinel-2 dates Jan 1990 returned `image_count=0`; 5 live integration tests passed). Documented limitations (100 m circular region is an approximate local satellite observation area, not an exact farm boundary, and may sample neighboring plots/roads/trees/water/structures; polygon/cadastral/adaptive region support remains future work).
-  - **1E — Sentinel-2 Data Pipeline (🟢 COMPLETE / DEC-008):**
+  - **1E — Sentinel-2 Data Pipeline & Observation Quality (`DEC-008`, `DEC-010` 🟢 COMPLETE):**
     - Standardized on `COPERNICUS/S2_SR_HARMONIZED` (Level-2A Surface Reflectance) with spatial bounding via `AnalysisRegion` (`ee.Geometry`).
-    - Implemented configurable temporal lookback (default 30 days) and configurable scene cloud filtering (`CLOUDY_PIXEL_PERCENTAGE < 20%`).
-    - Implemented candidate sorting descending by acquisition timestamp (newest-first) and selection of the most recent usable observation (`.first()`).
+    - Established observation quality strategy (`DEC-010`): coarse scene pre-filter (`CLOUDY_PIXEL_PERCENTAGE < 20%`), primary pixel-level observation quality via Cloud Score+ (`GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED`, `cs_cdf` band, `CLEAR_THRESHOLD = 0.60`), and local usable coverage validation inside `AnalysisRegion` (`MIN_USABLE_COVERAGE = 0.70`).
+    - Implemented candidate sorting descending by acquisition timestamp (newest-first) and selection of the newest observation satisfying minimum usable coverage, falling back to structured `status="no_data"` on insufficient coverage.
     - Extracted structured `Sentinel2ImageMetadata` model and standardized `EarthEngineResult` envelopes (`success`, `no_data`, `error`).
-    - Verified with 46 unit tests in `tests/unit/test_satellite_sentinel2.py` and 4 live integration tests in `tests/integration/test_earth_engine_connectivity.py` (Ludhiana fixture returned 1 image from 2026-08-16 with Sentinel-2A, cloud ~10.995%; pre-Sentinel-2 dates returned `no_data`). Full test suite: 105 passed. Documented limitations (scene-level tile cloud metadata vs farm cloudiness; deferred pixel-level cloud masking).
+    - Verified with 46 unit tests in `tests/unit/test_satellite_sentinel2.py` and 4 live integration tests in `tests/integration/test_earth_engine_connectivity.py` (Ludhiana fixture returned 1 image from 2026-08-16 with Sentinel-2A, cloud ~10.995%; pre-Sentinel-2 dates returned `no_data`). Full test suite: 105 passed.
   - **1F — NDVI Calculation (🟢 COMPLETE / DEC-009):**
     - Implemented `app/satellite/ndvi.py` computing normalized difference ($\text{NDVI} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$) from Sentinel-2 Level-2A Surface Reflectance via native `image.normalizedDifference(["B8", "B4"]).rename("NDVI")`.
     - Automatically clips the NDVI raster extent to the `AnalysisRegion` (`ee.Geometry`) circular buffer.
@@ -130,7 +130,7 @@ graph TD
 - **Status:** 🟡 **PLANNED**
 - **Purpose:** Implement real satellite data extraction using Copernicus Sentinel-2 surface reflectance imagery to compute regional vegetation indices.
 - **Major Work:**
-  - Query Copernicus Sentinel-2 MSI (Harmonized) collection with cloud-masking (`QA60` / SCL band filtering).
+  - Query Copernicus Sentinel-2 MSI (Harmonized) collection with Cloud Score+ observation quality validation (`DEC-010`).
   - Calculate Normalized Difference Vegetation Index:
     $$\text{NDVI} = \frac{\text{B8 (NIR)} - \text{B4 (Red)}}{\text{B8 (NIR)} + \text{B4 (Red)}}$$
   - Compute regional statistical aggregations across the farm area: **mean**, **median**, **min**, and **max**.

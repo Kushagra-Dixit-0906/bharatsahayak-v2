@@ -165,7 +165,7 @@ graph TD
     B --> C["📍 Coordinates & Farm Area\n(Latitude, Longitude, Bounding Area)"]
     C --> D["🔌 MCP Capability Interface\n(Tool Contract: get_farm_satellite_intelligence)"]
     D --> E["🛰️ Dedicated Earth Engine Module / Service\n(app/satellite/ engine)"]
-    E --> F["📸 Copernicus Sentinel-2 MSI Surface Reflectance\n(Harmonized + QA60/SCL Cloud Masking)"]
+    E --> F["📸 Copernicus Sentinel-2 MSI Surface Reflectance\n(Harmonized + Cloud Score+ Quality DEC-010)"]
     F --> G["🌱 NDVI Calculation\n(NIR - Red) / (NIR + Red)"]
     G --> H["📊 Regional Statistics Reducer\n(Mean, Median, Min, Max)"]
     H --> I["📦 Structured Satellite Result (JSON)\n(Vegetation Vigor, Stress Level, Uniformity)"]
@@ -175,7 +175,7 @@ graph TD
 
 ### Architectural Principles & Boundaries for Earth Engine Integration
 1. **Human-Centric Abstraction (`DEC-003`):** Farmers are never asked to enter raw coordinates or technical spatial projections. The frontend resolves human inputs (village name, PIN code, map tap) to spatial coordinates.
-2. **Layered Integration Boundary (`DEC-004`):** The MCP server provides the capability tool contract, while Earth Engine initialization, image filtering, cloud masking, and reducer operations live in an isolated module.
+2. **Layered Integration Boundary (`DEC-004`):** The MCP server provides the capability tool contract, while Earth Engine initialization, image filtering, observation quality validation (`DEC-010`), band mathematics (`DEC-009`), and reducer operations live in an isolated module.
 3. **Lean Statistical Aggregation First (`DEC-002`):** Compute robust zonal statistics (**mean**, **median**, **min**, **max**) for the farm area rather than transmitting heavy raster image arrays to LLMs.
 4. **Pluggable Data Source Architecture:** The Earth Engine client will implement a decoupled provider interface so that future datasets (Dynamic World LULC, NDWI moisture, soil grids) can be plugged in without refactoring the core multi-agent workflow.
 
