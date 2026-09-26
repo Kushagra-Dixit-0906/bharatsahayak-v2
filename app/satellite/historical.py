@@ -11,10 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Historical Sentinel-2 observation discovery, recency selection, and NDVI compositing.
+"""Historical Sentinel-2 observation discovery, recency selection, NDVI compositing, and multi-year orchestration.
 
-This module implements Step 3A & Step 3B of Phase 2C Historical Satellite Intelligence
-(DEC-014 / DEC-016):
+This module implements Phase 2C Historical Satellite Intelligence (DEC-014 / DEC-016):
 - Step 3A: Discovers candidate Sentinel-2 SR scenes within a single target year's
   Phase 2B seasonal window [ee_filter_start, ee_filter_end), applies the Phase 1 quality
   gate (Cloud Score+ cs_cdf >= 0.60, scene cloud < 20%, usable coverage >= 70%), sorts
@@ -23,15 +22,17 @@ This module implements Step 3A & Step 3B of Phase 2C Historical Satellite Intell
   scene, computes NDVI per-scene (calculate_ndvi), composites them via pixel-wise median
   (ee.ImageCollection.median()), executes regional zonal reduction on the final composite,
   and constructs a strongly typed AnnualHistoricalNdviObservation.
+- Step 4: Multi-year orchestration (`analyze_historical_years`) across the preceding historical
+  target years (Y-1, Y-2, Y-3) derived from an authoritative reference observation date.
 
 Important Scope Boundaries:
 ---------------------------
-- Does NOT orchestrate multi-year collections (Y-1, Y-2, Y-3) across years (Phase 2C Step 4).
-- Does NOT calculate baseline anomalies or z-scores across historical years (Phase 2D).
-- Operates strictly on a single target historical year.
+- Does NOT calculate baseline summary metrics (multi-year median/mean/std-dev) (Phase 2D).
+- Does NOT calculate baseline anomalies, percentage departures, or z-scores (Phase 2D).
+- Does NOT evaluate multi-year sufficiency guardrails (N_annual >= 2, Y >= 2) (Phase 2D).
 """
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import math
 from typing import Union
 
@@ -55,6 +56,13 @@ from .sentinel2 import (
     get_sentinel2_collection,
     mask_observation_quality,
 )
+from .temporal import (
+    DEFAULT_HISTORICAL_YEARS,
+    DEFAULT_WINDOW_HALF_DAYS,
+    calculate_historical_target_years,
+    construct_historical_temporal_window,
+    parse_utc_date,
+)
 from .types import (
     AnnualHistoricalNdviObservation,
     EarthEngineError,
@@ -62,8 +70,10 @@ from .types import (
     HistoricalObservationSummary,
     HistoricalTemporalWindow,
     NdviRegionalStatistics,
+    RegionalNdviAnalysis,
     SatelliteAnnualHistoricalNdviObservation,
     SatelliteHistoricalObservationSummary,
+    Sentinel2ImageMetadata,
 )
 
 # Architectural maximum usable observations selected per historical year (DEC-014 / DEC-016)
@@ -642,6 +652,164 @@ def compute_annual_historical_ndvi(
         )
 
 
+def analyze_historical_years(
+    reference_date: Union[str, date, datetime, Sentinel2ImageMetadata, RegionalNdviAnalysis],
+    region: ee.Geometry,
+    history_years: int = DEFAULT_HISTORICAL_YEARS,
+    window_half_days: int = DEFAULT_WINDOW_HALF_DAYS,
+    max_observations: int = DEFAULT_HISTORICAL_MAX_OBSERVATIONS,
+    scale_m: Union[int, float] = 10.0,
+    max_cloud_percentage: float = DEFAULT_MAX_CLOUD_PERCENTAGE,
+    dataset: str = SENTINEL2_SR_HARMONIZED,
+    quality_dataset: str = CLOUD_SCORE_PLUS_S2_HARMONIZED,
+    quality_band: str = DEFAULT_QUALITY_BAND,
+    clear_threshold: float = DEFAULT_CLEAR_THRESHOLD,
+    min_usable_coverage: float = DEFAULT_MIN_USABLE_COVERAGE,
+) -> list[AnnualHistoricalNdviObservation]:
+    """Orchestrates multi-year historical observation discovery, compositing, and statistics across target years.
+
+    Evaluates each historical target year (Y-1, Y-2, Y-3) independently within its Phase 2B
+    matched seasonal window (DEC-015, DEC-016). For each target year, delegates to
+    `compute_annual_historical_ndvi` to discover usable Sentinel-2 scenes, apply Cloud Score+
+    pixel masking, construct the pixel-wise median NDVI composite, and compute zonal statistics.
+
+    Architectural Guarantees:
+    - Anchors strictly to the authoritative reference observation date (DEC-012, DEC-015).
+    - Current observation year Y is strictly excluded from historical processing.
+    - Each historical year is evaluated independently with complete fault isolation.
+    - Preserves individual annual observation states (success, no_data, error) without dropping failed years.
+
+    Args:
+        reference_date: Authoritative current observation date (str, date, datetime,
+            Sentinel2ImageMetadata, or RegionalNdviAnalysis).
+        region: Parcel buffer spatial geometry (ee.Geometry).
+        history_years: Number of preceding historical target years to evaluate (> 0). Defaults to 3.
+        window_half_days: Half-width of the seasonal window in calendar days (>= 0). Defaults to 15 (31 days).
+        max_observations: Maximum newest usable observations per year to select (1 to 3). Defaults to 3.
+        scale_m: Spatial reduction scale in meters (> 0). Defaults to 10.0.
+        max_cloud_percentage: Coarse scene cloud threshold in percent. Defaults to 20.0%.
+        dataset: Sentinel-2 Earth Engine dataset ID. Defaults to 'COPERNICUS/S2_SR_HARMONIZED'.
+        quality_dataset: Cloud Score+ dataset ID. Defaults to 'GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'.
+        quality_band: Quality band identifier. Defaults to 'cs_cdf'.
+        clear_threshold: Pixel clear-sky score threshold in [0.0, 1.0]. Defaults to 0.60.
+        min_usable_coverage: Minimum regional usable coverage ratio in [0.0, 1.0]. Defaults to 0.70.
+
+    Returns:
+        list[AnnualHistoricalNdviObservation]: List of strongly typed annual historical observations
+            ordered descending by target year (e.g. [Y-1, Y-2, Y-3]), preserving individual year statuses
+            (success, no_data, error).
+
+    Raises:
+        TypeError: If reference_date is invalid or region is not ee.Geometry.
+        ValueError: If numeric arguments are out of bounds.
+    """
+    # 1. Extract reference date from domain models if provided
+    ref_input = reference_date
+    if isinstance(ref_input, RegionalNdviAnalysis):
+        ref_input = ref_input.observation.acquisition_date
+    elif isinstance(ref_input, Sentinel2ImageMetadata):
+        ref_input = ref_input.acquisition_date
+
+    # 2. Validate and normalize to UTC calendar date
+    parsed_ref_date = parse_utc_date(ref_input)
+
+    # 3. Synchronous Argument Validation
+    if not isinstance(region, ee.Geometry):
+        raise TypeError(
+            f"region must be an instance of ee.Geometry, got {type(region)!r}"
+        )
+
+    if not isinstance(history_years, int) or isinstance(history_years, bool) or history_years <= 0:
+        raise ValueError(
+            f"history_years must be a strictly positive integer (> 0), got {history_years!r}"
+        )
+
+    if not isinstance(window_half_days, int) or isinstance(window_half_days, bool) or window_half_days < 0:
+        raise ValueError(
+            f"window_half_days must be a non-negative integer (>= 0), got {window_half_days!r}"
+        )
+
+    if not isinstance(max_observations, int) or isinstance(max_observations, bool) or max_observations <= 0:
+        raise ValueError(
+            f"max_observations must be a strictly positive integer (> 0), got {max_observations!r}"
+        )
+    if max_observations > DEFAULT_HISTORICAL_MAX_OBSERVATIONS:
+        raise ValueError(
+            f"max_observations cannot exceed the architectural maximum of {DEFAULT_HISTORICAL_MAX_OBSERVATIONS} "
+            f"(DEC-014 / DEC-016), got {max_observations}"
+        )
+
+    if (
+        not isinstance(scale_m, (int, float))
+        or isinstance(scale_m, bool)
+        or math.isnan(scale_m)
+        or math.isinf(scale_m)
+        or float(scale_m) <= 0.0
+    ):
+        raise ValueError(f"scale_m must be a strictly positive number (> 0), got {scale_m!r}")
+    scale_val = float(scale_m)
+
+    _validate_numeric_bound("max_cloud_percentage", max_cloud_percentage, 0.0, 100.0)
+    _validate_numeric_bound("clear_threshold", clear_threshold, 0.0, 1.0)
+    _validate_numeric_bound("min_usable_coverage", min_usable_coverage, 0.0, 1.0)
+    _validate_non_empty_string("dataset", dataset)
+    _validate_non_empty_string("quality_dataset", quality_dataset)
+    _validate_non_empty_string("quality_band", quality_band)
+
+    # 4. Calculate Historical Target Years (Y-1, Y-2, Y-3)
+    target_years = calculate_historical_target_years(
+        reference_date=parsed_ref_date,
+        history_years=history_years,
+    )
+
+    # 5. Evaluate Each Historical Year Independently
+    annual_observations: list[AnnualHistoricalNdviObservation] = []
+    for target_year in target_years:
+        temporal_window = construct_historical_temporal_window(
+            reference_date=parsed_ref_date,
+            target_year=target_year,
+            window_half_days=window_half_days,
+        )
+
+        year_result = compute_annual_historical_ndvi(
+            temporal_window=temporal_window,
+            region=region,
+            max_observations=max_observations,
+            scale_m=scale_val,
+            max_cloud_percentage=max_cloud_percentage,
+            dataset=dataset,
+            quality_dataset=quality_dataset,
+            quality_band=quality_band,
+            clear_threshold=clear_threshold,
+            min_usable_coverage=min_usable_coverage,
+        )
+
+        if isinstance(year_result.data, AnnualHistoricalNdviObservation):
+            annual_observations.append(year_result.data)
+        else:
+            err = year_result.error or EarthEngineError(
+                type="HistoricalComputationError",
+                message=f"Failed to process historical target year {target_year}",
+            )
+            fallback_obs = AnnualHistoricalNdviObservation(
+                target_year=target_year,
+                temporal_window=temporal_window,
+                available_usable_scenes_count=0,
+                selected_scenes_count=0,
+                selected_observations=[],
+                statistics=None,
+                status="error",
+                composite_method="none",
+                pipeline_version="1.0.0",
+                error=err,
+            )
+            annual_observations.append(fallback_obs)
+
+    return annual_observations
+
+
 # Semantic aliases for discoverability and backward/forward compatibility
 build_annual_historical_composite = compute_annual_historical_ndvi
 build_annual_historical_ndvi_observation = compute_annual_historical_ndvi
+orchestrate_historical_ndvi = analyze_historical_years
+compute_multi_year_historical_ndvi = analyze_historical_years

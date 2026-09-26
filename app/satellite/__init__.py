@@ -32,10 +32,13 @@ from .pipeline import (
 )
 from .historical import (
     DEFAULT_HISTORICAL_MAX_OBSERVATIONS,
+    analyze_historical_years,
     build_annual_historical_composite,
     build_annual_historical_ndvi_observation,
     build_historical_ndvi_composite,
     compute_annual_historical_ndvi,
+    compute_multi_year_historical_ndvi,
+    orchestrate_historical_ndvi,
     select_historical_observations,
 )
 from .sentinel2 import (
@@ -103,6 +106,7 @@ __all__ = [
     "RED_BAND",
     "SENTINEL2_SR_HARMONIZED",
     "STATISTICAL_INVARIANT_EPSILON",
+    "analyze_historical_years",
     "analyze_regional_ndvi",
     "build_annual_historical_composite",
     "build_annual_historical_ndvi_observation",
@@ -112,6 +116,7 @@ __all__ = [
     "calculate_ndvi_statistics",
     "calculate_usable_coverage",
     "compute_annual_historical_ndvi",
+    "compute_multi_year_historical_ndvi",
     "compute_ndvi",
     "compute_ndvi_statistics",
     "construct_historical_temporal_window",
@@ -119,6 +124,7 @@ __all__ = [
     "get_most_recent_sentinel2_image",
     "get_sentinel2_collection",
     "mask_observation_quality",
+    "orchestrate_historical_ndvi",
     "parse_utc_date",
     "resolve_date_range",
     "select_historical_observations",
