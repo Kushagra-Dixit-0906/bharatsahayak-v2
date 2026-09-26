@@ -1,16 +1,16 @@
 # Phase 1 — Earth Engine Foundation
 
 > **Phase 1 Execution Record, Architectural Integration Design, and Sub-Roadmap.**  
-> *Status: 🟡 IN PROGRESS | Active Subphase: 1F Complete, Next Subphase: 1G*
+> *Status: 🟡 IN PROGRESS | Active Subphase: 1G Complete, Next Subphase: 1H*
 
 ---
 
 ## 📌 Resume Status
 
 - **Phase Status:** 🟡 **IN PROGRESS**
-- **Last Completed Substep:** **1F — NDVI Calculation (`DEC-009`)**
-- **Current Active Substep:** **1G — Regional NDVI Statistics** (🟡 PLANNED)
-- **Next Action:** Implement Earth Engine zonal reducers across the `AnalysisRegion` computing **mean**, **median**, **min**, and **max** NDVI statistics, returning a structured JSON result contract in Subphase 1G, incorporating observation quality and cloud handling standards locked in `DEC-010`.
+- **Last Completed Substep:** **1G — Regional NDVI Statistics** (🟢 COMPLETE)
+- **Current Active Substep:** **1H — Reliability & Data Quality** (🟡 PLANNED)
+- **Next Action:** Implement edge-case handlers for out-of-bounds coordinates, heavy clouds, zero-pixel reductions, API timeouts, and quota limits in Subphase 1H.
 - **Verified Fact / Boundary:**
   - **Phase 1B Completed (1B.1–1B.10):** Local environment setup, `earthengine-api` 1.7.43 installed via `uv add` (`DEC-005`), ADC authentication verified (`DEC-006`), project `bharatsahayak-v2` initialized, bounded Sentinel-2 catalog query verified, zero credential leakage audited.
   - **Phase 1C Completed (1C.1–1C.8):**
@@ -38,9 +38,16 @@
     - Automatically clips the NDVI raster extent to the `AnalysisRegion` (`ee.Geometry`) if provided.
     - Preserves invalid/masked pixels without fabricating replacement zeros; avoids unnecessary manual reflectance scaling (multiplicative factors cancel out in ratio).
     - Preserved active Phase 1E scene-level `<20%` cloud filter without introducing premature pixel-level cloud masking algorithms in 1F.
-    - Verified with 29 unit tests in [`tests/unit/test_satellite_ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_ndvi.py) and 3 live integration tests in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) (Tests 10–12).
-    - Live Ludhiana fixture verification selected Sentinel-2A scene from `2026-08-16`, confirmed output is `ee.image.Image`, single band `["NDVI"]`, sampled pixel values within $[-1.0, 1.0]$, pre-Sentinel-2 query returned `no_data` without fabricating data, and invalid band query produced `ee.EEException`.
-    - Total test suite: **146 passed** (0 failed).
+    - Verified with 29 unit tests in [`tests/unit/test_satellite_ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_ndvi.py) and 3 live integration tests in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) (Tests 10–12). Total test suite: **146 passed** (0 failed).
+  - **Phase 1G Completed:**
+    - Implemented `calculate_ndvi_statistics(ndvi_image, region, scale=10.0, band_name="NDVI") -> EarthEngineResult` and `compute_ndvi_statistics` alias in [`app/satellite/ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/ndvi.py).
+    - Implemented [`NdviRegionalStatistics`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py) (`mean`, `median`, `min`, `max`, `valid_pixel_count`) and `SatelliteRegionalStatistics` alias in [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py) with strict bounds $[-1.0, 1.0]$.
+    - Employs a single combined server-side reducer (`ee.Reducer.mean().combine(median).combine(min).combine(max).combine(count)`) executed in one `reduceRegion()` call.
+    - Verified runtime Earth Engine key structure: `{'NDVI_mean': ..., 'NDVI_median': ..., 'NDVI_min': ..., 'NDVI_max': ..., 'NDVI_count': ...}`.
+    - Preserved strict no-data semantics: empty dictionary, null mean, or `valid_pixel_count == 0` returns `EarthEngineResult(status="no_data", data=None, error=None)` ($\text{NULL} \neq 0.0$).
+    - Preserved remote error encapsulation (`ee.EEException` $\rightarrow$ `EarthEngineResult(status="error")`) while local parameter validation raises `TypeError` / `ValueError`.
+    - Verified with 13 unit tests in [`tests/unit/test_satellite_ndvi_statistics.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_ndvi_statistics.py) and 3 live integration tests in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) (Tests 17–19).
+    - Total test suite: **262 passed** (0 failed).
   - **Limitations & Future Roadmap:**
     - The 100 m circular region is an approximate local satellite observation area, **not** an exact farm boundary.
     - Scene-level `CLOUDY_PIXEL_PERCENTAGE` is a coarse pre-filter; fine-grained parcel-level observation quality is governed by Cloud Score+ (`DEC-010`).
@@ -48,7 +55,7 @@
     - Polygon/cadastral/adaptive region support remains future work.
   - **Strict Scope Boundaries:**
     - Earth Engine production client is **NOT** implemented yet (`app/satellite/client.py` does **NOT** exist yet).
-    - Regional NDVI summary statistics (mean, median, min, max) are **NOT** implemented yet (Subphase 1G).
+    - Reliability & edge cases (API timeouts, out-of-bounds coords) are Subphase 1H.
     - Crop-health interpretations and classification thresholds are **NOT** implemented yet.
     - Dynamic World LULC and NDWI are **NOT** implemented yet.
     - Weather data fusion and predictive models are **NOT** implemented yet.
@@ -95,7 +102,7 @@ graph TD
     S1C --> S1D["1D: Geographic Region Definition\n(1D.1–1D.3 Complete) 🟢 COMPLETE"]
     S1D --> S1E["1E: Sentinel-2 Pipeline & Observation Quality\n(DEC-008, DEC-010) 🟢 COMPLETE"]
     S1E --> S1F["1F: NDVI Calculation\n(DEC-009) 🟢 COMPLETE"]
-    S1F --> S1G["1G: Regional NDVI Statistics 🟡 PLANNED"]
+    S1F --> S1G["1G: Regional NDVI Statistics 🟢 COMPLETE"]
     S1G --> S1H["1H: Reliability & Data Quality 🟡 PLANNED"]
     S1H --> S1I["1I: Integration Boundary Verification 🟡 PLANNED"]
     S1I --> S1J["1J: Phase Documentation 🟡 PLANNED"]
@@ -110,7 +117,7 @@ graph TD
 | **1D** | **Geographic Region Definition** | Formulate point-to-region geometry strategy (`DEC-007` 🟢), implement geometry helpers in `app/satellite/geometry.py` (`1D.2` 🟢), validate coordinates & radius, test live region queries against Earth Engine (`1D.3` 🟢). | 🟢 **COMPLETE (1D.1–1D.3 Complete)** |
 | **1E** | **Sentinel-2 Pipeline & Observation Quality** | Ingest Sentinel-2 Level-2A collection (`COPERNICUS/S2_SR_HARMONIZED`), apply spatial/temporal filters and coarse scene cloud filter (`<20%`), validate observation quality via Cloud Score+ (`cs_cdf >= 0.60`, usable coverage `>= 0.70`), order newest-first, select freshest usable scene, and extract structured metadata (`DEC-008`, `DEC-010`). | 🟢 **COMPLETE** |
 | **1F** | **NDVI Calculation** | Compute $\text{NDVI} = \frac{\text{B8}-\text{B4}}{\text{B8}+\text{B4}}$ using native `image.normalizedDifference(["B8", "B4"]).rename("NDVI")`, clip to `AnalysisRegion`, output unreduced `ee.Image`, validate $[-1.0, 1.0]$ range (`DEC-009`). | 🟢 **COMPLETE** |
-| **1G** | **Regional NDVI Statistics** | Implement zonal reducers across farm geometry computing **mean**, **median**, **min**, **max**, and format structured JSON output. | 🟡 PLANNED |
+| **1G** | **Regional NDVI Statistics** | Implement zonal reducers across farm geometry computing **mean**, **median**, **min**, **max**, and valid pixel count, returning structured `NdviRegionalStatistics` envelope. | 🟢 **COMPLETE** |
 | **1H** | **Reliability & Data Quality** | Implement edge-case handlers for out-of-bounds coordinates, heavy clouds, zero-pixel reductions, API timeouts, and quota limits. | 🟡 PLANNED |
 | **1I** | **Integration Boundary Verification** | Verify standalone execution of the Earth Engine module, clean MCP interface decoupling, and pluggability for future datasets. | 🟡 PLANNED |
 | **1J** | **Phase Documentation** | Write Before vs After records, document verified outputs, update decisions, backlog, and resume state. | 🟡 PLANNED |
@@ -477,9 +484,91 @@ Implement Normalized Difference Vegetation Index ($\text{NDVI}$) calculation for
   - **Observation Quality Decoupling:** In accordance with `DEC-010`, observation quality validation is decoupled from pure NDVI band mathematics. Phase 1F focuses strictly on computing normalized difference and raster clipping.
   - **Approximate Geometry:** The 100m circular buffer is an approximate local satellite observation envelope, **not** an exact farm boundary.
   - **Strict Scope Boundaries Maintained:**
-    - Zonal statistical reductions (mean, median, min, max) are **NOT** implemented yet (Subphase 1G).
+    - Zonal statistical reductions (mean, median, min, max) are implemented in Subphase 1G.
     - Crop-health classification thresholds are **NOT** implemented yet.
     - Gemini prompt reasoning, MCP tool changes, and farmer-facing UI components remain deferred.
+
+---
+
+## 📊 1G — Regional NDVI Statistics
+
+### Goal
+Implement regional NDVI summary statistics over the 100 m `AnalysisRegion` (~3.14 hectares), executing a single combined server-side reduction (`mean`, `median`, `min`, `max`, `count`), parsing the runtime reducer dictionary, strictly handling un-fabricated no-data conditions, and returning a structured `EarthEngineResult` containing `NdviRegionalStatistics`.
+
+### Substep Breakdown & Execution Record
+
+#### 1G.1 Regional Reduction Implementation & Result Contract — 🟢 COMPLETE
+- **Code Implementation:**
+  - In [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py):
+    - Added [`NdviRegionalStatistics`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py#L47-L54):
+      ```python
+      class NdviRegionalStatistics(BaseModel):
+          """Structured regional summary statistics for NDVI over an AnalysisRegion."""
+
+          mean: float = Field(ge=-1.0, le=1.0)
+          median: float = Field(ge=-1.0, le=1.0)
+          min: float = Field(ge=-1.0, le=1.0)
+          max: float = Field(ge=-1.0, le=1.0)
+          valid_pixel_count: int | None = Field(default=None, ge=0)
+      ```
+    - Added alias: `SatelliteRegionalStatistics = NdviRegionalStatistics`.
+  - In [`app/satellite/ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/ndvi.py):
+    - Added `calculate_ndvi_statistics(ndvi_image, region, scale=10.0, band_name="NDVI") -> EarthEngineResult`:
+      - **Local Validation:** Validates `ndvi_image` is `ee.Image`, `region` is `ee.Geometry`, `scale` is positive finite numeric, `band_name` is non-empty string. Local programmer errors immediately raise `TypeError` or `ValueError` (never masked as remote `EarthEngineResult`).
+      - **Single Combined Reducer:** Constructs a unified server-side reducer:
+        ```python
+        combined_reducer = (
+            ee.Reducer.mean()
+            .combine(reducer2=ee.Reducer.median(), sharedInputs=True)
+            .combine(reducer2=ee.Reducer.min(), sharedInputs=True)
+            .combine(reducer2=ee.Reducer.max(), sharedInputs=True)
+            .combine(reducer2=ee.Reducer.count(), sharedInputs=True)
+        )
+        ```
+      - **One-Pass Server Reduction:** Executes one `ndvi_image.reduceRegion(reducer=combined_reducer, geometry=region, scale=scale, maxPixels=10000)` and evaluates via `.getInfo()`.
+      - **Verified Runtime Key Inspection:** Live Earth Engine evaluation confirmed the actual dictionary structure returned:
+        ```json
+        {
+          "NDVI_count": 346,
+          "NDVI_max": 0.7135161606268364,
+          "NDVI_mean": 0.5945221322208015,
+          "NDVI_median": 0.6182636318161177,
+          "NDVI_min": 0.3443496801705757
+        }
+        ```
+      - **No-Data Semantics:** If `reduceRegion()` returns an empty dictionary, missing `mean`, or `valid_pixel_count == 0` (e.g., all pixels masked by Cloud Score+), returns `EarthEngineResult(status="no_data", data=None, error=None)`. Maintains $\text{NULL} \neq 0.0$; never fabricates zeros.
+      - **Remote Error Semantics:** Catches `ee.EEException` and server-side runtime errors, wrapping them cleanly into `EarthEngineResult(status="error", data=None, error=EarthEngineError(...))`.
+    - Added alias: `compute_ndvi_statistics = calculate_ndvi_statistics`.
+  - In [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py): Exported `NdviRegionalStatistics`, `SatelliteRegionalStatistics`, `calculate_ndvi_statistics`, and `compute_ndvi_statistics`.
+
+#### 1G.2 Unit & Live Integration Testing — 🟢 COMPLETE
+- **Unit Testing:**
+  - Created [`tests/unit/test_satellite_ndvi_statistics.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_ndvi_statistics.py) with 13 unit tests covering:
+    - Default/valid argument proxy instantiation.
+    - Strict local type errors (`TypeError` on non-`ee.Image` or non-`ee.Geometry`).
+    - Value errors (`ValueError` on `scale <= 0`, `NaN`, `inf`, `-inf`, `bool`, `None`, empty/whitespace `band_name`).
+    - Alias parity between `compute_ndvi_statistics` and `calculate_ndvi_statistics`.
+    - Pydantic bounds validation on `NdviRegionalStatistics` ($[-1.0, 1.0]$, non-negative count).
+    - Mocked server-side reduction outputs (`success`, `no_data` on empty dict/null mean/zero count, `error` on remote EEException).
+  - Unit test result: **243 passed** across full unit test suite (`uv run pytest tests/unit/ -v`).
+- **Live Integration Testing:**
+  - Added 3 live integration tests to [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py):
+    - **Test 17 (`test_calculate_ndvi_statistics_live_evaluation`):** Evaluated full live pipeline over Jhajj Farm / Ludhiana fixture (`[75.7196, 30.9157]`, 100m buffer, Aug 2026). S2 scene selected (`2026-08-16`), quality-masked via Cloud Score+ (`cs_cdf >= 0.60`), NDVI computed, and regional statistics evaluated. Verified `status="success"`, `min <= mean <= max` ($0.344 \le 0.595 \le 0.714$), `min <= median <= max` ($0.344 \le 0.618 \le 0.714$), valid pixel count $346 \ge 1$. Alias parity verified.
+    - **Test 18 (`test_calculate_ndvi_statistics_all_masked_no_data`):** Directly constructed fully masked raster (`ee.Image.constant(0.5).rename("NDVI").updateMask(ee.Image.constant(0))`). Reduction produced clean `status="no_data"`, `data=None`, `error=None`.
+    - **Test 19 (`test_calculate_ndvi_statistics_invalid_band_error`):** Queried non-existent band on real `ee.Image`, producing clean `status="error"`, `data=None`, `error.type="EEException"`.
+  - Integration test result: **19 passed** in 43.30s (`uv run pytest tests/integration/test_earth_engine_connectivity.py -v`).
+  - Total targeted test suite: **262 passed** (0 failed).
+
+#### 1G.3 Performance & Quota Verification
+- **Defensible Architectural Statement:**
+  > "The reduction is spatially bounded to the existing 100 m AnalysisRegion (~3.14 hectares) and requests one combined server-side `reduceRegion()` evaluation. Actual execution latency and Earth Engine quota consumption are measured during live integration testing rather than assumed."
+- **Observed Live Telemetry:**
+  - Combined reduction runtime for the 100 m region: completed smoothly within standard interactive request latencies (~1–2s per live reduction call).
+  - Single `reduceRegion()` call with 5 combined statistics avoids 5 separate network/computation round-trips.
+
+#### 1G.4 Documented Limitations & Strict Scope Boundaries
+- **Measurement Only:** Phase 1G is strictly a measurement layer computing numeric statistics. It does **not** interpret NDVI as crop health, disease probability, yield forecast, or irrigation recommendation.
+- **Strict Scope Preserved:** Edge-case hardening (Subphase 1H), MCP server tool upgrades, Gemini prompt reasoning, time-series analysis, and UI map components remain deferred.
 
 ---
 
@@ -533,7 +622,13 @@ Implement Normalized Difference Vegetation Index ($\text{NDVI}$) calculation for
   - Native `image.normalizedDifference(["B8", "B4"]).rename("NDVI")`, clipped to `AnalysisRegion`, returning unreduced `ee.Image`.
   - Preserved masked pixels; avoided manual scale factor multiplication; preserved scene-level `<20%` cloud filter.
   - Verified 29 unit tests in `tests/unit/test_satellite_ndvi.py` and 3 live integration tests in `tests/integration/test_earth_engine_connectivity.py`. 146 total tests passed.
-- 🟡 **1G Next:** Regional NDVI Statistics (Earth Engine zonal reductions computing mean, median, min, max over farm geometry).
+- ✅ **1G Completed:**
+  - Implemented `calculate_ndvi_statistics(ndvi_image, region, scale=10.0, band_name="NDVI") -> EarthEngineResult` and `compute_ndvi_statistics` alias in `app/satellite/ndvi.py`.
+  - Implemented `NdviRegionalStatistics` (`mean`, `median`, `min`, `max`, `valid_pixel_count`) and `SatelliteRegionalStatistics` alias in `app/satellite/types.py` with strict Pydantic bounds $[-1.0, 1.0]$.
+  - Verified live reducer dictionary keys (`NDVI_mean`, `NDVI_median`, `NDVI_min`, `NDVI_max`, `NDVI_count`).
+  - Preserved strict no-data semantics ($\text{NULL} \neq 0.0$) and remote error encapsulation.
+  - Verified 13 unit tests in `tests/unit/test_satellite_ndvi_statistics.py` and 3 live integration tests in `tests/integration/test_earth_engine_connectivity.py`. 262 total tests passed.
+- 🟡 **1H Next:** Reliability & Data Quality (edge-case handlers for out-of-bounds coordinates, heavy clouds, zero-pixel reductions, API timeouts, and quota limits).
 
 ---
 
@@ -559,4 +654,5 @@ Implement Normalized Difference Vegetation Index ($\text{NDVI}$) calculation for
 - **Subphase 1D (Geographic Region Definition):** 🟢 **COMPLETE (1D.1–1D.3 Complete)**
 - **Subphase 1E (Sentinel-2 Data Pipeline & Observation Quality):** 🟢 **COMPLETE**
 - **Subphase 1F (NDVI Calculation):** 🟢 **COMPLETE**
-- **Subphase 1G (Regional NDVI Statistics):** 🟡 **PLANNED**
+- **Subphase 1G (Regional NDVI Statistics):** 🟢 **COMPLETE**
+- **Subphase 1H (Reliability & Data Quality):** 🟡 **PLANNED**

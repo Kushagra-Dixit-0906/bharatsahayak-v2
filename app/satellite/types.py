@@ -49,6 +49,19 @@ class Sentinel2ImageMetadata(BaseModel):
 SatelliteImageMetadata = Sentinel2ImageMetadata
 
 
+class NdviRegionalStatistics(BaseModel):
+    """Structured regional summary statistics for NDVI over an AnalysisRegion."""
+
+    mean: float = Field(ge=-1.0, le=1.0)
+    median: float = Field(ge=-1.0, le=1.0)
+    min: float = Field(ge=-1.0, le=1.0)
+    max: float = Field(ge=-1.0, le=1.0)
+    valid_pixel_count: int | None = Field(default=None, ge=0)
+
+
+SatelliteRegionalStatistics = NdviRegionalStatistics
+
+
 class EarthEngineResult(BaseModel):
     """Minimal result contract for Earth Engine operations."""
 

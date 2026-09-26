@@ -43,9 +43,12 @@ Important Scope Boundaries:
   NOT an exact cadastral farm parcel boundary.
 """
 
+import math
 from typing import Union
 
 import ee
+
+from .types import EarthEngineError, EarthEngineResult, NdviRegionalStatistics
 
 # Standard band names for Sentinel-2 Level-2A (DEC-009)
 NIR_BAND: str = "B8"
@@ -120,3 +123,134 @@ def calculate_ndvi(
 
 # Semantic alias
 compute_ndvi = calculate_ndvi
+
+
+def calculate_ndvi_statistics(
+    ndvi_image: ee.Image,
+    region: ee.Geometry,
+    scale: Union[int, float] = 10.0,
+    band_name: str = NDVI_BAND_NAME,
+) -> EarthEngineResult:
+    """Calculates regional NDVI summary statistics (mean, median, min, max) over an AnalysisRegion.
+
+    Executes a single combined server-side zonal reduction over the valid unmasked pixels
+    within the designated spatial geometry (DEC-002, DEC-009).
+
+    Args:
+        ndvi_image: Earth Engine image (ee.Image) containing the NDVI band.
+        region: Spatial analysis geometry (ee.Geometry).
+        scale: Spatial reduction scale in meters. Defaults to 10.0 (Sentinel-2 optical resolution).
+        band_name: Name of the NDVI band to reduce. Defaults to 'NDVI'.
+
+    Returns:
+        EarthEngineResult:
+            - status="success": Valid pixel reductions; data contains NdviRegionalStatistics.
+            - status="no_data": Zero valid unmasked pixels in the region; data=None.
+            - status="error": Earth Engine exception occurred; error contains details.
+
+    Raises:
+        TypeError: If ndvi_image is not an ee.Image or region is not an ee.Geometry.
+        ValueError: If scale is non-positive, non-finite, or band_name is empty/invalid.
+    """
+    if not isinstance(ndvi_image, ee.Image):
+        raise TypeError(
+            f"ndvi_image must be an instance of ee.Image, got {type(ndvi_image)!r}"
+        )
+
+    if not isinstance(region, ee.Geometry):
+        raise TypeError(
+            f"region must be an instance of ee.Geometry, got {type(region)!r}"
+        )
+
+    if (
+        not isinstance(scale, (int, float))
+        or isinstance(scale, bool)
+        or math.isnan(scale)
+        or math.isinf(scale)
+    ):
+        raise ValueError(f"scale must be a valid finite number, got {scale!r}")
+
+    if float(scale) <= 0.0:
+        raise ValueError(f"scale must be strictly positive (> 0), got {scale}")
+
+    if not isinstance(band_name, str) or not band_name.strip():
+        raise ValueError(f"band_name must be a non-empty string, got {band_name!r}")
+
+    clean_band = band_name.strip()
+
+    try:
+        combined_reducer = (
+            ee.Reducer.mean()
+            .combine(reducer2=ee.Reducer.median(), sharedInputs=True)
+            .combine(reducer2=ee.Reducer.min(), sharedInputs=True)
+            .combine(reducer2=ee.Reducer.max(), sharedInputs=True)
+            .combine(reducer2=ee.Reducer.count(), sharedInputs=True)
+        )
+
+        stats = ndvi_image.select([clean_band]).reduceRegion(
+            reducer=combined_reducer,
+            geometry=region,
+            scale=float(scale),
+            maxPixels=1e6,
+        )
+
+        stats_dict = stats.getInfo()
+        if not stats_dict:
+            return EarthEngineResult(
+                status="no_data",
+                data=None,
+                error=None,
+            )
+
+        mean_val = stats_dict.get(f"{clean_band}_mean", stats_dict.get("mean"))
+        if mean_val is None:
+            return EarthEngineResult(
+                status="no_data",
+                data=None,
+                error=None,
+            )
+
+        median_val = stats_dict.get(f"{clean_band}_median", stats_dict.get("median"))
+        min_val = stats_dict.get(f"{clean_band}_min", stats_dict.get("min"))
+        max_val = stats_dict.get(f"{clean_band}_max", stats_dict.get("max"))
+        count_val = stats_dict.get(f"{clean_band}_count", stats_dict.get("count"))
+
+        valid_count: int | None = None
+        if count_val is not None:
+            valid_count = int(count_val)
+            if valid_count == 0:
+                return EarthEngineResult(
+                    status="no_data",
+                    data=None,
+                    error=None,
+                )
+
+        statistics = NdviRegionalStatistics(
+            mean=float(mean_val),
+            median=float(median_val) if median_val is not None else float(mean_val),
+            min=float(min_val) if min_val is not None else float(mean_val),
+            max=float(max_val) if max_val is not None else float(mean_val),
+            valid_pixel_count=valid_count,
+        )
+
+        return EarthEngineResult(
+            status="success",
+            dataset=None,
+            image_count=None,
+            data=statistics,
+            error=None,
+        )
+
+    except Exception as exc:
+        return EarthEngineResult(
+            status="error",
+            data=None,
+            error=EarthEngineError(
+                type=exc.__class__.__name__,
+                message=str(exc),
+            ),
+        )
+
+
+# Semantic alias
+compute_ndvi_statistics = calculate_ndvi_statistics

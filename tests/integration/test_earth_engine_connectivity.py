@@ -24,6 +24,8 @@ from app.satellite.ndvi import (
     NIR_BAND,
     RED_BAND,
     calculate_ndvi,
+    calculate_ndvi_statistics,
+    compute_ndvi_statistics,
 )
 from app.satellite.sentinel2 import (
     CLOUD_SCORE_PLUS_S2_HARMONIZED,
@@ -39,6 +41,8 @@ from app.satellite.sentinel2 import (
 from app.satellite.types import (
     EarthEngineError,
     EarthEngineResult,
+    NdviRegionalStatistics,
+    SatelliteRegionalStatistics,
     Sentinel2ImageMetadata,
 )
 
@@ -525,3 +529,118 @@ def test_observation_quality_strict_threshold_rejection(ee_session: str) -> None
     assert pre_result.status == "no_data"
     assert pre_result.image_count == 0
     assert pre_result.data is None
+
+
+def test_calculate_ndvi_statistics_live_evaluation(ee_session: str) -> None:
+    """Test 17 (LIVE NDVI REGIONAL STATISTICS SUCCESS): Full pipeline from quality-filtered S2 to regional statistics."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    # 1. Select most recent usable Sentinel-2 image
+    image = get_most_recent_sentinel2_image(
+        region=region,
+        start_date="2026-08-01",
+        end_date="2026-08-31",
+        max_cloud_percentage=20.0,
+        clear_threshold=DEFAULT_CLEAR_THRESHOLD,
+        min_usable_coverage=DEFAULT_MIN_USABLE_COVERAGE,
+        apply_quality_mask=True,
+    )
+    assert isinstance(image, ee.Image)
+
+    # 2. Calculate NDVI
+    ndvi_image = calculate_ndvi(image=image, region=region)
+    assert isinstance(ndvi_image, ee.Image)
+
+    # 3. Calculate regional statistics
+    result = calculate_ndvi_statistics(
+        ndvi_image=ndvi_image,
+        region=region,
+        scale=10.0,
+        band_name=NDVI_BAND_NAME,
+    )
+
+    # 4. Verify EarthEngineResult contract
+    assert result.status == "success"
+    assert result.error is None
+    assert result.data is not None
+    assert isinstance(result.data, NdviRegionalStatistics)
+
+    stats = result.data
+    # Assert values are within theoretical bounds [-1.0, 1.0]
+    assert -1.0 <= stats.mean <= 1.0, f"Mean {stats.mean} outside [-1.0, 1.0]"
+    assert -1.0 <= stats.median <= 1.0, f"Median {stats.median} outside [-1.0, 1.0]"
+    assert -1.0 <= stats.min <= 1.0, f"Min {stats.min} outside [-1.0, 1.0]"
+    assert -1.0 <= stats.max <= 1.0, f"Max {stats.max} outside [-1.0, 1.0]"
+
+    # Assert pixel count
+    assert stats.valid_pixel_count is not None
+    assert stats.valid_pixel_count >= 1, f"Expected >= 1 valid pixels, got {stats.valid_pixel_count}"
+
+    # Mathematical consistency
+    assert stats.min <= stats.mean <= stats.max, (
+        f"Inconsistent: min ({stats.min}) <= mean ({stats.mean}) <= max ({stats.max})"
+    )
+    assert stats.min <= stats.median <= stats.max, (
+        f"Inconsistent: min ({stats.min}) <= median ({stats.median}) <= max ({stats.max})"
+    )
+
+    # Verify alias compute_ndvi_statistics produces identical results
+    alias_result = compute_ndvi_statistics(
+        ndvi_image=ndvi_image,
+        region=region,
+        scale=10.0,
+    )
+    assert alias_result.status == "success"
+    assert alias_result.data == stats
+
+
+def test_calculate_ndvi_statistics_all_masked_no_data(ee_session: str) -> None:
+    """Test 18 (LIVE NDVI STATISTICS NO DATA): Fully-masked raster produces status='no_data' with None data/error."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    # Directly construct all-masked NDVI image
+    masked_ndvi = (
+        ee.Image.constant(0.5)
+        .rename(NDVI_BAND_NAME)
+        .updateMask(ee.Image.constant(0))
+    )
+
+    result = calculate_ndvi_statistics(
+        ndvi_image=masked_ndvi,
+        region=region,
+        scale=10.0,
+    )
+
+    assert result.status == "no_data"
+    assert result.data is None
+    assert result.error is None
+
+
+def test_calculate_ndvi_statistics_invalid_band_error(ee_session: str) -> None:
+    """Test 19 (LIVE NDVI STATISTICS REMOTE ERROR): Non-existent band on real ee.Image produces status='error'."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    # Create image without NDVI band
+    image_without_ndvi = ee.Image.constant(42.0).rename("B4")
+
+    result = calculate_ndvi_statistics(
+        ndvi_image=image_without_ndvi,
+        region=region,
+        scale=10.0,
+        band_name="NON_EXISTENT_NDVI_BAND",
+    )
+
+    assert result.status == "error"
+    assert result.data is None
+    assert result.error is not None
+    assert result.error.type in ("EEException", "Exception")
+    assert len(result.error.message) > 0
