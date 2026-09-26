@@ -7,7 +7,18 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 1: Earth Engine Foundation (Subphases 1A–1I Complete; 1J Current; 1K Pending Checkpoint)
+### 🟡 In Progress — Phase 2: Historical Satellite Intelligence (Subphase 2A Complete & Sealed; 2B Next / Pending)
+- **Phase 2A Architecture & Design Review (🟢 COMPLETE & APPROVED / `DEC-012`, `DEC-013`, `DEC-014`):**
+  - Conducted comprehensive architecture, data-engineering, and scientific review for historical comparative satellite intelligence.
+  - Formulated and locked `DEC-012`: 3-year rolling operational historical horizon ($Y-1, Y-2, Y-3$) with Day-of-Year centered temporal windowing ($\text{Reference DOY} \pm 15\text{ days}$). Explicitly documented that DOY matching normalizes astronomical/calendar seasonality without claiming identical crop growth stage.
+  - Formulated and locked `DEC-013`: Selected Option C (Annual Matched-Window Regional Observations). Formally defined the primary statistical observation unit as one annual matched-window regional NDVI value per represented historical year ($[\text{val}_{Y-1}, \text{val}_{Y-2}, \dots]$). Selected Historical Median NDVI as the primary baseline, and established the anomaly metrics suite: Absolute Departure (primary), Gated Relative % Departure ($\text{baseline} \ge 0.15$), and Gated Z-Score ($N_{\text{annual}} \ge 2, Y \ge 2, \sigma_{\text{annual}} \ge 0.02$). Framed departures strictly as "MVP empirical spectral-departure bands" without asserting crop health or disease diagnoses.
+  - Formulated and locked `DEC-014`: Established the strongly typed `HistoricalNdviAnalysis` domain contract with explicit observation units (`historical_annual_observation_count`, `distinct_years_count`, `raw_qualifying_scenes_count`) and sufficiency guardrails ($N_{\text{annual}} \ge 2 \land Y \ge 2$). Defined universal result states: `success`, `insufficient_history`, `no_data`, and `error`. Replaced synthetic confidence scores with transparent empirical evidence.
+  - Established materialization budget target of maximum 3 client-side `.getInfo()` calls.
+  - Created canonical Phase 2 architecture record in `docs/phases/PHASE_02_HISTORICAL_SATELLITE_INTELLIGENCE.md`.
+  - Recorded two future implementation questions (Option C server-side construct and leap-year DOY alignment).
+  - Confirmed zero application source-code modifications.
+
+### 🟢 Completed — Phase 1: Earth Engine Foundation (Subphases 1A–1K Complete & Sealed — `60f8d90`)
 - **Phase 1A Architecture & Integration Design (🟢 COMPLETE):**
   - Selected and documented Option C (Layered Tool Contract with Dedicated Earth Engine Module) as `DEC-004` in `docs/DECISION_LOG.md` and `docs/ARCHITECTURE.md`.
   - Defined detailed 1A–1K sub-roadmap in `docs/MASTER_ROADMAP.md` and `docs/phases/PHASE_01_EARTH_ENGINE_FOUNDATION.md`.
@@ -49,16 +60,16 @@
   - Conducted full read-only architectural audit of layer decoupling, unidirectional dependency flow ($\text{Agent} \rightarrow \text{MCP} \rightarrow \text{Satellite} \rightarrow \text{EE}$), strict Earth Engine object encapsulation (`ee.Image`/`ee.Geometry` never cross MCP), and serialization rules (`result.model_dump(mode="json")`).
   - Defined future `get_regional_satellite_analysis` tool signature as DESIGN ONLY (implementation deferred to Phase 6).
   - Documented unresolved location privacy and coordinate telemetry policy. Zero code modifications performed.
-- **Phase 1J Final Documentation Consolidation (🟢 COMPLETE / CURRENT):**
+- **Phase 1J Final Documentation Consolidation (🟢 COMPLETE):**
   - Created canonical, comprehensive Phase 1 foundation record in `docs/phases/PHASE_01_EARTH_ENGINE_FOUNDATION.md` documenting milestones 1A through 1J, architectural invariants, verified test counts, and deferred roadmaps.
+- **Phase 1K Verification & Final Git Checkpoint (🟢 COMPLETE):**
+  - Checkpointed verified, audited Phase 1 foundation documentation with clean working tree (`60f8d90`).
 - **Strict Scope Boundaries Maintained:**
   - FastMCP tool registration remains deferred to Phase 6.
   - Gemini prompt reasoning, multi-temporal time-series, historical baseline anomaly detection, NDWI, Dynamic World LULC, and UI map components remain deferred to subsequent phases.
 
-
 ### 🟡 Planned Phases
-- **Phase 1 (Earth Engine Foundation):** Local environment setup (1B), connectivity test (1C), geometry definition (1D), Sentinel-2 pipeline (1E), NDVI calculation (1F), regional statistics (1G), and reliability testing (1H).
-- **Phase 2 (Satellite Intelligence):** Copernicus Sentinel-2 MSI surface reflectance querying, cloud masking, and NDVI regional summary statistics (mean, median, min, max).
+- **Phase 2 (Historical Satellite Intelligence):** 3-year rolling baseline ($Y-1, Y-2, Y-3$), DOY $\pm 15$ days seasonal matching, Option C annual matched-window regional reductions, and NDVI anomaly calculation.
 - **Phase 3 (Environmental Data Sources):** Pluggable provider architecture for live meteorological forecasts and regional soil databases.
 - **Phase 4 (Data Fusion):** Normalization and fusion of satellite NDVI, weather indicators, and farmer profile context.
 - **Phase 5 (Gemini Agricultural Reasoning):** Enhanced prompt engineering for Gemini 2.5 Flash interpreting satellite vigor and localized agronomic advisories.

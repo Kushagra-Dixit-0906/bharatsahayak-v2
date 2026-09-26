@@ -150,11 +150,12 @@ The `load_farmer_profile` node parses incoming queries to maintain session state
 
 ---
 
-## 🛰️ Earth Engine Satellite Intelligence Flow (`🟢 SATELLITE ENGINE COMPLETE (Phase 1A–1H) | 🟡 MCP CONNECTION SCHEDULED (Phase 6)`)
+## 🛰️ Earth Engine Satellite Intelligence Flow (`🟢 PHASE 1 COMPLETE | 🟡 PHASE 2 IN PROGRESS | 🟡 MCP CONNECTION SCHEDULED (Phase 6)`)
 
 > [!IMPORTANT]
 > **Current Implementation Status:**
-> - **Satellite Engine (`app/satellite/`):** 🟢 **COMPLETE & VERIFIED (Phase 1A–1H)**. Standalone deterministic satellite computation engine providing `analyze_regional_ndvi(...)`, single authoritative observation selection, Cloud Score+ quality masking, NDVI computation, and regional zonal reductions (`382 tests passing`).
+> - **Phase 1 Instantaneous Satellite Engine (`app/satellite/`):** 🟢 **COMPLETE & SEALED (`60f8d90`)**. Standalone deterministic satellite computation engine providing `analyze_regional_ndvi(...)`, single authoritative observation selection, Cloud Score+ quality masking, NDVI computation, and regional zonal reductions (`382 tests passing`).
+> - **Phase 2 Historical Intelligence & Anomaly Detection:** 🟡 **ARCHITECTURE APPROVED (`DEC-012`–`DEC-014`)**. Extends the satellite engine with 3-year rolling baselines ($Y-1, Y-2, Y-3$), DOY $\pm 15$ days seasonal matching, Option C annual matched-window regional observations, and empirical NDVI anomaly evidence.
 > - **FastMCP Server & Agent Connection:** 🟡 **SCHEDULED FOR PHASE 6**. The active MCP server ([app/mcp_server.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/mcp_server.py)) currently retains its initial static/catalog tools until Phase 6 implements the live `get_regional_satellite_analysis` tool adapter.
 
 In accordance with architectural decision [`DEC-004`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/docs/DECISION_LOG.md#L118-L168) (Option C), the Earth Engine architecture decouples MCP tool contracts from geospatial execution:

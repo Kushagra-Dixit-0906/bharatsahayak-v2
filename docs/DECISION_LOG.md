@@ -1135,3 +1135,157 @@ BharatSahayak V2 standardizes on `RegionalNdviAnalysis` as the authoritative dom
 ---
 
 - **Status:** 🟢 **DECISION LOCKED & FORMALIZED (Phase 1H Architecture Decision Complete)**
+
+---
+
+### DEC-012: 3-Year Rolling Historical Horizon with Day-of-Year Centered Temporal Matching
+
+- **Decision ID:** `DEC-012`
+- **Date / Context:** Phase 2A Historical Satellite Intelligence (Historical Horizon & Seasonality Strategy)
+
+#### 📸 Before Snapshot
+Prior to DEC-012, Phase 1 established instantaneous regional NDVI analysis (`RegionalNdviAnalysis`), extracting a single authoritative observation within a 30-day lookback window. However, the system lacked historical depth: an instantaneous value (e.g., $\text{NDVI} = 0.54$) cannot determine whether vegetation vigor is typical, lagging, or unusually high without comparison to previous years.
+
+#### 📜 Decision
+Standardize on a **3-year rolling operational historical horizon** with **Day-of-Year (DOY) centered windowing**:
+
+1. **Operational Horizon ($K=3$ Years):**
+   - Evaluates the preceding 3 calendar years ($Y-1, Y-2, Y-3$) relative to the current observation year $Y$.
+   - **Architectural Scope Notice:** 3 years is a practical operational baseline for the MVP smallholder advisory, balancing data density, compute latency, and cloud limits. It is **not** a claim of an optimal climatological baseline (longer 5–10 year horizons remain future work).
+2. **Day-of-Year (DOY) Centered Window:**
+   - Evaluates historical observations in a window of $\text{Reference DOY} \pm 15\text{ days}$ (30-day total window) in each historical year.
+   - **Astronomical / Seasonal Normalization Boundary:** DOY matching ensures astronomical and seasonal calendar comparability. It does **not** guarantee identical crop phenological stage (planting dates vary year-to-year). Crop-specific phenology alignment remains strictly within Phase 5 agent reasoning.
+
+#### 💡 Rationale (Why Chosen)
+- **Prevents Seasonality Artifacts:** Comparing August monsoon peak against May summer fallow yields massive false-positive "anomalies". DOY windowing restricts comparison to the identical point in the annual orbit.
+- **Archive Consistency:** Sentinel-2 Level-2A Harmonized Surface Reflectance (`COPERNICUS/S2_SR_HARMONIZED`) provides consistent global coverage across India from 2018 onwards. A 3-year lookback is universally available and computationally lightweight.
+
+#### ⚖️ Trade-offs & Limitations
+- **Fixed Horizon vs Climate Shifts:** A 3-year window captures recent management practices but may be influenced if 2 of the 3 prior years suffered regional droughts.
+- **Calendar Matching vs Crop Growth Stages:** Does not account for shifted sowing dates due to delayed monsoon onset (handled downstream in Phase 5).
+
+---
+
+### DEC-013: Option C Annual Matched-Window Regional Observations & Anomaly Mathematics
+
+- **Decision ID:** `DEC-013`
+- **Date / Context:** Phase 2A Historical Satellite Intelligence (Historical Sampling & Anomaly Mathematics)
+
+#### 📸 Before Snapshot
+Prior to DEC-013, the method for sampling historical Sentinel-2 scenes and computing baseline/anomaly metrics was undefined. Pooling all raw scenes across years would treat correlated 5-day revisit passes as independent samples, while picking a single arbitrary scene per year would introduce high sensitivity to single-day weather artifacts.
+
+#### 📜 Decision
+Adopt **Option C: Annual Matched-Window Regional Observations** as the canonical sampling and statistical reduction architecture:
+
+1. **Option C Sampling & Reduction Pipeline:**
+   ```text
+   Historical Sentinel-2 scenes
+           ↓
+   Group by historical calendar year (Y-1, Y-2, Y-3)
+           ↓
+   Apply Phase 1 quality policy (Cloud Score+ cs_cdf >= 0.60, min coverage >= 70%, scene cloud < 20%)
+           ↓
+   Within each historical year:
+       Process all qualifying scenes in that year's DOY ±15-day matched window
+           ↓
+   Produce ONE annual matched-window regional NDVI observation per represented historical year
+           ↓
+   Historical annual observations:
+       Y-1 → one regional value
+       Y-2 → one regional value
+       Y-3 → one regional value
+           ↓
+   Construct historical distribution [val_{Y-1}, val_{Y-2}, val_{Y-3}]
+           ↓
+   Compute Median / Mean / Standard Deviation across the annual values
+   ```
+2. **Explicit Observation Unit:**
+   - Primary statistical population unit: **ONE annual matched-window regional NDVI value per represented historical year**.
+   - Raw Sentinel-2 scenes within a year are aggregated into that year's representative regional value. They are **never** pooled directly as independent multi-year samples.
+3. **Primary Historical Baseline:**
+   - **Historical Median NDVI** ($\text{median}([\text{val}_{Y-1}, \text{val}_{Y-2}, \dots])$) is the primary baseline statistic.
+   - Mean and standard deviation across annual regional values serve as secondary dispersion evidence.
+4. **Primary Anomaly Metric:**
+   - **Absolute NDVI Departure:**
+     $$\Delta\text{NDVI} = \text{current\_regional\_mean\_ndvi} - \text{historical\_annual\_median\_ndvi}$$
+5. **Gated Relative / Percentage Departure:**
+   - Computed as $\frac{\text{current} - \text{baseline}}{\text{baseline}} \times 100$ **only when** $\text{historical\_annual\_median\_ndvi} \ge 0.15$. Returns `None` over fallow/bare soil to prevent near-zero division explosion.
+6. **Gated Standardized Anomaly (Z-Score):**
+   - Computed as $\frac{\text{current} - \mu_{\text{annual}}}{\sigma_{\text{annual}}}$ **only when** $N_{\text{annual}} \ge 2$, $Y \ge 2$, and $\sigma_{\text{annual}} \ge 0.02$ across the historical annual regional NDVI values. Returns `None` otherwise.
+7. **Empirical Departure Classification Language:**
+   - Labeled strictly as **"MVP empirical spectral-departure bands"** (e.g. *Strong Positive Spectral Departure*, *Near-Baseline Alignment*, *Strong Negative Spectral Departure*).
+   - Strictly prohibits mapping spectral departures directly to crop health diagnoses, disease, or stress labels.
+
+#### 💡 Rationale (Why Chosen)
+- **Eliminates Autocorrelation Bias:** Sentinel-2's 5-day revisit means 4 scenes in August 2024 measure the same crop growth cycle. Grouping by year prevents over-representing a clear year with 6 scenes over a partially cloudy year with 2 scenes.
+- **Robust Outlier Rejection:** Median baseline is resilient to a single anomalous past year (e.g. flood or drought).
+
+---
+
+### DEC-014: Layered Historical Analysis Contract with Explicit Annual Observation Units & Sufficiency Guardrails
+
+- **Decision ID:** `DEC-014`
+- **Date / Context:** Phase 2A Historical Satellite Intelligence (Domain Contract & Result-State Semantics)
+
+#### 📸 Before Snapshot
+Prior to DEC-014, the domain contract for historical evidence and result-state semantics for sparse or missing historical data was undefined.
+
+#### 📜 Decision
+Establish a strongly typed domain contract (`HistoricalNdviAnalysis`) with explicit observation units and data sufficiency guardrails:
+
+1. **Domain Composition Hierarchy:**
+   ```text
+   EarthEngineResult
+    └── data: HistoricalNdviAnalysis
+         ├── current: RegionalNdviAnalysis (Preserved Phase 1 Root Contract)
+         ├── baseline: HistoricalNdviBaseline
+         │    ├── median: float
+         │    ├── mean: float | None
+         │    ├── std_dev: float | None
+         │    ├── min: float | None
+         │    ├── max: float | None
+         │    └── valid_pixel_count: int | None
+         ├── temporal_matching: HistoricalTemporalWindow
+         │    ├── reference_doy: int
+         │    ├── window_days: int
+         │    ├── years_evaluated: list[int]
+         │    ├── start_doy: int
+         │    └── end_doy: int
+         ├── sufficiency: HistoricalSufficiencyEvidence
+         │    ├── historical_annual_observation_count: int
+         │    ├── distinct_years_count: int
+         │    ├── raw_qualifying_scenes_count: int
+         │    ├── is_sufficient: bool
+         │    └── sufficiency_notes: str | None
+         ├── anomaly: NdviAnomalyEvidence
+         │    ├── absolute_departure: float
+         │    ├── percentage_departure: float | None
+         │    ├── z_score: float | None
+         │    ├── spectral_departure_class: str
+         │    └── is_anomalous: bool
+         └── pipeline_version: str = "2.0.0"
+   ```
+2. **Explicit Observation Units & Field Nomenclature:**
+   - `historical_annual_observation_count`: Count of annual regional observations $N_{\text{annual}}$ in baseline population.
+   - `distinct_years_count`: Count of distinct historical calendar years $Y$ represented.
+   - `raw_qualifying_scenes_count`: Total raw Sentinel-2 scenes passing quality gates across all historical windows (provenance only).
+3. **Data Sufficiency Rule:**
+   - Valid baseline requires:
+     $$N_{\text{annual}} \ge 2 \quad \text{AND} \quad Y \ge 2$$
+   - If $N_{\text{annual}} < 2$ or $Y < 2$, the result state is marked as `insufficient_history`. The current Phase 1 observation is returned, but baseline and anomaly calculations are withheld.
+4. **Universal Result-State Semantics:**
+   - `status="success"`: Current observation valid AND sufficient historical data ($N_{\text{annual}} \ge 2 \land Y \ge 2$); baseline and anomalies computed.
+   - `status="insufficient_history"`: Current observation valid, but historical data is sparse ($N_{\text{annual}} < 2$ or $Y < 2$).
+   - `status="no_data"`: No usable current Phase 1 observation exists within lookback window.
+   - `status="error"`: Earth Engine exception, runtime error, or invariant violation.
+5. **Rejection of Synthetic Confidence Scores:**
+   - Arbitrary scalar confidence scores (e.g. `confidence: 0.88`) are explicitly rejected in favor of transparent empirical evidence ($N_{\text{annual}}$, $Y$, $\sigma$, temporal window width).
+6. **Materialization Budget:**
+   - A maximum of 3 explicit client-side materialization calls (`.getInfo()`) is established as an engineering design target to control latency and limit round trips.
+
+#### 💡 Rationale (Why Chosen)
+- **Domain Fidelity:** Reflects remote sensing realities without hiding data sparsity.
+- **Zero Hallucination Grounding:** Downstream agents know exactly how many historical years contributed to the baseline.
+- **Phase 1 Preservation:** Nests `RegionalNdviAnalysis` without modifying any Phase 1 data structures.
+
+---
