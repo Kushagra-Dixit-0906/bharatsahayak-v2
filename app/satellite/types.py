@@ -13,6 +13,7 @@
 # limitations under the License.
 """Type definitions and result contracts for satellite and Earth Engine operations."""
 
+from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -127,3 +128,39 @@ class RegionalNdviAnalysis(BaseModel):
 
 
 SatelliteRegionalAnalysis = RegionalNdviAnalysis
+
+
+class HistoricalTemporalWindow(BaseModel):
+    """Deterministic date range for a single historical year's matched seasonal window (DEC-015).
+
+    The window is strictly owned by target_year, even if the date range [start_date, end_date]
+    crosses a calendar-year boundary into target_year - 1 or target_year + 1.
+    """
+
+    target_year: int = Field(
+        description="The authoritative historical anchor year owning this seasonal window"
+    )
+    anchor_date: date = Field(
+        description="The seasonal anchor date within target_year"
+    )
+    start_date: date = Field(
+        description="Inclusive start date of the seasonal window"
+    )
+    end_date: date = Field(
+        description="Inclusive end date of the seasonal window"
+    )
+    ee_filter_start: str = Field(
+        description="Inclusive start date string YYYY-MM-DD for Earth Engine"
+    )
+    ee_filter_end: str = Field(
+        description="Exclusive end date string YYYY-MM-DD for Earth Engine"
+    )
+    inclusive_day_count: int = Field(
+        default=31, description="Total inclusive calendar days spanned"
+    )
+    reference_doy: int = Field(
+        ge=1, le=366, description="Day of Year (1-366) of reference observation date"
+    )
+
+
+SatelliteTemporalWindow = HistoricalTemporalWindow
