@@ -1,9 +1,9 @@
 # Phase 2 — Historical Satellite Intelligence
 
 > **Canonical Record of Phase 2 Architecture, Design Decisions, Historical Baselines, and Anomaly Mathematics.**  
-> *Status: 🟢 PHASE 2A COMPLETE & SEALED (Subphase 2A Approved; 2B Next / Pending)*  
-> *Base Sealed Checkpoint: `60f8d90 — docs: finalize Phase 1 Earth Engine foundation documentation`*  
-> *Next Step: Subphase 2B — Historical Temporal Window & Seasonality Strategy*  
+> *Status: 🟢 PHASE 2A & 2B COMPLETE & SEALED (Subphases 2A & 2B Approved; 2C Next / Pending)*<br>
+> *Base Sealed Checkpoint: `60f8d90 — docs: finalize Phase 1 Earth Engine foundation documentation`*<br>
+> *Next Step: Subphase 2C — Option C Historical Collection Pipeline*
 
 ---
 
@@ -291,10 +291,10 @@ EarthEngineResult
 
 ```
 Phase 2: Historical Satellite Intelligence
-├── 2A: Architecture & Design Review (🟢 COMPLETE / APPROVED)
-├── 2B: Temporal Window & Seasonality Strategy (DEC-012 Formalized)
-├── 2C: Option C Historical Collection Pipeline
-├── 2D: Multi-Year Baseline Computation Engine (DEC-013 Formalized)
+├── 2A: Architecture & Design Review (🟢 COMPLETE / APPROVED / DEC-012, DEC-013, DEC-014)
+├── 2B: Temporal Window & Seasonality Strategy (🟢 COMPLETE / APPROVED / DEC-015)
+├── 2C: Option C Historical Collection Pipeline (🟡 NEXT / PENDING)
+├── 2D: Multi-Year Baseline Computation Engine (🟡 PLANNED)
 ├── 2E: Anomaly Mathematics & Departure Verification
 ├── 2F: Data Sufficiency & Sparse History Handlers (DEC-014 Formalized)
 ├── 2G: Typed Domain Contracts (Pydantic Models)
@@ -311,6 +311,7 @@ Phase 2: Historical Satellite Intelligence
 - **`DEC-012`:** 3-Year Rolling Historical Horizon with Day-of-Year Centered Temporal Matching ($\text{DOY} \pm 15\text{ days}$).
 - **`DEC-013`:** Option C Annual Matched-Window Regional Observations & Primary Baseline / Anomaly Metrics.
 - **`DEC-014`:** Layered Historical Analysis Contract with Explicit Annual Observation Units & Sufficiency Guardrails.
+- **`DEC-015`:** Calendar-Date-Anchored Seasonal Windowing & Cross-Calendar-Year Target-Year Ownership Invariant.
 
 ---
 
@@ -334,5 +335,5 @@ Phase 2: Historical Satellite Intelligence
 
 ## 16. Open Technical Questions for Implementation
 
-1. **Earth Engine Server-Side Aggregation Construct:** Determine whether Option C annual reductions are best implemented via `ee.Join` / `ee.ImageCollection.map` or via server-side filtered sub-collections within a combined compute graph.
-2. **Leap Year DOY Alignment:** Ensure DOY date arithmetic in Python `datetime` cleanly maps leap year February 29th across historical non-leap years.
+1. **Earth Engine Server-Side Aggregation Construct:** Determine whether Option C annual reductions are best implemented via `ee.Join` / `ee.ImageCollection.map` or via server-side filtered sub-collections within a combined compute graph. *(To be investigated in Phase 2C).*
+2. **Leap Year & Temporal Window Alignment:** Formalized in Phase 2B (`DEC-015`) using pure Python calendar-date-anchored seasonal windowing and cross-year target-year ownership. Sealed in `docs/phases/PHASE_02B_TEMPORAL_WINDOW_SEASONALITY.md`.

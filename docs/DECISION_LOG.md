@@ -1289,3 +1289,45 @@ Establish a strongly typed domain contract (`HistoricalNdviAnalysis`) with expli
 - **Phase 1 Preservation:** Nests `RegionalNdviAnalysis` without modifying any Phase 1 data structures.
 
 ---
+
+### DEC-015: Calendar-Date-Anchored Seasonal Windowing & Cross-Year Ownership Strategy
+
+- **Decision ID:** `DEC-015`
+- **Date / Context:** Phase 2B Historical Satellite Intelligence (Temporal Window & Seasonality Strategy)
+
+#### 📸 Before Snapshot
+Prior to DEC-015, the conceptual temporal window was defined as $\text{Reference DOY} \pm 15\text{ days}$ (`DEC-012`), but the concrete date arithmetic implementation mechanism, leap-year handling across common historical years, Earth Engine filter boundary representations, and ownership rules for windows crossing January 1 / December 31 were unspecified.
+
+#### 📜 Decision
+Standardize on **Calendar-Date-Anchored Seasonal Windowing** in pure Python with explicit target-year window ownership and simple leap-year calendar correctness:
+
+1. **Conceptual Basis vs. Implementation Mechanism:**
+   - **Day of Year (DOY):** Serves as the conceptual foundation ensuring astronomical and seasonal calendar comparability across solar years.
+   - **Calendar-Date Arithmetic:** Serves as the concrete implementation mechanism. For each target historical year $Y_h \in \{Y-1, Y-2, Y-3\}$, anchor the observation's calendar date $(M_0, D_0)$ and evaluate a continuous 31-day inclusive calendar window $[T_h - 15\text{ days}, T_h + 15\text{ days}]$.
+2. **Cross-Calendar-Year Window Ownership Invariant:**
+   - A historical search window is **strictly owned by its target historical anchor year $Y_h$**, even if its date range spans into $Y_h-1$ (e.g. Dec 21, $Y_h-1$ to Jan 20, $Y_h$) or $Y_h+1$ (e.g. Dec 10, $Y_h$ to Jan 9, $Y_h+1$).
+   - The window is a contiguous *seasonal matching window*, not an arbitrary calendar-year data partition.
+   - All qualifying satellite acquisitions within $[S_h, E_h]$ belong entirely to the annual baseline value for target year $Y_h$. Phase 2C must not split or partition scenes across calendar years.
+3. **Simple Leap-Year Rule (Calendar Correctness):**
+   - *"Leap-year handling is a calendar correctness problem, not a crop-phenology correction problem."*
+   - The 31-day window easily absorbs the $\approx 1$-day astronomical displacement ($< 3.2\%$ of window width).
+   - If the reference observation is February 29 in a leap year, its anchor date in common historical years is deterministically clamped to **February 28** (the last day of February).
+4. **Strict UTC Calendar-Date Basis:**
+   - All dates, reference anchors, and lookback windows are evaluated strictly on **UTC calendar dates**, preserving the Phase 1 architectural contract.
+   - Sentinel-2 daytime overpasses over India occur at 10:30–11:00 AM IST (05:00–05:30 AM UTC), falling squarely in the middle of the UTC calendar day.
+5. **Earth Engine Boundary Contract:**
+   - Because Earth Engine's `filterDate(start, end)` is half-open $[start, exclusive\_end)$, the component provides:
+     $$\text{ee\_filter\_start} = \text{start\_date.strftime}("\%Y-\%m-\%d")$$
+     $$\text{ee\_filter\_end} = (\text{end\_date} + \text{timedelta}(\text{days}=1)).\text{strftime}("\%Y-\%m-\%d")$$
+6. **Complexity Control & Deferred Alternatives:**
+   - Complex phenological curve fitting, Dynamic Time Warping (DTW), Growing Degree-Days (GDD), crop-specific Days-After-Sowing (DAS) alignment, and fractional DOY coordinates are explicitly rejected or deferred for the MVP.
+
+#### 💡 Rationale (Why Chosen)
+- **100% Deterministic & Unit-Testable:** Pure Python `datetime` and `timedelta` arithmetic executes client-side without Earth Engine API dependencies or network latency.
+- **Robust at Year Boundaries:** Standard ISO date strings (`YYYY-MM-DD`) are handled natively by Earth Engine's `filterDate` across New Year boundaries without requiring complex `ee.Filter.dayOfYear` modulo branching or server-side collection splitting.
+- **Unambiguous Phase 2C Contract:** Enforces an exact 1:1 mapping between each target historical year $Y_h$ and its seasonal scene population.
+
+#### ⚖️ Trade-offs & Limitations
+- **Calendar vs Crop Sowing Offsets:** Does not adjust for dynamic monsoon shifts (e.g. if sowing occurred 2 weeks later in a prior year). Such agronomic interpretations remain deferred to Phase 5 agent reasoning.
+
+---

@@ -71,7 +71,7 @@ graph TD
 ---
 
 ### Phase 2: Historical Satellite Intelligence (3-Year Baseline & Anomaly Detection)
-- **Status:** 🟡 **IN PROGRESS (Subphase 2A Complete & Approved; 2B Next / Pending)**
+- **Status:** 🟡 **IN PROGRESS (Subphases 2A & 2B Complete & Sealed; 2C Next / Pending)**
 - **Purpose:** Extend the satellite foundation from an instantaneous observation to seasonally normalized 3-year historical comparative baselines and empirical anomaly evidence.
 - **Sub-Roadmap:**
   - **2A — Architecture & Design Review (🟢 COMPLETE & APPROVED / `DEC-012`, `DEC-013`, `DEC-014`):**
@@ -81,9 +81,13 @@ graph TD
     - Defined annual observation unit and sufficiency guardrails ($N_{\text{annual}} \ge 2 \land Y \ge 2$).
     - Defined primary baseline (Median NDVI) and anomaly metrics suite (Absolute $\Delta$, Gated %, Gated Z-Score).
     - Established typed contract `HistoricalNdviAnalysis` and universal result states.
-  - **2B — Historical Temporal Window & Seasonality Strategy (🟡 NEXT / PENDING):**
-    - Formalize DOY date arithmetic helper and leap-year February 29th handling.
-  - **2C — Option C Historical Collection Pipeline (🟡 PLANNED):**
+  - **2B — Historical Temporal Window & Seasonality Strategy (🟢 COMPLETE & SEALED / `DEC-015`):**
+    - Formalized Calendar-Date-Anchored Seasonal Windowing ($T_h \pm 15\text{ days}$, 31-day inclusive span) across $Y-1, Y-2, Y-3$.
+    - Established Cross-Calendar-Year Target-Year Ownership Invariant for continuous windows crossing Jan 1 / Dec 31.
+    - Formalized simple leap-year calendar correctness (clamping Feb 29 $\to$ Feb 28 in common historical years).
+    - Preserved strict UTC calendar-date basis and Earth Engine boundary contract `[start, end + 1 day)`.
+    - Documented canonical 18-case edge matrix in `docs/phases/PHASE_02B_TEMPORAL_WINDOW_SEASONALITY.md`.
+  - **2C — Option C Historical Collection Pipeline (🟡 NEXT / PENDING):**
     - Ingest historical Sentinel-2 collections grouped by calendar year with Phase 1 Cloud Score+ quality gates.
   - **2D — Multi-Year Baseline Computation Engine (🟡 PLANNED):**
     - Compute annual matched-window regional reductions and multi-year median/mean/std-dev baselines.

@@ -7,7 +7,7 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 2: Historical Satellite Intelligence (Subphase 2A Complete & Sealed; 2B Next / Pending)
+### 🟡 In Progress — Phase 2: Historical Satellite Intelligence (Subphases 2A & 2B Complete & Sealed; 2C Next / Pending)
 - **Phase 2A Architecture & Design Review (🟢 COMPLETE & APPROVED / `DEC-012`, `DEC-013`, `DEC-014`):**
   - Conducted comprehensive architecture, data-engineering, and scientific review for historical comparative satellite intelligence.
   - Formulated and locked `DEC-012`: 3-year rolling operational historical horizon ($Y-1, Y-2, Y-3$) with Day-of-Year centered temporal windowing ($\text{Reference DOY} \pm 15\text{ days}$). Explicitly documented that DOY matching normalizes astronomical/calendar seasonality without claiming identical crop growth stage.
@@ -17,6 +17,15 @@
   - Created canonical Phase 2 architecture record in `docs/phases/PHASE_02_HISTORICAL_SATELLITE_INTELLIGENCE.md`.
   - Recorded two future implementation questions (Option C server-side construct and leap-year DOY alignment).
   - Confirmed zero application source-code modifications.
+- **Phase 2B Historical Temporal Window & Seasonality Strategy (🟢 COMPLETE & SEALED / `DEC-015`):**
+  - Conducted master architectural design review and sealed the Calendar-Date-Anchored Seasonal Windowing strategy.
+  - Formalized the 31-day inclusive calendar window ($T_h \pm 15\text{ days}$) across the 3 historical target years ($Y-1, Y-2, Y-3$).
+  - Established the **Cross-Calendar-Year Window Ownership Invariant**: historical seasonal windows crossing January 1 or December 31 are strictly owned by their target historical anchor year $Y_h$. All qualifying scenes within the continuous window belong entirely to the annual baseline for $Y_h$ without calendar-year data partitioning.
+  - Formalized simple leap-year calendar correctness as a calendar problem rather than a phenology problem (mapping February 29 to February 28 in common historical years).
+  - Confirmed strict UTC calendar-date basis and defined Earth Engine half-open boundary contract `[start_date, end_date + 1 day)`.
+  - Evaluated and deferred complex phenological curve fitting and fractional DOY coordinates for the MVP.
+  - Created canonical Phase 2B design record with 18-case edge verification matrix in `docs/phases/PHASE_02B_TEMPORAL_WINDOW_SEASONALITY.md`.
+  - Confirmed zero application source-code, test, or dependency modifications.
 
 ### 🟢 Completed — Phase 1: Earth Engine Foundation (Subphases 1A–1K Complete & Sealed — `60f8d90`)
 - **Phase 1A Architecture & Integration Design (🟢 COMPLETE):**
