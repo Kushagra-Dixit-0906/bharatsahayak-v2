@@ -1,658 +1,401 @@
 # Phase 1 — Earth Engine Foundation
 
-> **Phase 1 Execution Record, Architectural Integration Design, and Sub-Roadmap.**  
-> *Status: 🟡 IN PROGRESS | Active Subphase: 1G Complete, Next Subphase: 1H*
+> **Canonical Record of Phase 1 Architecture, Implementation, Verification, and Decisions.**
+> *Status: 🟢 ARCHITECTURALLY COMPLETE (Subphases 1A–1I Complete; 1J Current; 1K Pending Checkpoint)*
+> *Base Checkpoint: `4f79d2a — build: complete Phase 1H regional NDVI orchestration pipeline`*
 
 ---
 
-## 📌 Resume Status
+## 1. Executive Summary
 
-- **Phase Status:** 🟡 **IN PROGRESS**
-- **Last Completed Substep:** **1G — Regional NDVI Statistics** (🟢 COMPLETE)
-- **Current Active Substep:** **1H — Reliability & Data Quality** (🟡 PLANNED)
-- **Next Action:** Implement edge-case handlers for out-of-bounds coordinates, heavy clouds, zero-pixel reductions, API timeouts, and quota limits in Subphase 1H.
-- **Verified Fact / Boundary:**
-  - **Phase 1B Completed (1B.1–1B.10):** Local environment setup, `earthengine-api` 1.7.43 installed via `uv add` (`DEC-005`), ADC authentication verified (`DEC-006`), project `bharatsahayak-v2` initialized, bounded Sentinel-2 catalog query verified, zero credential leakage audited.
-  - **Phase 1C Completed (1C.1–1C.8):**
-    - Minimal calculation executed: `ee.Number(42).getInfo() -> 42` (1C.1).
-    - Intentional invalid asset query produced `ee.EEException` via SDK error translation (1C.2).
-    - Valid query with pre-Sentinel-2 date range returned `image_count=0` without API exceptions, establishing distinct `NO_DATA` state (1C.3).
-    - Pydantic result contract (`EarthEngineResult`, `EarthEngineError`, `EarthEngineStatus`) implemented in `app/satellite/types.py` and `app/satellite/__init__.py` with non-negative validation and status literal constraints (1C.4–1C.6).
-    - 6 focused unit tests in `tests/unit/test_satellite_types.py` passed (1C.6).
-    - 3 live Earth Engine integration tests in `tests/integration/test_earth_engine_connectivity.py` passed (0 skipped, 6 non-blocking framework warnings) validating success, no_data, and error mappings (1C.7).
-    - Phase 1C documentation and checkpoint recorded (1C.8).
-  - **Phase 1D Completed (1D.1–1D.3):**
-    - **1D.1 Completed:** Formulated and documented `DEC-007: Geographic Analysis Region Strategy` establishing the decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` model with a default 100 m circular buffer for local Sentinel-2 aggregation.
-    - **1D.2 Completed:** Created [`app/satellite/geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/geometry.py) implementing `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry` with coordinate and radius validation. Exported in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py). Verified with 35 unit tests in [`tests/unit/test_satellite_geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_geometry.py) and verified non-network client-side geometry proxy instantiation without `.getInfo()` or server-side calls.
-    - **1D.3 Completed:** Verified `create_analysis_region()` in live Earth Engine Sentinel-2 queries in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py). Successful query over Ludhiana test fixture (`[75.7196, 30.9157]`, 100 m radius, Aug 2026, clouds < 20%) returned `image_count=1` mapped to `EarthEngineResult(status="success")`. Pre-Sentinel-2 date query (Jan 1990) returned `image_count=0` mapped to `EarthEngineResult(status="no_data")`. All 5 live integration tests passed.
-  - **Phase 1E Completed (`DEC-008`, `DEC-010`):**
-    - Implemented [`app/satellite/sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/sentinel2.py) with `get_sentinel2_collection()`, `select_most_recent_sentinel2_image()`, `get_most_recent_sentinel2_image()`, and `resolve_date_range()`.
-    - Standardized on `COPERNICUS/S2_SR_HARMONIZED` with `AnalysisRegion` spatial bounding, configurable lookback (default 30 days), and coarse scene cloud filtering (`CLOUDY_PIXEL_PERCENTAGE < 20%`).
-    - Established observation quality strategy (`DEC-010`): coarse scene pre-filter, primary pixel-level observation quality via Cloud Score+ (`GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED`, `cs_cdf` band, `CLEAR_THRESHOLD = 0.60`), local usable coverage validation inside `AnalysisRegion` (`MIN_USABLE_COVERAGE = 0.70`), and newest-to-oldest candidate iteration.
-    - Sorted candidates descending by timestamp (newest-first) and selected the newest usable observation meeting minimum usable coverage, falling back to structured `status="no_data"` on insufficient coverage.
-    - Extracted structured [`Sentinel2ImageMetadata`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py#L34-L44) returning `EarthEngineResult` envelopes (`success`, `no_data`, `error`).
-    - Verified with 46 unit tests in [`tests/unit/test_satellite_sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_sentinel2.py) and 4 live integration tests in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py). Total test suite: **105 passed**.
-  - **Phase 1F Completed (`DEC-009`):**
-    - Implemented [`app/satellite/ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/ndvi.py) with `calculate_ndvi(image, region=None, nir_band="B8", red_band="B4", band_name="NDVI") -> ee.Image` and `compute_ndvi` alias.
-    - Computes $\text{NDVI} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$ using Earth Engine's native `image.normalizedDifference(["B8", "B4"]).rename("NDVI")`.
-    - Automatically clips the NDVI raster extent to the `AnalysisRegion` (`ee.Geometry`) if provided.
-    - Preserves invalid/masked pixels without fabricating replacement zeros; avoids unnecessary manual reflectance scaling (multiplicative factors cancel out in ratio).
-    - Preserved active Phase 1E scene-level `<20%` cloud filter without introducing premature pixel-level cloud masking algorithms in 1F.
-    - Verified with 29 unit tests in [`tests/unit/test_satellite_ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_ndvi.py) and 3 live integration tests in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) (Tests 10–12). Total test suite: **146 passed** (0 failed).
-  - **Phase 1G Completed:**
-    - Implemented `calculate_ndvi_statistics(ndvi_image, region, scale=10.0, band_name="NDVI") -> EarthEngineResult` and `compute_ndvi_statistics` alias in [`app/satellite/ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/ndvi.py).
-    - Implemented [`NdviRegionalStatistics`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py) (`mean`, `median`, `min`, `max`, `valid_pixel_count`) and `SatelliteRegionalStatistics` alias in [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py) with strict bounds $[-1.0, 1.0]$.
-    - Employs a single combined server-side reducer (`ee.Reducer.mean().combine(median).combine(min).combine(max).combine(count)`) executed in one `reduceRegion()` call.
-    - Verified runtime Earth Engine key structure: `{'NDVI_mean': ..., 'NDVI_median': ..., 'NDVI_min': ..., 'NDVI_max': ..., 'NDVI_count': ...}`.
-    - Preserved strict no-data semantics: empty dictionary, null mean, or `valid_pixel_count == 0` returns `EarthEngineResult(status="no_data", data=None, error=None)` ($\text{NULL} \neq 0.0$).
-    - Preserved remote error encapsulation (`ee.EEException` $\rightarrow$ `EarthEngineResult(status="error")`) while local parameter validation raises `TypeError` / `ValueError`.
-    - Verified with 13 unit tests in [`tests/unit/test_satellite_ndvi_statistics.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_ndvi_statistics.py) and 3 live integration tests in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) (Tests 17–19).
-    - Total test suite: **262 passed** (0 failed).
-  - **Limitations & Future Roadmap:**
-    - The 100 m circular region is an approximate local satellite observation area, **not** an exact farm boundary.
-    - Scene-level `CLOUDY_PIXEL_PERCENTAGE` is a coarse pre-filter; fine-grained parcel-level observation quality is governed by Cloud Score+ (`DEC-010`).
-    - NDVI alone represents vegetative reflectance/greenness, **not** definitive crop health, disease diagnosis, or yield prediction.
-    - Polygon/cadastral/adaptive region support remains future work.
-  - **Strict Scope Boundaries:**
-    - Earth Engine production client is **NOT** implemented yet (`app/satellite/client.py` does **NOT** exist yet).
-    - Reliability & edge cases (API timeouts, out-of-bounds coords) are Subphase 1H.
-    - Crop-health interpretations and classification thresholds are **NOT** implemented yet.
-    - Dynamic World LULC and NDWI are **NOT** implemented yet.
-    - Weather data fusion and predictive models are **NOT** implemented yet.
-    - Gemini prompt reasoning and MCP integration are **NOT** implemented yet.
-    - Field polygon drawing is **NOT** implemented yet.
-    - Farmer-facing interactive map workflow is **NOT** implemented yet.
+Phase 1 establishes the scientific, geospatial data-engineering, and architectural foundation for integrating **Google Earth Engine (GEE)** into BharatSahayak V2. It implements a standalone, fully verified, and deterministic pipeline that transforms a farmer's point location into authoritative regional vegetation-index measurements and empirical quality evidence.
+
+The completed Phase 1 pipeline executes the following end-to-end sequence:
+
+$$\text{Farmer Location} \rightarrow \text{Analysis Region} \rightarrow \text{Sentinel-2 Candidate Discovery} \rightarrow \text{Cloud Score+ Quality Filtering} \rightarrow \text{Authoritative Observation Selection} \rightarrow \text{NDVI Computation} \rightarrow \text{Regional Zonal Reduction} \rightarrow \text{Statistical Invariant Validation} \rightarrow \text{Typed RegionalNdviAnalysis Evidence}$$
 
 > [!IMPORTANT]
-> **Source of Truth Rule:** When returning to the project after a session break, this *Resume Status* section is the absolute source of truth for where development stopped. Never mark a phase or subphase complete until implementation, testing, and documentation are verified.
+> **Boundary Notice:** Phase 1 delivers an autonomous satellite calculation engine in `app/satellite/`. It is **NOT** yet wired into the live Model Context Protocol (MCP) server or Gemini 2.5 Flash agent reasoning graphs. Live MCP tool registration and agent integration are scheduled for **Phase 6**.
 
 ---
 
-## 🎯 Objective
+## 2. Scope & Non-Scope
 
-Phase 1 establishes the technical, data-engineering, and architectural foundation for integrating **Google Earth Engine (GEE)** to derive the project's first live satellite agricultural signal.
+### In-Scope (Implemented, Verified, and Locked in Phase 1):
+- **Google Earth Engine API Integration:** Client-side initialization, error translation, and non-commercial project binding (`bharatsahayak-v2`).
+- **Geographic Analysis Region (`DEC-007`):** Point-to-region geometry resolver (`create_analysis_region`) generating a 100m circular buffer at 10m spatial scale.
+- **Sentinel-2 Surface Reflectance Ingestion (`DEC-008`):** Spatio-temporal filtering of `COPERNICUS/S2_SR_HARMONIZED` with 30-day lookback and coarse scene cloud pre-filtering ($<20\%$).
+- **Cloud Score+ Quality Assessment (`DEC-010`):** Pixel-level clear-sky masking via `GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED` (`cs_cdf >= 0.60`) and enforcement of $\ge 70\%$ parcel usable coverage.
+- **Normalized Difference Vegetation Index (`DEC-009`):** Pure band math $\text{NDVI} = \frac{\text{B8}-\text{B4}}{\text{B8}+\text{B4}}$ clipped to the analysis region.
+- **Regional Zonal Statistics (Phase 1G):** Combined server-side reduction computing **mean**, **median**, **min**, **max**, and valid pixel count inside `NdviRegionalStatistics`.
+- **Regional NDVI Orchestration Pipeline (`DEC-011` / Phase 1H):** Top-level `analyze_regional_ndvi(...)` pipeline enforcing single authoritative observation selection, identical quality masking, statistical invariant validation ($\epsilon = 10^{-6}$), freshness derivation, and typed domain payload assembly.
+- **Integration Boundary Verification (Phase 1I):** Formal verification of layer decoupling, unidirectional dependency direction, serialization protocols, and security boundaries.
+- **Testing & Verification:** 359 unit tests and 23 live Earth Engine integration tests passing with 0 failures.
 
-### Initial Concrete Target:
-- **Satellite Constellation:** Copernicus Sentinel-2 MSI Level-2A (Harmonized Surface Reflectance).
-- **Core Signal:** Normalized Difference Vegetation Index ($\text{NDVI} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$).
-- **Spatial Aggregation:** Regional/zonal summary statistics (**mean**, **median**, **min**, **max**) computed across the farm parcel geometry.
-- **Integration Boundary:** Decoupled geospatial module invoked behind an MCP capability tool interface (`DEC-004`).
+### Out-of-Scope (Deferred to Subsequent Phases):
+- **Historical NDVI Baselines & Anomaly Detection:** Deferred to **Phase 2**.
+- **Companion Indices & Land Cover (NDWI / Dynamic World):** Deferred to **Phase 3**.
+- **Multi-Source Data Fusion (Weather + Soil + Satellite):** Deferred to **Phase 4**.
+- **Gemini Agricultural Reasoning & Agronomic Interpretation:** Deferred to **Phase 5**.
+- **Live FastMCP Satellite Tool Registration:** Deferred to **Phase 6**.
+- **End-to-End Farmer Workflow & Interactive Map UI:** Deferred to **Phase 7** / **Phase 9**.
+- **Cloud Infrastructure & Reasoning Engine Deployment:** Deferred to **Phase 10**.
 
 ---
 
-## 📸 Before Snapshot (Baseline Before Phase 1 Implementation)
+## 3. Final Architecture
 
-Prior to the execution of Phase 1 implementation steps, the verified application baseline is as follows:
-- ❌ **No Earth Engine Code:** Earth Engine API is not integrated into `app/` application code.
-- ❌ **No Live Satellite Queries:** Copernicus Sentinel-2 is not queried by BharatSahayak.
-- ❌ **No NDVI Calculation:** NDVI is not computed by any module in the repository.
-- ❌ **Static MCP Implementation:** Existing tools in [app/mcp_server.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/mcp_server.py) return hardcoded mock/catalog strings for Punjab, Karnataka, and fallbacks.
-- ❌ **No Map-Based Location:** Farmer-facing interactive map and coordinate resolvers are not yet implemented.
-- ❌ **No Earth Engine Dependencies:** `earthengine-api` was initially not present in `pyproject.toml` or `uv.lock`.
-- ❌ **No Production Earth Engine Authentication:** Service account authentication has not been wired into runtime configuration.
-
----
-
-## 🗺️ Phase 1 Sub-Roadmap
-
-```mermaid
-graph TD
-    S1A["1A: Architecture & Integration Design\n(DEC-004) 🟢 COMPLETE"] --> S1B["1B: Local Environment & Verification\n(1B.1–1B.10 Complete) 🟢 COMPLETE"]
-    S1B --> S1C["1C: EE Connectivity & Result Contract\n(1C.1–1C.8 Complete) 🟢 COMPLETE"]
-    S1C --> S1D["1D: Geographic Region Definition\n(1D.1–1D.3 Complete) 🟢 COMPLETE"]
-    S1D --> S1E["1E: Sentinel-2 Pipeline & Observation Quality\n(DEC-008, DEC-010) 🟢 COMPLETE"]
-    S1E --> S1F["1F: NDVI Calculation\n(DEC-009) 🟢 COMPLETE"]
-    S1F --> S1G["1G: Regional NDVI Statistics 🟢 COMPLETE"]
-    S1G --> S1H["1H: Reliability & Data Quality 🟡 PLANNED"]
-    S1H --> S1I["1I: Integration Boundary Verification 🟡 PLANNED"]
-    S1I --> S1J["1J: Phase Documentation 🟡 PLANNED"]
-    S1J --> S1K["1K: Verification & Git Checkpoint 🟡 PLANNED"]
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ 1. Client & Farmer Ingestion Layer (Frontend / Mobile)                │
+│    - Captures FarmerLocation via GPS, search, or map pin-drop.        │
+│    - No manual coordinate typing or polygon drawing required.          │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+┌───────────────────────────────────▼────────────────────────────────────┐
+│ 2. Spatial Geometry Layer (app/satellite/geometry.py - DEC-007)        │
+│    - create_analysis_region(lat, lon, radius_m=100.0)                  │
+│    - Constructs circular AnalysisRegion proxy (ee.Geometry).           │
+│    - Approximate data sampling area (NOT cadastral boundary).          │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+┌───────────────────────────────────▼────────────────────────────────────┐
+│ 3. Candidate Discovery & Quality Layer (app/satellite/sentinel2.py)    │
+│    - get_sentinel2_collection(...) (DEC-008, DEC-010)                  │
+│    - Ingests COPERNICUS/S2_SR_HARMONIZED.                              │
+│    - Links GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED (cs_cdf >= 0.60).  │
+│    - Filters candidates by >= 70% parcel usable coverage.             │
+│    - Orders candidate scenes descending (newest-first).                │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+┌───────────────────────────────────▼────────────────────────────────────┐
+│ 4. Authoritative Observation Lineage (app/satellite/pipeline.py)       │
+│    - Materialization Call 1: collection.size().getInfo()               │
+│      (Short-circuits to status="no_data" if count == 0).               │
+│    - Selects authoritative_image = collection.first() EXACTLY ONCE.    │
+│    - Materialization Call 2: authoritative_image.getInfo()             │
+│      (Extracts telemetry for Sentinel2ImageMetadata).                  │
+│    - Applies identical quality mask: mask_observation_quality(...)     │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+┌───────────────────────────────────▼────────────────────────────────────┐
+│ 5. Band Math & Reduction Layer (app/satellite/ndvi.py)                 │
+│    - calculate_ndvi(masked_image, region) (DEC-009)                    │
+│      NDVI = (B8 - B4) / (B8 + B4), clipped to AnalysisRegion.          │
+│    - calculate_ndvi_statistics(ndvi_image, region, scale=10.0)         │
+│      Materialization Call 3: combined reduceRegion().getInfo()         │
+│      (mean, median, min, max, valid_pixel_count).                      │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │
+┌───────────────────────────────────▼────────────────────────────────────┐
+│ 6. Validation, Evidence & Payload Assembly (DEC-011)                   │
+│    - Invariant Check: min - 1e-6 <= mean/median <= max + 1e-6.         │
+│    - Freshness: observation_age_days = max(0, (ref_date - acq_date))   │
+│    - Quality: min_usable_coverage=0.70, scene_cloud=20%, is_usable=True│
+│    - Root Domain Payload: RegionalNdviAnalysis                         │
+│    - Result Transport Envelope: EarthEngineResult(status="success")    │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ Direct in-process call (Phase 6)
+┌───────────────────────────────────▼────────────────────────────────────┐
+│ 7. Future FastMCP Adapter Layer (app/mcp_server.py - Phase 6 FUTURE)   │
+│    - Tool: get_regional_satellite_analysis (DESIGN ONLY / NOT IMPL)    │
+│    - Serializes via result.model_dump(mode="json").                    │
+│    - Earth Engine objects NEVER cross this boundary.                   │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ JSON-RPC over stdio (Phase 6)
+┌───────────────────────────────────▼────────────────────────────────────┐
+│ 8. Multi-Agent Reasoning Layer (app/agent.py - Phase 5 FUTURE)         │
+│    - Gemini 2.5 Flash agent reasoning graphs.                          │
+│    - Translates empirical satellite evidence into farming advice.      │
+│    - Separates optical reflectance from agronomic diagnosis.           │
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
-| Substep | Title | Description | Status |
-| :--- | :--- | :--- | :--- |
-| **1A** | **Earth Engine Architecture & Integration Design** | Analyze Earth Engine role, auth models, quota, integration boundaries (Options A/B/C), and record `DEC-004`. | 🟢 **COMPLETE** |
-| **1B** | **Local Earth Engine Environment & Verification** | Add `earthengine-api` via `uv` (`DEC-005`), configure local environment, authenticate developer ADC (`DEC-006`), initialize project `bharatsahayak-v2`, verify bounded Sentinel-2 catalog connectivity, audit credentials, and record documentation. | 🟢 **COMPLETE (1B.1–1B.10 Complete)** |
-| **1C** | **Earth Engine Connectivity & Result Contract** | Execute minimal calculation (1C.1), observe SDK error translation on invalid asset (1C.2), verify zero-data behavior (1C.3), define result boundary (1C.4/1C.5), implement Pydantic result contract in `app/satellite/` (1C.6), and verify via unit and live integration tests (1C.6/1C.7), document checkpoint (1C.8). | 🟢 **COMPLETE (1C.1–1C.8 Complete)** |
-| **1D** | **Geographic Region Definition** | Formulate point-to-region geometry strategy (`DEC-007` 🟢), implement geometry helpers in `app/satellite/geometry.py` (`1D.2` 🟢), validate coordinates & radius, test live region queries against Earth Engine (`1D.3` 🟢). | 🟢 **COMPLETE (1D.1–1D.3 Complete)** |
-| **1E** | **Sentinel-2 Pipeline & Observation Quality** | Ingest Sentinel-2 Level-2A collection (`COPERNICUS/S2_SR_HARMONIZED`), apply spatial/temporal filters and coarse scene cloud filter (`<20%`), validate observation quality via Cloud Score+ (`cs_cdf >= 0.60`, usable coverage `>= 0.70`), order newest-first, select freshest usable scene, and extract structured metadata (`DEC-008`, `DEC-010`). | 🟢 **COMPLETE** |
-| **1F** | **NDVI Calculation** | Compute $\text{NDVI} = \frac{\text{B8}-\text{B4}}{\text{B8}+\text{B4}}$ using native `image.normalizedDifference(["B8", "B4"]).rename("NDVI")`, clip to `AnalysisRegion`, output unreduced `ee.Image`, validate $[-1.0, 1.0]$ range (`DEC-009`). | 🟢 **COMPLETE** |
-| **1G** | **Regional NDVI Statistics** | Implement zonal reducers across farm geometry computing **mean**, **median**, **min**, **max**, and valid pixel count, returning structured `NdviRegionalStatistics` envelope. | 🟢 **COMPLETE** |
-| **1H** | **Reliability & Data Quality** | Implement edge-case handlers for out-of-bounds coordinates, heavy clouds, zero-pixel reductions, API timeouts, and quota limits. | 🟡 PLANNED |
-| **1I** | **Integration Boundary Verification** | Verify standalone execution of the Earth Engine module, clean MCP interface decoupling, and pluggability for future datasets. | 🟡 PLANNED |
-| **1J** | **Phase Documentation** | Write Before vs After records, document verified outputs, update decisions, backlog, and resume state. | 🟡 PLANNED |
-| **1K** | **Git Checkpoint** | Run full verification suite and commit verified Phase 1 implementation. | 🟡 PLANNED |
+---
+
+## 4. Earth Engine Integration & Authentication
+
+- **Google Cloud Project:** Bound to project `bharatsahayak-v2`. Configurable via environment variable `EE_PROJECT_ID` with default fallback to `bharatsahayak-v2`.
+- **Python Earth Engine API:** Powered by `earthengine-api` version `1.7.43` installed via `uv add` (`DEC-005`).
+- **Developer Authentication Model (`DEC-006`):** Standard interactive developer authentication via Application Default Credentials (`earthengine authenticate` / `gcloud auth application-default login`).
+- **Credential Safety Invariant:** Zero private keys, access tokens, refresh tokens, or credential files are tracked or exposed in the repository.
+- **Non-Commercial / Community Tier Design:** Relies exclusively on non-commercial standard community-tier Earth Engine interactive quotas. Queries are tightly bounded spatially and temporally to avoid billing dependencies or resource exhaustion.
 
 ---
 
-## 🏛️ 1A — Architecture & Integration Design
+## 5. Geographic Region Strategy (`DEC-007`)
 
-### Goal
-Define the exact architectural placement, boundaries, and communication contracts for Google Earth Engine before writing any integration code.
-
-### Options Considered
-- **Option A (Monolithic MCP):** Write all Earth Engine initialization, image filtering, band math, and zonal reducers directly inside `app/mcp_server.py`.
-- **Option B (Standalone Microservice):** Build a separate microservice with custom REST endpoints without utilizing the MCP tool architecture.
-- **Option C (Chosen — Layered Tool Contract + Dedicated Engine):** Expose high-level capabilities through the MCP server tool contract, while delegating low-level Earth Engine API calls and geospatial operations to a dedicated, decoupled module.
-
-### Chosen Architecture & Rationale
-**Option C was selected (`DEC-004`).**
-
-```text
-Farmer / User Interface
-        ↓
-Resolved Farm Coordinates & Area (Lat, Lon, Buffer/Acreage)
-        ↓
-MCP Tool Contract (get_farm_satellite_intelligence)
-        ↓
-Dedicated Earth Engine Module / Service (app/satellite/)
-        ↓
-Copernicus Sentinel-2 Level-2A Collection
-        ↓
-Observation Quality (Cloud Score+ cs_cdf >= 0.60) / Quality Masking
-        ↓
-NDVI Band Math ((B8 - B4) / (B8 + B4))
-        ↓
-Zonal Reducers (Mean, Median, Min, Max)
-        ↓
-Structured JSON Output Envelope
-        ↓
-Gemini 2.5 Flash Multi-Agent Advisors
-```
-
-**Key Advantages:**
-1. **Clean Separation of Concerns:** MCP handles tool contracts and serialization; the Earth Engine module handles geospatial math and client authentication.
-2. **Independent Testability:** Earth Engine logic can be thoroughly tested with mock reducer fixtures in CI/CD without running a live MCP stdio subprocess.
-3. **Future Pluggability:** Adding Dynamic World LULC or NDWI in later phases requires extending only the dedicated satellite module without modifying existing agent-facing MCP signatures.
-4. **Engineering Rigor:** Clean, professional architecture suitable for technical interviews and scalable production deployments.
-
-### Status of 1A
-- 🟢 **COMPLETED & DOCUMENTED**
+- **Decoupled Two-Stage Modeling:**
+  1. `FarmerLocation`: Point coordinate `(latitude, longitude)` resolved via GPS geolocation, address lookup, or interactive map pin-drop. Farmers are never expected to type raw latitude/longitude coordinates or draw complex polygons in normal UX.
+  2. `AnalysisRegion`: Derived Earth Engine spatial geometry (`ee.Geometry.buffer`) centered at the point coordinate.
+- **Default Geometry Parameters:** Circular buffer with `DEFAULT_ANALYSIS_RADIUS_M = 100.0` meters ($\approx 3.14\text{ hectares}$) evaluated at a spatial scale of `10.0` meters (matching Sentinel-2 10m MSI optical bands).
+- **Critical Limitation & Boundary Notice:**
+  > [!WARNING]
+  > The 100m circular buffer is an engineering choice for local satellite data aggregation, **NOT an exact cadastral or legal farm boundary**. It samples an approximate local neighborhood that may include adjacent field plots, bunds, irrigation channels, trees, or rural structures. It must never be presented to the farmer as a surveyed parcel boundary.
+- **Future Roadmap:** Support for precise field polygon drawing (Phase 9) and cadastral registry integration (Bhulekh/Bhoomi) will feed directly into the existing `AnalysisRegion` abstraction without modifying downstream satellite processing.
 
 ---
 
-## 🛠️ 1B — Local Earth Engine Environment & Verification
+## 6. Sentinel-2 Observation Selection (`DEC-008`)
 
-### Goal
-Establish, configure, authenticate, and verify the local developer environment for Google Earth Engine against Google Cloud project `bharatsahayak-v2` using reproducible package management and verified query tests.
-
-### Substep Breakdown & Execution Record
-
-#### 1B.1 Local Environment Inspection — 🟢 COMPLETE
-- **Package Manager:** `uv` 0.11.26
-- **Python Runtime:** Python 3.13.14
-- **ADK Version:** `google-adk` 2.2.0
-- **Project Python Constraint:** `>=3.11,<3.14` (in `pyproject.toml`)
-- **Initial State:** `earthengine-api` was verified as not initially installed in the virtual environment.
-
-#### 1B.2 Dependency Management Decision (`DEC-005`) — 🟢 COMPLETE
-- **Chosen Approach:** Use canonical `uv add earthengine-api` command.
-- **Recorded ADR:** Logged as `DEC-005` in `docs/DECISION_LOG.md`.
-- **Rationale:** Guarantees reproducibility, keeps `pyproject.toml` and `uv.lock` synchronized in a single transaction, enables automatic dependency resolution across transitive packages, and maintains a consistent project toolchain.
-
-#### 1B.3 Add Earth Engine API — 🟢 COMPLETE
-- Installed package: `earthengine-api` v1.7.43
-- Manifest updates: `pyproject.toml` and `uv.lock` updated cleanly.
-- Import verification: `import ee` executed and verified successfully in the local runtime.
-
-#### 1B.4 Lockfile Verification — 🟢 COMPLETE
-- `uv` resolved and updated the complete dependency graph.
-- `git diff --check` confirmed no actual whitespace errors.
-- Note: LF/CRLF notifications on Windows are standard line-ending warnings and do not represent syntax or lockfile defects.
-
-#### 1B.5 Earth Engine Developer Authentication (`DEC-006`) — 🟢 COMPLETE
-- **Authentication Method:** Interactive developer authentication via `earthengine authenticate` / ADC workflow (`DEC-006`).
-- **Execution:** Completed successfully for the local developer session.
-- **Security Rule:** No credentials, access tokens, refresh tokens, or credential file contents are ever recorded, exposed, or committed to the repository.
-
-#### 1B.6 Client Initialization & Minimal Query — 🟢 COMPLETE
-- **Project Initialized:** `ee.Initialize(project='bharatsahayak-v2')` succeeded with project `bharatsahayak-v2`.
-- **Minimal API Query:** `ee.Number(1).getInfo()` executed and returned `1`.
-
-#### 1B.7 Sentinel-2 Catalog Connectivity & Engineering Lessons — 🟢 COMPLETE
-- **Unbounded Query Lesson:** An initial unbounded exploratory query using `ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED').size().getInfo()` without spatial or temporal filters hung waiting for Earth Engine's distributed catalog evaluation and was interrupted.
+- **Dataset:** Copernicus Sentinel-2 Level-2A Harmonized Surface Reflectance (`COPERNICUS/S2_SR_HARMONIZED`).
+- **Temporal Query Window:** Configurable start and end dates with `DEFAULT_LOOKBACK_DAYS = 30` days.
+- **Scene-Level Cloud Pre-Filter:** `DEFAULT_MAX_CLOUD_PERCENTAGE = 20.0%` (`CLOUDY_PIXEL_PERCENTAGE < 20`).
+- **Newest-First Candidate Ordering:** Candidate scenes are strictly sorted descending by acquisition time (`system:time_start`).
+- **Selection Policy ("Most Recent Usable"):**
   > [!NOTE]
-  > **Engineering Lesson (Not a System Failure):** For BharatSahayak operational queries, apply spatial and temporal bounds before expensive Earth Engine evaluation wherever possible, reducing unnecessary server-side computation and quota usage.
-- **Bounded Verification Query:** Executed a filtered catalog query over a representative agricultural test fixture:
-  - **Location:** Representative farmland near Ludhiana, Punjab (Latitude: `30.9157`, Longitude: `75.7196`).
-  - **Syntax Notice:** `ee.Geometry.Point` requires coordinates in `[longitude, latitude]` order, so `[75.7196, 30.9157]` was used.
-  - **Dataset:** `COPERNICUS/S2_SR_HARMONIZED` (Sentinel-2 Level-2A Surface Reflectance).
-  - **Date Filter:** `2026-08-01` to `2026-08-31`.
-  - **Cloud Filter:** `CLOUDY_PIXEL_PERCENTAGE < 20`.
-  - **Result:** Successfully returned `1` valid scene, proving end-to-end catalog access, authorization, and network round-trip.
-  - **Fixture Clarification:** This is a development test fixture only, not a hardcoded production farmer location.
-
-#### 1B.8 Credential Safety Check — 🟢 COMPLETE
-- Verified `git status` clean.
-- Verified `.gitignore` comprehensively excludes `.env`, `.venv`, `.adk`, `*.env`, and local credentials.
-- Searched repository for credential filenames; matches were strictly confined to third-party library metadata inside `.venv` (ignored).
-- Ran `git ls-files` search against credential and secret patterns; confirmed **zero tracked secrets**.
-- Confirmed no tokens or secrets were introduced into the repository.
-
-#### 1B.9 Documentation — 🟢 COMPLETE
-- Recorded verified Phase 1B facts across `docs/phases/PHASE_01_EARTH_ENGINE_FOUNDATION.md`, `docs/CHANGELOG.md`, and `docs/MASTER_ROADMAP.md`.
-
-#### 1B.10 Git Checkpoint — 🟢 COMPLETE
-- Checkpointed verified Phase 1B environment baseline.
+  > The pipeline intentionally selects the **most recent usable observation** meeting quality gates rather than searching for the "clearest available historical image". Recent observations provide actionable operational relevance to the farmer, whereas an image from six months ago—even if cloudless—is useless for current crop management.
 
 ---
 
-## 🛰️ 1C — Earth Engine Connectivity & Result Contract
+## 7. Observation Quality via Cloud Score+ (`DEC-010`)
 
-### Goal
-Validate core Earth Engine calculation and failure behavior, define an explicit application-level result contract, implement Pydantic models in `app/satellite/`, and verify the contract via unit and live integration tests.
-
-### Substep Breakdown & Execution Record
-
-#### 1C.1 Minimal Earth Engine Calculation — 🟢 COMPLETE
-- Executed `ee.Number(42).getInfo()`, returning `42`.
-- Confirmed server-side mathematical evaluation against project `bharatsahayak-v2`.
-
-#### 1C.2 Intentional Earth Engine Error Behavior — 🟢 COMPLETE
-- Executed query against an intentionally invalid asset path: `ee.ImageCollection("NON_EXISTENT/INVALID_ASSET_12345").size().getInfo()`.
-- Verified that the underlying Google API error was translated by the Earth Engine Python SDK into `ee.EEException`.
-- Documented observed SDK error translation behavior without generalizing across all possible failure modes.
-
-#### 1C.3 Valid Query with Zero Data — 🟢 COMPLETE
-- Executed valid Sentinel-2 query using the Ludhiana test point (`[75.7196, 30.9157]`) over a historical pre-launch date range (`1990-01-01` to `1990-01-02`).
-- Query evaluated successfully without raising an API exception and returned `image_count=0`.
-- Established `NO_DATA` as a valid, distinct operational state separate from system errors.
-
-#### 1C.4 / 1C.5 Result Boundary & Contract Decisions — 🟢 COMPLETE
-- Defined structured Earth Engine result contract supporting explicit status values: `"success"`, `"no_data"`, `"error"`.
-- Enforced architectural boundary: SDK-specific exceptions remain encapsulated behind the satellite module integration boundary and are converted into application-level error structures.
-
-#### 1C.6 Result Contract Implementation & Unit Tests — 🟢 COMPLETE
-- Created [app/satellite/\_\_init\_\_.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py) and [app/satellite/types.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py).
-- Implemented using Pydantic `BaseModel` conforming to BharatSahayak standards:
-  - [`EarthEngineResult`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py#L31-L38): `status` (`Literal["success", "no_data", "error"]`), optional `dataset` (`str`), optional `image_count` (`int` with `ge=0` non-negative validation), optional generic `data` payload, and optional `error` (`EarthEngineError`).
-  - [`EarthEngineError`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py#L22-L27): `type` (`str`), `message` (`str`).
-- Created unit test suite in [tests/unit/test_satellite_types.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_types.py).
-- Verified: **6 unit tests passed** (success creation, no_data creation, error creation, invalid status rejection, negative image count rejection, model dict/json serialization).
-
-#### 1C.7 Live Earth Engine Integration Testing — 🟢 COMPLETE
-- Created live integration test suite in [tests/integration/test_earth_engine_connectivity.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py).
-- Implemented module-scoped `ee_session` fixture initializing `ee.Initialize(project="bharatsahayak-v2")` with clean `pytest.skip` handling if credentials are unavailable.
-- Executed `uv run pytest tests/integration/test_earth_engine_connectivity.py`:
-  - **3 integration tests passed** (12.86s).
-  - Success test returned 1 Sentinel-2 scene.
-  - No-data test returned 0 scenes.
-  - Error test intercepted `ee.EEException` and mapped it to structured `EarthEngineResult(status="error", error=EarthEngineError(...))`.
-  - **0 tests skipped**; 6 non-blocking framework warnings reported.
-  - All queries kept strictly spatially and temporally bounded (no unmeasured EECU claims).
-
-#### 1C.8 Phase 1C Documentation & Checkpoint — 🟢 COMPLETE
-- Documented verified Phase 1C achievements across `docs/phases/PHASE_01_EARTH_ENGINE_FOUNDATION.md`, `docs/MASTER_ROADMAP.md`, and `docs/CHANGELOG.md`.
+- **Dataset & Band:** Google Cloud Score+ S2_HARMONIZED V1 (`GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED`), linked via `quality_band = "cs_cdf"`.
+- **Clear-Sky Usability Threshold:** `DEFAULT_CLEAR_THRESHOLD = 0.60` (`cs_cdf >= 0.60`).
+- **Minimum Usable Regional Coverage:** `DEFAULT_MIN_USABLE_COVERAGE = 0.70` ($70\%$).
+- **Why Scene Cloud Cover is Insufficient:** Scene-level cloud percentage measures cloudiness across a massive $100\text{km} \times 100\text{km}$ tile. A tile with $15\%$ cloud cover may have thick cumulus directly obscuring the farmer's 100m parcel; conversely, a $40\%$ cloudy scene may be completely clear over the target parcel. Cloud Score+ evaluates localized pixel optical quality directly within the `AnalysisRegion`.
+- **Pixel Masking Semantics:** Pixels with `cs_cdf < 0.60` are masked using `image.updateMask()`. Masked pixels are strictly excluded from statistical reductions and are **never converted to $\text{NDVI} = 0.0$**.
+- **No-Data Fallback:** If zero candidate scenes in the search window achieve $\ge 70\%$ usable coverage, the pipeline returns `status="no_data"`, `image_count=0`, `data=None`, `error=None`.
 
 ---
 
-## 🌐 1D — Geographic Region Definition
+## 8. NDVI Band Mathematics (`DEC-009`)
 
-### Goal
-Establish the architectural strategy and geometric transformations for converting human-selected farm locations into bounded Earth Engine geometries for satellite data extraction.
+- **Spectral Bands:**
+  - Red Band: `B4` ($\lambda \approx 665\text{ nm}$, 10m resolution)
+  - Near-Infrared (NIR) Band: `B8` ($\lambda \approx 842\text{ nm}$, 10m resolution)
+- **Mathematical Formula:**
+  $$\text{NDVI} = \frac{\text{NIR} - \text{Red}}{\text{NIR} + \text{Red}} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$$
+- **Implementation:** Computed using Earth Engine's native `image.normalizedDifference(["B8", "B4"]).rename("NDVI")`, clipped to the `AnalysisRegion`.
+- **Radiometric Fidelity:** Multiplicative surface reflectance scale factors ($0.0001$) are not multiplied because they cancel out identically in normalized difference ratios. Masked/invalid pixels are preserved without artificial value substitution.
+- **Separation of Concerns:** NDVI is strictly a surface reflectance measurement of vegetative greenness; the data layer performs zero crop health classification or disease diagnosis.
 
-### Substep Breakdown & Execution Record
+---
 
-#### 1D.1 Geographic Analysis Region Strategy (`DEC-007`) — 🟢 COMPLETE
-- **Conceptual Strategy:** Adopted a decoupled two-stage geographic modeling strategy separating **`FarmerLocation`** (user input) from **`AnalysisRegion`** (satellite compute geometry) through an intermediate **Region Resolution** abstraction:
-  ```text
-  FarmerLocation (Point: Latitude, Longitude)
-          ↓
-  Region Resolution (Resolver / Buffer Engine)
-          ↓
-  AnalysisRegion (Geometry: Circular Buffer / Future Polygon)
+## 9. Regional NDVI Summary Statistics (Phase 1G)
+
+- **Combined Single-Pass Reducer:** Executes a single server-side reduction over the unmasked pixels in the `AnalysisRegion`:
+  ```python
+  combined_reducer = (
+      ee.Reducer.mean()
+      .combine(reducer2=ee.Reducer.median(), sharedInputs=True)
+      .combine(reducer2=ee.Reducer.min(), sharedInputs=True)
+      .combine(reducer2=ee.Reducer.max(), sharedInputs=True)
+      .combine(reducer2=ee.Reducer.count(), sharedInputs=True)
+  )
   ```
-- **Farmer-Facing Location Input:**
-  - Farmers specify location via browser GPS, map-based village/area search, or interactive map pin-drop (`DEC-003`).
-  - Strict negative constraint: Never require farmers to manually type raw latitude/longitude coordinates or draw complex field polygons in the MVP.
-- **Location Storage:**
-  - Store original farmer-selected location as simple `latitude` and `longitude` (`FarmerLocation`).
-- **Initial Analysis Region Choice:**
-  - Automatically convert selected point into a circular analysis region with a fixed default radius of **100 meters** (~3.14 hectares / ~7.7 acres).
-  - This is an engineering MVP choice for local satellite processing, **not** a claim of exact cadastral farm boundary.
-  - The 100 m radius must **NOT** be exposed as a user-configurable technical parameter in the MVP.
-- **Limitation Documentation:**
-  - The 100 m circular buffer is an approximate local satellite observation area. It may sample neighboring plots, field bunds, farm roads, irrigation channels, adjacent trees, or rural structures.
-  - It must **NEVER** be described or presented to the farmer as their exact cadastral or legal field boundary.
-- **Future Reusability:**
-  - The generated `AnalysisRegion` is deterministic and reusable across both current and historical satellite observations, enabling consistent multi-temporal trend calculations over the exact same spatial footprint.
-- **Future Upgrade Path:**
-  - Compatible with optional precise field polygon drawing (Phase 9) and cadastral database integration without redesigning downstream satellite processing.
-- **Recorded Decision:** Logged as [`DEC-007`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/docs/DECISION_LOG.md#DEC-007) in `docs/DECISION_LOG.md`.
-- **Strict Scope Boundary:** DEC-007 is a **region-definition decision only**. It does **NOT** mean that Sentinel-2 NDVI, historical analysis, weather fusion, prediction, Gemini reasoning, or MCP integration are implemented.
-
-#### 1D.2 Geographic Geometry Helper Implementation & Unit Verification — 🟢 COMPLETE
-- **Code Implementation:**
-  - Created [`app/satellite/geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/geometry.py) implementing `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry`.
-  - Built-in validation ensures:
-    - `latitude ∈ [-90, 90]` (decimal degrees)
-    - `longitude ∈ [-180, 180]` (decimal degrees)
-    - `radius_m > 0` (strictly positive finite meters)
-    - Invalid and non-finite types (NaN, inf, -inf, strings, None, booleans) raise `ValueError`.
-  - Geometry construction: Constructs `ee.Geometry.Point([float(longitude), float(latitude)]).buffer(float(radius_m))` adhering to Earth Engine's `[x, y]` coordinate syntax.
-  - Constant defined: `DEFAULT_ANALYSIS_RADIUS_M = 100.0` meters (`DEC-007`).
-  - Module exports: Exported `create_analysis_region` and `DEFAULT_ANALYSIS_RADIUS_M` in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py).
-  - Docstrings thoroughly describe `FarmerLocation`, `Region Resolution`, `AnalysisRegion`, and document that the 100 m buffer is an approximate local satellite observation area, **not** an exact farm boundary.
-- **Unit Test Verification:**
-  - Created [`tests/unit/test_satellite_geometry.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_geometry.py) containing **35 test cases**.
-  - Test coverage:
-    - Valid Punjab farm coordinates (`[75.7196, 30.9157]`) with default radius.
-    - Custom radius values (`250.0m`, `50m`).
-    - Coordinate boundary limits (`[-90, 90]`, `[-180, 180]`, `(0, 0)`).
-    - Invalid latitude parameterized checks (out-of-bounds, NaN, inf, -inf, string, None, True).
-    - Invalid longitude parameterized checks (out-of-bounds, NaN, inf, -inf, string, None, False).
-    - Invalid radius parameterized checks (`0`, `0.0`, `-1`, `-100.0`, `-0.0001`, NaN, inf, -inf, string, None, True).
-    - Default radius constant validation (`DEFAULT_ANALYSIS_RADIUS_M == 100.0`).
-  - Execution result: **35 passed in 7.20s** (`uv run pytest tests/unit/test_satellite_geometry.py -v`).
-- **Local Non-Network Verification:**
-  - Executed client-side instantiation script over `latitude=30.9157`, `longitude=75.7196`, `radius_m=100`.
-  - Verified outputs:
-    - Python type: `<class 'ee.geometry.Geometry'>`
-    - `isinstance(region, ee.Geometry)`: `True`
-    - Geometry name: `"Geometry"`
-    - Default radius constant: `100.0`
-    - Confirmed: **Zero `.getInfo()` or server-side Earth Engine network calls were executed.**
-- **Strict Scope Boundaries Maintained:**
-  - Sentinel-2 query pipeline is **NOT** implemented yet.
-  - NDVI band math is **NOT** implemented yet.
-  - Regional summary statistics are **NOT** implemented yet.
-  - Multi-temporal historical analysis is **NOT** implemented yet.
-  - MCP tool integration is **NOT** implemented yet.
-  - `app/satellite/client.py` does **NOT** exist yet.
-  - Farmer-facing UI and interactive map components are **NOT** implemented yet.
-  - Field polygon drawing is **NOT** implemented yet.
-
-#### 1D.3 Live Earth Engine Region Query Verification & Checkpoint — 🟢 COMPLETE
-- **Live Integration Testing:**
-  - Extended [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) with live region query tests using `create_analysis_region()`.
-  - **Test 4 (`test_earth_engine_region_query_success`):**
-    - Geometry: `create_analysis_region(latitude=30.9157, longitude=75.7196, radius_m=100.0)`
-    - Dataset: `COPERNICUS/S2_SR_HARMONIZED`
-    - Date Filter: `2026-08-01` to `2026-08-31`
-    - Cloud Filter: `CLOUDY_PIXEL_PERCENTAGE < 20`
-    - Spatial Filter: `.filterBounds(region)`
-    - Server Evaluation: Evaluated via `collection.size().getInfo()` against project `bharatsahayak-v2`.
-    - Result: Returned **`image_count = 1`** scene, cleanly mapping to `EarthEngineResult(status="success", dataset="COPERNICUS/S2_SR_HARMONIZED", image_count=1)`.
-  - **Test 5 (`test_earth_engine_region_query_no_data`):**
-    - Geometry: Same 100 m region over Ludhiana test fixture.
-    - Date Filter: Historical pre-Sentinel-2 date range (`1990-01-01` to `1990-01-02`).
-    - Result: Returned **`image_count = 0`** without API exceptions, cleanly mapping to `EarthEngineResult(status="no_data", dataset="COPERNICUS/S2_SR_HARMONIZED", image_count=0)`.
-  - **Test Suite Results:** **5 passed in 19.34s** (`uv run pytest tests/integration/test_earth_engine_connectivity.py`).
-- **Recorded Limitations:**
-  - The 100 m circular region is an approximate local satellite observation area, **not** an exact farm boundary.
-  - It may include neighboring plots, field bunds, farm roads, adjacent trees, water/irrigation channels, or rural structures.
-  - The analysis region must **never** be presented to the farmer as an exact cadastral or legal field boundary.
-  - Support for user-drawn field polygons (Phase 9), official cadastral land record integration (Bhulekh / Bhoomi), and adaptive acreage-scaled buffering remains future work.
-- **Strict Scope Boundaries Maintained:**
-  - Earth Engine production client is **NOT** implemented yet (`app/satellite/client.py` does **NOT** exist yet).
-  - Sentinel-2 NDVI band math is **NOT** implemented yet (Subphase 1F).
-  - Regional NDVI summary statistics are **NOT** implemented yet (Subphase 1G).
-  - Crop health prediction, historical trend analysis, Gemini prompt reasoning, MCP tool upgrades, and farmer-facing UI/polygon drawing remain future work.
+- **Zonal Output Contract:** Mapped directly to `NdviRegionalStatistics`:
+  - `mean: float` ($[-1.0, 1.0]$)
+  - `median: float` ($[-1.0, 1.0]$)
+  - `min: float` ($[-1.0, 1.0]$)
+  - `max: float` ($[-1.0, 1.0]$)
+  - `valid_pixel_count: int | None` ($\ge 0$)
+- **Missing / Zero Pixel Semantics:** If all pixels are masked within the buffer, `valid_pixel_count == 0` returns `EarthEngineResult(status="no_data")`.
 
 ---
 
-## 🛰️ 1E — Sentinel-2 Data Pipeline
+## 10. Regional NDVI Orchestration Pipeline (`DEC-011` / Phase 1H)
 
-### Goal
-Implement a dedicated, deterministic Sentinel-2 Surface Reflectance imagery selection pipeline (`DEC-008`), bounding candidates by spatial `AnalysisRegion` and temporal lookback window, filtering cloudy scenes, sorting newest-first, selecting the most recent usable observation, and extracting structured metadata for downstream NDVI calculation.
+The top-level function `analyze_regional_ndvi(...)` in [`app/satellite/pipeline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/pipeline.py) orchestrates the complete workflow:
 
-### Substep Breakdown & Execution Record
+```python
+def analyze_regional_ndvi(
+    latitude: Union[int, float],
+    longitude: Union[int, float],
+    radius_m: Union[int, float] = DEFAULT_ANALYSIS_RADIUS_M,
+    start_date: Union[str, date, datetime, None] = None,
+    end_date: Union[str, date, datetime, None] = None,
+    lookback_days: int = DEFAULT_LOOKBACK_DAYS,
+    max_cloud_percentage: float = DEFAULT_MAX_CLOUD_PERCENTAGE,
+    clear_threshold: float = DEFAULT_CLEAR_THRESHOLD,
+    min_usable_coverage: float = DEFAULT_MIN_USABLE_COVERAGE,
+    scale_m: Union[int, float] = 10.0,
+    dataset: str = SENTINEL2_SR_HARMONIZED,
+    quality_dataset: str = CLOUD_SCORE_PLUS_S2_HARMONIZED,
+    quality_band: str = DEFAULT_QUALITY_BAND,
+) -> EarthEngineResult:
+```
 
-#### 1E.1 Sentinel-2 Imagery Selection Pipeline (`DEC-008`, `DEC-010`) — 🟢 COMPLETE
-- **Code Implementation:**
-  - Implemented [`app/satellite/sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/sentinel2.py):
-    - `get_sentinel2_collection(region, start_date, end_date, lookback_days=30, max_cloud_percentage=20.0, dataset='COPERNICUS/S2_SR_HARMONIZED', quality_dataset='GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED', quality_band='cs_cdf', clear_threshold=0.60, min_usable_coverage=0.70, apply_quality_filter=True) -> ee.ImageCollection`: Constructs spatially/temporally bounded, cloud-filtered collection, links Cloud Score+, computes parcel usable coverage server-side, and filters by `min_usable_coverage` sorted descending (`system:time_start`).
-    - `select_most_recent_sentinel2_image(...) -> EarthEngineResult`: Evaluates qualifying candidate scenes, selects newest qualifying `.first()`, extracts metadata into `Sentinel2ImageMetadata` with `usable_coverage_percentage`, `clear_threshold`, and `quality_band`, handling `no_data` (`image_count = 0`) and errors cleanly.
-    - `get_most_recent_sentinel2_image(...) -> ee.Image`: Returns the quality-masked `ee.Image` proxy for downstream NDVI computation in Phase 1F.
-    - `mask_observation_quality(image, clear_threshold=0.60, quality_band='cs_cdf') -> ee.Image`: Applies pixel-level quality masking (`updateMask(cs_cdf >= clear_threshold)`).
-    - `calculate_usable_coverage(image, region, clear_threshold=0.60, quality_band='cs_cdf') -> ee.Number`: Computes parcel-level usable coverage ratio inside `AnalysisRegion` using `ee.Reducer.mean()` on binary mask.
-    - `resolve_date_range(...) -> tuple[str, str]`: Standardizes and validates ISO string, date, and datetime inputs with positive lookback calculation.
-  - Updated [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py) adding optional backward-compatible fields (`usable_coverage_percentage`, `clear_threshold`, `quality_band`) to `Sentinel2ImageMetadata`.
-  - Exported all pipeline functions, constants, and types in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py).
-- **Unit Test Verification:**
-  - Created [`tests/unit/test_satellite_sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_sentinel2.py) (46 tests) and [`tests/unit/test_satellite_observation_quality.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_observation_quality.py) (20 tests).
-  - Total unit test suite: **190 passed** (`uv run pytest tests/unit/ -v`).
-- **Live Earth Engine Integration Testing:**
-  - Extended [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) with 8 live pipeline and quality tests (Tests 6–9 and Tests 13–16):
-    - **Test 6 (`test_select_most_recent_sentinel2_image_success`):** Over Ludhiana test fixture (`[75.7196, 30.9157]`, 100m radius, Aug 2026, cloud < 20%), returned `image_count >= 1` scene from `2026-08-16T05:50:41.321000+00:00` with `status="success"`.
-    - **Test 7 (`test_select_most_recent_sentinel2_image_no_data`):** Over historical pre-Sentinel-2 dates (Jan 1990), returned `image_count = 0` mapped cleanly to `status="no_data"`.
-    - **Test 8 (`test_sentinel2_candidate_ordering_and_most_recent_selection`):** Verified candidate scenes are sorted strictly descending by acquisition timestamp.
-    - **Test 9 (`test_select_most_recent_sentinel2_image_error`):** Verified invalid asset IDs produce `status="error"` with `EEException` details.
-    - **Test 13 (`test_cloud_score_plus_linkage_and_band_association`):** Verified candidate image contains optical bands (`B8`, `B4`) and Cloud Score+ quality band (`cs_cdf`), with valid sampled scores.
-    - **Test 14 (`test_observation_quality_selection_success`):** Verified selection produces `usable_coverage_percentage >= 70.0%`, `clear_threshold=0.60`, `quality_band="cs_cdf"`.
-    - **Test 15 (`test_observation_quality_masked_ndvi_evaluation`):** Verified NDVI computed on quality-masked image evaluates strictly in $[-1.0, 1.0]$.
-    - **Test 16 (`test_observation_quality_strict_threshold_rejection`):** Verified zero qualifying candidates return `status="no_data"`, `image_count=0` without fabricating NDVI.
-  - Total integration test suite: **16 passed** in 40.34s.
-  - Total combined test suite: **219 passed** (0 failed).
-- **Documented Limitations & Scope Boundaries:**
-  - **Observation Quality Strategy Verified:** Pixel-level observation quality via Cloud Score+ `GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED` (`cs_cdf >= 0.60`, parcel usable coverage `>= 0.70`) is implemented and live-verified.
-  - **Terminology:** Avoids subjective terms like *"best image"*; strictly uses *"most recent usable image"*.
-  - **Missing Imagery:** Missing observations or scenes with insufficient usable coverage are strictly represented as `no_data`, **never** as NDVI=0.
-  - **Strict Scope Preserved:** Regional NDVI summary statistics (Phase 1G), multi-temporal time-series, historical baseline comparisons, Dynamic World / NDWI, MCP server tool upgrades, and farmer UI components remain deferred.
-
----
-
-## 🌿 1F — NDVI Calculation
-
-### Goal
-Implement Normalized Difference Vegetation Index ($\text{NDVI}$) calculation for Sentinel-2 Level-2A imagery in accordance with `DEC-009`, applying native Earth Engine band math ($(\text{B8}-\text{B4})/(\text{B8}+\text{B4})$), renaming the output band to `'NDVI'`, clipping to the `AnalysisRegion`, preserving un-invented masked pixels, and verifying theoretical value range $[-1.0, 1.0]$.
-
-### Substep Breakdown & Execution Record
-
-#### 1F.1 NDVI Band Mathematics & Module Implementation (`DEC-009`) — 🟢 COMPLETE
-- **Code Implementation:**
-  - Created [`app/satellite/ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/ndvi.py) implementing:
-    - `calculate_ndvi(image: ee.Image, region: ee.Geometry | None = None, nir_band: str = "B8", red_band: str = "B4", band_name: str = "NDVI") -> ee.Image`:
-      - Consumes an un-evaluated `ee.Image` from Phase 1E (`COPERNICUS/S2_SR_HARMONIZED`).
-      - Identifies Near-Infrared band (`B8`) and Red band (`B4`).
-      - Applies normalized difference formula:
-        $$\text{NDVI} = \frac{\text{B8} - \text{B4}}{\text{B8} + \text{B4}}$$
-        using Earth Engine's native `image.normalizedDifference(["B8", "B4"])`.
-      - Renames resulting output band to `'NDVI'` (`.rename(band_name)`).
-      - Automatically clips the raster extent to the provided `AnalysisRegion` (`.clip(region)`) if specified.
-      - Preserves invalid/masked pixels (zero denominator or sensor masked) natively without fabricating artificial zeros.
-      - Skips manual reflectance scaling (multiplicative scale factor $0.0001$ cancels out identically in normalized ratios).
-    - `compute_ndvi`: Defined as a semantic functional alias for `calculate_ndvi`.
-    - Defined standard constants: `NDVI_BAND_NAME = "NDVI"`, `NIR_BAND = "B8"`, `RED_BAND = "B4"`.
-  - Exported `NDVI_BAND_NAME`, `NIR_BAND`, `RED_BAND`, `calculate_ndvi`, and `compute_ndvi` in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py).
-- **Unit Test Verification:**
-  - Created [`tests/unit/test_satellite_ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_ndvi.py) with **29 unit tests**.
-  - Verified:
-    - Constant definitions (`NDVI_BAND_NAME == "NDVI"`, `NIR_BAND == "B8"`, `RED_BAND == "B4"`).
-    - Client-side proxy creation for un-evaluated `ee.Image` objects.
-    - Client-side proxy creation with `AnalysisRegion` clipping.
-    - Custom band and output naming support (`B8A`, `B4`, `CUSTOM_NDVI`).
-    - Parity of `compute_ndvi` alias.
-    - Parameterized type validation: rejection of non-`ee.Image` inputs (None, strings, numbers, booleans, lists, dicts).
-    - Parameterized geometry validation: rejection of non-`ee.Geometry` regions.
-    - Parameterized string validation: rejection of empty, whitespace, and non-string band names.
-  - Execution result: **29 passed** (`uv run pytest tests/unit/test_satellite_ndvi.py -v`).
-- **Live Earth Engine Integration Testing:**
-  - Extended [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) with 3 live tests (Tests 10–12):
-    - **Test 10 (`test_calculate_ndvi_live_evaluation`):**
-      - Fixture: Representative farmland near Ludhiana, Punjab (`[75.7196, 30.9157]`, 100m radius circular buffer, project `bharatsahayak-v2`).
-      - Selected Observation: Live Sentinel-2A scene from `2026-08-16T05:50:41` selected via Phase 1E pipeline (`COPERNICUS/S2_SR_HARMONIZED`, cloud $\approx 10.995\%$).
-      - Output Verification: Output is an `ee.Image` instance; `.bandNames().getInfo()` returned `["NDVI"]`.
-      - Value Range Verification: Sampled valid pixels within the 100m buffer evaluated strictly within $[-1.0, 1.0]$.
-    - **Test 11 (`test_calculate_ndvi_no_data_path`):**
-      - Pre-Sentinel-2 date query (Jan 1990) returned `status="no_data"`, `image_count=0`, confirming NDVI calculation is not executed or fabricated from non-existent imagery.
-    - **Test 12 (`test_calculate_ndvi_invalid_bands_error`):**
-      - Evaluated image with non-existent band names, confirming server-side evaluation raises `ee.EEException`.
-  - Total test suite: **146 passed** (0 failed) in 112.44s.
-- **Documented Limitations & Scope Boundaries:**
-  - **NDVI is a Reflectance Metric, Not Direct Crop Health:** NDVI measures vegetative greenness and relative photosynthetic vigor. It does **not** constitute an agronomic diagnosis, pest identification, or yield prediction on its own.
-  - **Observation Quality Decoupling:** In accordance with `DEC-010`, observation quality validation is decoupled from pure NDVI band mathematics. Phase 1F focuses strictly on computing normalized difference and raster clipping.
-  - **Approximate Geometry:** The 100m circular buffer is an approximate local satellite observation envelope, **not** an exact farm boundary.
-  - **Strict Scope Boundaries Maintained:**
-    - Zonal statistical reductions (mean, median, min, max) are implemented in Subphase 1G.
-    - Crop-health classification thresholds are **NOT** implemented yet.
-    - Gemini prompt reasoning, MCP tool changes, and farmer-facing UI components remain deferred.
+### Architectural Guarantees:
+1. **Single Authoritative Observation Lineage:** Discovers qualifying scenes, calls `collection.first()` **exactly once**, and flows that identical `ee.Image` proxy through metadata extraction, quality masking, NDVI computation, and zonal reduction. No split-brain secondary queries occur.
+2. **Exactly 3 Client Materialization Calls:**
+   - Call 1: `collection.size().getInfo()` (evaluates candidate count).
+   - Call 2: `authoritative_image.getInfo()` (evaluates image telemetry).
+   - Call 3: `stats.getInfo()` (evaluates zonal reduction inside `calculate_ndvi_statistics`).
+3. **Structured Domain Composition:**
+   ```
+   EarthEngineResult
+    └── data: RegionalNdviAnalysis
+         ├── observation: Sentinel2ImageMetadata
+         ├── quality: ObservationQualityEvidence
+         ├── freshness: ObservationFreshness
+         ├── region: AnalysisRegionMetadata
+         ├── statistics: NdviRegionalStatistics
+         └── pipeline_version: "1.0.0"
+   ```
 
 ---
 
-## 📊 1G — Regional NDVI Statistics
+## 11. Observation Freshness Modeling
 
-### Goal
-Implement regional NDVI summary statistics over the 100 m `AnalysisRegion` (~3.14 hectares), executing a single combined server-side reduction (`mean`, `median`, `min`, `max`, `count`), parsing the runtime reducer dictionary, strictly handling un-fabricated no-data conditions, and returning a structured `EarthEngineResult` containing `NdviRegionalStatistics`.
-
-### Substep Breakdown & Execution Record
-
-#### 1G.1 Regional Reduction Implementation & Result Contract — 🟢 COMPLETE
-- **Code Implementation:**
-  - In [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py):
-    - Added [`NdviRegionalStatistics`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py#L47-L54):
-      ```python
-      class NdviRegionalStatistics(BaseModel):
-          """Structured regional summary statistics for NDVI over an AnalysisRegion."""
-
-          mean: float = Field(ge=-1.0, le=1.0)
-          median: float = Field(ge=-1.0, le=1.0)
-          min: float = Field(ge=-1.0, le=1.0)
-          max: float = Field(ge=-1.0, le=1.0)
-          valid_pixel_count: int | None = Field(default=None, ge=0)
-      ```
-    - Added alias: `SatelliteRegionalStatistics = NdviRegionalStatistics`.
-  - In [`app/satellite/ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/ndvi.py):
-    - Added `calculate_ndvi_statistics(ndvi_image, region, scale=10.0, band_name="NDVI") -> EarthEngineResult`:
-      - **Local Validation:** Validates `ndvi_image` is `ee.Image`, `region` is `ee.Geometry`, `scale` is positive finite numeric, `band_name` is non-empty string. Local programmer errors immediately raise `TypeError` or `ValueError` (never masked as remote `EarthEngineResult`).
-      - **Single Combined Reducer:** Constructs a unified server-side reducer:
-        ```python
-        combined_reducer = (
-            ee.Reducer.mean()
-            .combine(reducer2=ee.Reducer.median(), sharedInputs=True)
-            .combine(reducer2=ee.Reducer.min(), sharedInputs=True)
-            .combine(reducer2=ee.Reducer.max(), sharedInputs=True)
-            .combine(reducer2=ee.Reducer.count(), sharedInputs=True)
-        )
-        ```
-      - **One-Pass Server Reduction:** Executes one `ndvi_image.reduceRegion(reducer=combined_reducer, geometry=region, scale=scale, maxPixels=10000)` and evaluates via `.getInfo()`.
-      - **Verified Runtime Key Inspection:** Live Earth Engine evaluation confirmed the actual dictionary structure returned:
-        ```json
-        {
-          "NDVI_count": 346,
-          "NDVI_max": 0.7135161606268364,
-          "NDVI_mean": 0.5945221322208015,
-          "NDVI_median": 0.6182636318161177,
-          "NDVI_min": 0.3443496801705757
-        }
-        ```
-      - **No-Data Semantics:** If `reduceRegion()` returns an empty dictionary, missing `mean`, or `valid_pixel_count == 0` (e.g., all pixels masked by Cloud Score+), returns `EarthEngineResult(status="no_data", data=None, error=None)`. Maintains $\text{NULL} \neq 0.0$; never fabricates zeros.
-      - **Remote Error Semantics:** Catches `ee.EEException` and server-side runtime errors, wrapping them cleanly into `EarthEngineResult(status="error", data=None, error=EarthEngineError(...))`.
-    - Added alias: `compute_ndvi_statistics = calculate_ndvi_statistics`.
-  - In [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py): Exported `NdviRegionalStatistics`, `SatelliteRegionalStatistics`, `calculate_ndvi_statistics`, and `compute_ndvi_statistics`.
-
-#### 1G.2 Unit & Live Integration Testing — 🟢 COMPLETE
-- **Unit Testing:**
-  - Created [`tests/unit/test_satellite_ndvi_statistics.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_ndvi_statistics.py) with 13 unit tests covering:
-    - Default/valid argument proxy instantiation.
-    - Strict local type errors (`TypeError` on non-`ee.Image` or non-`ee.Geometry`).
-    - Value errors (`ValueError` on `scale <= 0`, `NaN`, `inf`, `-inf`, `bool`, `None`, empty/whitespace `band_name`).
-    - Alias parity between `compute_ndvi_statistics` and `calculate_ndvi_statistics`.
-    - Pydantic bounds validation on `NdviRegionalStatistics` ($[-1.0, 1.0]$, non-negative count).
-    - Mocked server-side reduction outputs (`success`, `no_data` on empty dict/null mean/zero count, `error` on remote EEException).
-  - Unit test result: **243 passed** across full unit test suite (`uv run pytest tests/unit/ -v`).
-- **Live Integration Testing:**
-  - Added 3 live integration tests to [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py):
-    - **Test 17 (`test_calculate_ndvi_statistics_live_evaluation`):** Evaluated full live pipeline over Jhajj Farm / Ludhiana fixture (`[75.7196, 30.9157]`, 100m buffer, Aug 2026). S2 scene selected (`2026-08-16`), quality-masked via Cloud Score+ (`cs_cdf >= 0.60`), NDVI computed, and regional statistics evaluated. Verified `status="success"`, `min <= mean <= max` ($0.344 \le 0.595 \le 0.714$), `min <= median <= max` ($0.344 \le 0.618 \le 0.714$), valid pixel count $346 \ge 1$. Alias parity verified.
-    - **Test 18 (`test_calculate_ndvi_statistics_all_masked_no_data`):** Directly constructed fully masked raster (`ee.Image.constant(0.5).rename("NDVI").updateMask(ee.Image.constant(0))`). Reduction produced clean `status="no_data"`, `data=None`, `error=None`.
-    - **Test 19 (`test_calculate_ndvi_statistics_invalid_band_error`):** Queried non-existent band on real `ee.Image`, producing clean `status="error"`, `data=None`, `error.type="EEException"`.
-  - Integration test result: **19 passed** in 43.30s (`uv run pytest tests/integration/test_earth_engine_connectivity.py -v`).
-  - Total targeted test suite: **262 passed** (0 failed).
-
-#### 1G.3 Performance & Quota Verification
-- **Defensible Architectural Statement:**
-  > "The reduction is spatially bounded to the existing 100 m AnalysisRegion (~3.14 hectares) and requests one combined server-side `reduceRegion()` evaluation. Actual execution latency and Earth Engine quota consumption are measured during live integration testing rather than assumed."
-- **Observed Live Telemetry:**
-  - Combined reduction runtime for the 100 m region: completed smoothly within standard interactive request latencies (~1–2s per live reduction call).
-  - Single `reduceRegion()` call with 5 combined statistics avoids 5 separate network/computation round-trips.
-
-#### 1G.4 Documented Limitations & Strict Scope Boundaries
-- **Measurement Only:** Phase 1G is strictly a measurement layer computing numeric statistics. It does **not** interpret NDVI as crop health, disease probability, yield forecast, or irrigation recommendation.
-- **Strict Scope Preserved:** Edge-case hardening (Subphase 1H), MCP server tool upgrades, Gemini prompt reasoning, time-series analysis, and UI map components remain deferred.
+Implemented as `ObservationFreshness` in [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py):
+- `reference_date: str` (the resolved search end date in `YYYY-MM-DD`).
+- `observation_age_days: int` (derived age in days, $age = \max(0, (\text{ref\_date} - \text{acq\_date}).\text{days})$).
+- `lookback_window_days: int` (temporal search window, default 30).
+- **Semantics:** Evaluated strictly using UTC calendar arithmetic. Represents transparent temporal evidence without fabricating arbitrary confidence heuristics or binary freshness thresholds.
 
 ---
 
-## 🔮 Future Upgrade Impact
+## 12. Mathematical Invariant Verification
 
-| Deferred Feature | Why Deferred | Dependency | Likely Future Affected Area | Architectural Consideration |
-| :--- | :--- | :--- | :--- | :--- |
-| **Precise Field Polygon Drawing & GeoJSON Upload** | Lowers farmer UX complexity in MVP; circular buffer provides sufficient satellite sample (`DEC-007`). | Phase 1 (EE foundation), Phase 9 (UI) | `app/satellite/` geometry resolver, `frontend/` map | Resolver outputs polygon `AnalysisRegion` into unchanged satellite extraction pipeline. |
-| **Cadastral / Land Record Boundary Ingestion** | Requires state-level land registry API access (Bhulekh / Bhoomi). | Phase 1, Phase 7 | `app/data_sources/cadastral.py` | Feed resolved parcel polygons directly into `AnalysisRegion` model. |
-| **NDVI Multi-Temporal Time Series** | Avoids heavy multi-temporal Earth Engine latency during live conversational turns (`DEC-002`). | Phase 1 (EE foundation) | `app/` satellite modules, MCP layer | Add optional `time_series` array to output dictionary without modifying core statistical keys. |
-| **Historical Baseline & Anomaly Detection** | Requires multi-year imagery alignment and seasonal baseline z-score models. | NDVI time series, `DEC-007` | `app/` analytics modules, `app/agent.py` | Query historical scenes over same `AnalysisRegion`; pass anomaly flags as non-blocking advisory metadata. |
-| **Dynamic World Land Cover (LULC)** | Sentinel-2 NDVI chosen as primary vegetative health indicator (`DEC-001`). | Phase 1 | `app/` satellite modules, MCP layer | Implement as a pluggable `LulcProvider` without tightly coupling crop advice to LULC classifications. |
-| **NDWI (Water / Moisture Index)** | Focused first on vegetation greenness index before expanding spectral band math. | Phase 1 | `app/` satellite modules, MCP layer | Compute as a companion index sharing the same geometry and cloud mask pipeline. |
-| **Additional Spectral Indicators (EVI, SAVI)** | Standard NDVI is universally understood and sufficient for smallholder MVP. | Phase 2 | `app/` satellite modules | Keep index calculation functions modular and independent. |
-| **Multi-Source Data Fusion (Soil + Weather + Satellite)** | Requires individual satellite, meteorological, and soil providers to exist first. | Phase 2, Phase 3 | `app/fusion/` module | Fuse normalized outputs into a single `FarmHealthContext` dictionary for Gemini prompts. |
+Before returning a successful analysis payload, the pipeline executes `_verify_statistical_invariants(stats)`:
+$$\text{min} - \epsilon \le \text{median} \le \text{max} + \epsilon \quad \text{and} \quad \text{min} - \epsilon \le \text{mean} \le \text{max} + \epsilon$$
+- **Tolerance:** `STATISTICAL_INVARIANT_EPSILON = 1e-6`.
+- **Purpose:** Mathematical data-integrity safeguard protecting against corrupted server-side reduction dictionaries or distributed reducer anomalies. Violations immediately return `EarthEngineResult(status="error", error=EarthEngineError(type="StatisticalInvariantError", ...))`.
 
 ---
 
-## 📝 Documentation Step Result (Phase 1 Progress)
+## 13. Universal Tri-State Result Contract
 
-### Verified Achievements Across Phase 1:
-- ✅ **1A Completed:** Documented Earth Engine integration boundary (`DEC-004`, Option C) in `docs/DECISION_LOG.md` and `docs/ARCHITECTURE.md`.
-- ✅ **1B Completed (1B.1–1B.10):**
-  - Added `earthengine-api` 1.7.43 via `uv add` (`DEC-005`).
-  - Completed local developer authentication (`DEC-006`) without secret leakage.
-  - Successfully initialized `ee.Initialize(project='bharatsahayak-v2')` and verified `ee.Number(1).getInfo() -> 1`.
-  - Verified Sentinel-2 catalog querying with bounded test fixture over Ludhiana, Punjab.
-  - Documented spatial/temporal query bounding lesson for Earth Engine collections.
-  - Audited repository and confirmed zero credentials or secrets tracked.
-- ✅ **1C Completed (1C.1–1C.8):**
-  - Verified minimal compute `ee.Number(42).getInfo() -> 42`.
-  - Verified SDK exception translation (`ee.EEException`) on invalid assets.
-  - Verified `image_count=0` no-data query state.
-  - Created `app/satellite/__init__.py` and `app/satellite/types.py` (`EarthEngineResult`, `EarthEngineError`, `EarthEngineStatus`).
-  - Verified 6 unit tests in `tests/unit/test_satellite_types.py`.
-  - Verified 3 live integration tests in `tests/integration/test_earth_engine_connectivity.py`.
-  - Completed Phase 1C documentation checkpoint.
-- ✅ **1D Completed (1D.1–1D.3):**
-  - **1D.1 Completed:** Formulated and documented `DEC-007: Geographic Analysis Region Strategy` in `docs/DECISION_LOG.md` (decoupled `FarmerLocation` $\rightarrow$ `Region Resolution` $\rightarrow$ `AnalysisRegion` with 100 m default circular buffer).
-  - **1D.2 Completed:** Implemented `app/satellite/geometry.py` with `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry` and coordinate/radius validation. Exported in `app/satellite/__init__.py`. Passed 35 unit tests in `tests/unit/test_satellite_geometry.py`. Verified non-network client-side geometry proxy instantiation without server-side calls.
-  - **1D.3 Completed:** Verified geometry helper with live Earth Engine Sentinel-2 queries in `tests/integration/test_earth_engine_connectivity.py`. Successful query returned `image_count=1`, no-data query returned `image_count=0`. 5 live integration tests passed. Documented approximation limitations and future polygon/cadastral roadmap.
-- ✅ **1E Completed (`DEC-008`, `DEC-010`):**
-  - Implemented `app/satellite/sentinel2.py` (`get_sentinel2_collection`, `select_most_recent_sentinel2_image`, `get_most_recent_sentinel2_image`, `resolve_date_range`).
-  - Standardized on `COPERNICUS/S2_SR_HARMONIZED`, `AnalysisRegion` bounds, configurable lookback (default 30 days), and scene cloud filter (`CLOUDY_PIXEL_PERCENTAGE < 20%`).
-  - Established observation quality strategy (`DEC-010`): Cloud Score+ `cs_cdf >= 0.60`, parcel usable coverage `>= 0.70`, newest-to-oldest candidate search, and structured `no_data` fallback.
-  - Implemented newest-first candidate ordering and most recent usable image selection.
-  - Created `Sentinel2ImageMetadata` model and updated `EarthEngineResult` contracts.
-  - Verified 46 unit tests in `tests/unit/test_satellite_sentinel2.py` and 4 live integration tests in `tests/integration/test_earth_engine_connectivity.py`. 105 total tests passed.
-- ✅ **1F Completed (`DEC-009`):**
-  - Implemented `app/satellite/ndvi.py` (`calculate_ndvi`, `compute_ndvi`, `NDVI_BAND_NAME`, `NIR_BAND`, `RED_BAND`).
-  - Native `image.normalizedDifference(["B8", "B4"]).rename("NDVI")`, clipped to `AnalysisRegion`, returning unreduced `ee.Image`.
-  - Preserved masked pixels; avoided manual scale factor multiplication; preserved scene-level `<20%` cloud filter.
-  - Verified 29 unit tests in `tests/unit/test_satellite_ndvi.py` and 3 live integration tests in `tests/integration/test_earth_engine_connectivity.py`. 146 total tests passed.
-- ✅ **1G Completed:**
-  - Implemented `calculate_ndvi_statistics(ndvi_image, region, scale=10.0, band_name="NDVI") -> EarthEngineResult` and `compute_ndvi_statistics` alias in `app/satellite/ndvi.py`.
-  - Implemented `NdviRegionalStatistics` (`mean`, `median`, `min`, `max`, `valid_pixel_count`) and `SatelliteRegionalStatistics` alias in `app/satellite/types.py` with strict Pydantic bounds $[-1.0, 1.0]$.
-  - Verified live reducer dictionary keys (`NDVI_mean`, `NDVI_median`, `NDVI_min`, `NDVI_max`, `NDVI_count`).
-  - Preserved strict no-data semantics ($\text{NULL} \neq 0.0$) and remote error encapsulation.
-  - Verified 13 unit tests in `tests/unit/test_satellite_ndvi_statistics.py` and 3 live integration tests in `tests/integration/test_earth_engine_connectivity.py`. 262 total tests passed.
-- 🟡 **1H Next:** Reliability & Data Quality (edge-case handlers for out-of-bounds coordinates, heavy clouds, zero-pixel reductions, API timeouts, and quota limits).
+| Status | Meaning | `image_count` | `data` | `error` | Invariant |
+|---|---|---|---|---|---|
+| `"success"` | Valid scene passed quality gates; valid NDVI statistics produced. | $\ge 1$ | `RegionalNdviAnalysis` | `None` | Ground downstream reasoning in evidence. |
+| `"no_data"` | Zero candidate scenes OR all pixels masked within `AnalysisRegion`. | $0$ or $N$ | `None` | `None` | $\text{no\_data} \neq \text{error}$; $\text{no\_data} \neq \text{NDVI zero}$. |
+| `"error"` | Remote EE exception, invalid coordinates, or invariant violation. | `None` or $N$ | `None` | `EarthEngineError` | Structured diagnostic details returned. |
 
 ---
 
-## 📜 Documentation / Resume Rules
+## 14. Integration Boundary Specification (Phase 1I)
 
-1. **Reality Over Aspiration:** A feature or phase must never be marked complete merely because it was discussed, designed, or planned.
-2. **Completion Requirements:** Marking any subphase complete requires:
-   - Concrete code implementation where applicable.
-   - Verification of execution outputs.
-   - Unit/integration tests where applicable.
-   - Accurate documentation of actual results.
-   - Verified Git checkpoint.
-3. **Resume Truth:** The **Resume Status** section at the top of this document is the authoritative guide for resuming development.
+- **Layered Flow:** $\text{Agent} \xrightarrow{\text{JSON-RPC}} \text{MCP Adapter} \xrightarrow{\text{Python In-Process}} \text{Satellite Service} \xrightarrow{\text{API}} \text{Earth Engine}$.
+- **Encapsulation:** `app/satellite/` does not import MCP, ADK, Gemini, or agent modules. Upstream agents do not import Earth Engine or satellite modules directly.
+- **Serialization Rule:** Pydantic models crossing the MCP boundary are serialized via `result.model_dump(mode="json")`. Earth Engine objects (`ee.Image`, `ee.Geometry`, `ee.Reducer`) never cross the MCP boundary.
+- **Future Tool Definition:**
+  ```python
+  # DESIGN ONLY / NOT IMPLEMENTED IN PHASE 1
+  @mcp.tool()
+  def get_regional_satellite_analysis(
+      latitude: float,
+      longitude: float,
+      radius_m: float = 100.0,
+      lookback_days: int = 30,
+      start_date: str | None = None,
+      end_date: str | None = None,
+  ) -> dict: ...
+  ```
 
 ---
 
-## 📊 Current Status
+## 15. Parameter Governance Matrix
 
-- **Phase 1 (Earth Engine Foundation):** 🟡 **IN PROGRESS**
-- **Subphase 1A (Architecture & Integration Design):** 🟢 **COMPLETE**
-- **Subphase 1B (Local Earth Engine Environment & Verification):** 🟢 **COMPLETE (1B.1–1B.10 Complete)**
-- **Subphase 1C (Earth Engine Connectivity & Result Contract):** 🟢 **COMPLETE (1C.1–1C.8 Complete)**
-- **Subphase 1D (Geographic Region Definition):** 🟢 **COMPLETE (1D.1–1D.3 Complete)**
-- **Subphase 1E (Sentinel-2 Data Pipeline & Observation Quality):** 🟢 **COMPLETE**
-- **Subphase 1F (NDVI Calculation):** 🟢 **COMPLETE**
-- **Subphase 1G (Regional NDVI Statistics):** 🟢 **COMPLETE**
-- **Subphase 1H (Reliability & Data Quality):** 🟡 **PLANNED**
+| Parameter | Governance Tier | Canonical Owner | Exposed to MCP Tool? | Default Value |
+|---|---|---|---|---|
+| `latitude` | Farmer / Geolocation | Farmer UI / GPS | **Yes** (Required) | None |
+| `longitude` | Farmer / Geolocation | Farmer UI / GPS | **Yes** (Required) | None |
+| `radius_m` | Operational Spatial Scope | Agent / Service | **Yes** (Optional) | `100.0` |
+| `lookback_days` | Operational Temporal Scope | Agent / Service | **Yes** (Optional) | `30` |
+| `start_date` | Operational Temporal Scope | Agent / Service | **Yes** (Optional) | `None` |
+| `end_date` | Operational Temporal Scope | Agent / Service | **Yes** (Optional) | `None` |
+| `max_cloud_percentage` | Engineering Quality Policy | Satellite Service | **No** (Enforced) | `20.0` |
+| `clear_threshold` | Engineering Quality Policy | Satellite Service | **No** (Enforced) | `0.60` |
+| `min_usable_coverage` | Engineering Quality Policy | Satellite Service | **No** (Enforced) | `0.70` |
+| `scale_m` | Engineering Spatial Scale | Satellite Service | **No** (Enforced) | `10.0` |
+| `dataset` | Engineering Asset ID | Satellite Service | **No** (Enforced) | `COPERNICUS/S2_SR_HARMONIZED` |
+| `quality_dataset` | Engineering Asset ID | Satellite Service | **No** (Enforced) | `GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED` |
+| `quality_band` | Engineering Band ID | Satellite Service | **No** (Enforced) | `cs_cdf` |
+
+---
+
+## 16. Location Privacy & Telemetry Boundary
+
+- **Unresolved Privacy Decision:**
+  > *"Exact agricultural coordinates represent sensitive location data. Telemetry requirements, precision bounding, retention policies, and access controls require explicit future design before production deployment."*
+- **Current Status:** Zero coordinate telemetry logging was implemented in Phase 1. `security_checkpoint` regexes do not corrupt valid floating-point coordinates.
+
+---
+
+## 17. Testing & Verification Evidence
+
+All test evidence has been compiled directly from live test suite runs:
+
+### Verified Test Summary (Phase 1H Checkpoint):
+- **Unit Tests ([tests/unit/](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit)):** **359 passed** (0 failures).
+  - `test_satellite_pipeline.py`: 102 passed.
+  - `test_satellite_sentinel2.py`: 46 passed.
+  - `test_satellite_geometry.py`: 35 passed.
+  - `test_satellite_ndvi.py`: 29 passed.
+  - `test_satellite_ndvi_statistics.py`: 13 passed.
+  - `test_satellite_types.py`: 20 passed.
+  - `test_satellite_observation_quality.py`: 20 passed.
+  - `test_dummy.py`: 1 passed.
+  - `test_intelligence.py`: 8 passed.
+- **Live Integration Tests ([tests/integration/test_earth_engine_connectivity.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py)):** **23 passed** (0 failures).
+  - Validates live Punjab fixture (`[75.7196, 30.9157]`, Aug 2026), pre-Sentinel-2 `no_data`, strict coverage rejection `no_data`, and live radiometric invariant envelopes.
+- **Combined Targeted Test Suite:** **382 passed in 468.64s** (0 failures).
+
+---
+
+## 18. Verified Git Checkpoints
+
+| Commit Hash | Commit Title | Key Milestones Included |
+|---|---|---|
+| `13e5aa9` | `build: complete Phase 1B Earth Engine environment setup` | `earthengine-api` 1.7.43, ADC auth, bounded query test. |
+| `ff68be7` | `build: complete Phase 1C Earth Engine result contract` | `EarthEngineResult`, `EarthEngineError`, initial 6 unit tests. |
+| `d04a60f` | `build: complete Phase 1D geographic region definition` | `create_analysis_region`, 100m circular buffer, 35 unit tests. |
+| `c8d1721` | `build: complete Phase 1E Sentinel-2 data pipeline` | Sentinel-2 ingestion, Cloud Score+ quality filter, 46 unit tests. |
+| `64dc820` | `build: complete Phase 1F NDVI calculation` | `calculate_ndvi`, normalized difference band math, 29 unit tests. |
+| `87903f0` | `build: complete Phase 1G regional NDVI statistics` | `calculate_ndvi_statistics`, combined reducer, `NdviRegionalStatistics`. |
+| `4f79d2a` | `build: complete Phase 1H regional NDVI orchestration pipeline` | `analyze_regional_ndvi`, `RegionalNdviAnalysis`, 382 tests passing. |
+
+---
+
+## 19. Architecture Decisions Log Summary
+
+- **`DEC-004` (Phase 1A):** Layered MCP Tool Contract with Dedicated Earth Engine Module.
+- **`DEC-005` (Phase 1B):** Dependency Management via canonical `uv add earthengine-api`.
+- **`DEC-006` (Phase 1B):** Local Developer Application Default Credentials (ADC) Authentication.
+- **`DEC-007` (Phase 1D):** Geographic Analysis Region Strategy (`FarmerLocation` $\rightarrow$ 100m `AnalysisRegion`).
+- **`DEC-008` (Phase 1E):** Sentinel-2 Surface Reflectance Imagery Selection Strategy.
+- **`DEC-009` (Phase 1F):** Normalized Difference Vegetation Index Band Mathematics.
+- **`DEC-010` (Phase 1E):** Cloud Score+ Local Observation Quality Strategy.
+- **`DEC-011` (Phase 1H):** Regional Satellite Observation Evidence & Analysis Contract.
+- **Phase 1I Review:** Integration Boundary Verification, Parameter Governance, and Serialization Rules.
+
+---
+
+## 20. Deferred Architecture Roadmap
+
+| Deferred Feature | Planned Phase | Rationale for Deferral |
+|---|---|---|
+| **Multi-Year Historical NDVI Baseline** | Phase 2 | Requires multi-temporal alignment and seasonal baseline statistical modeling. |
+| **Vegetative Anomaly Detection (Z-Scores)** | Phase 2 | Requires multi-year historical imagery distribution over same `AnalysisRegion`. |
+| **NDWI (Normalized Difference Water Index)** | Phase 3 | Focused first on primary vegetation index before expanding spectral band library. |
+| **Dynamic World Land Cover (LULC)** | Phase 3 | Pluggable land-cover classification to complement optical vegetation measurements. |
+| **Multi-Source Data Fusion (Weather + Soil + EO)** | Phase 4 | Requires individual satellite, meteorological, and soil providers to exist first. |
+| **Gemini Agronomic Reasoning Prompt Graphs** | Phase 5 | Requires normalized multi-modal data fusion payloads from Phase 4. |
+| **FastMCP Satellite Tool Integration** | Phase 6 | Exposing `get_regional_satellite_analysis` tool in `app/mcp_server.py`. |
+| **Interactive Map Pin-Drop & Farm Onboarding UI** | Phase 7 / 9 | Frontend UI map interaction and visual indicator rendering. |
+| **Vertex AI Reasoning Engine Cloud Deployment** | Phase 10 | Production cloud deployment of multi-agent runtime. |
+
+---
+
+## 21. Final Phase 1 Status Summary
+
+| Subphase | Title | Status |
+|---|---|---|
+| **1A** | Architecture & Integration Design | 🟢 **COMPLETE** |
+| **1B** | Local Earth Engine Environment Setup | 🟢 **COMPLETE** |
+| **1C** | Earth Engine Connectivity & Result Contract | 🟢 **COMPLETE** |
+| **1D** | Geographic Region Definition (`DEC-007`) | 🟢 **COMPLETE** |
+| **1E** | Sentinel-2 Data Pipeline & Quality (`DEC-008`, `DEC-010`) | 🟢 **COMPLETE** |
+| **1F** | NDVI Calculation (`DEC-009`) | 🟢 **COMPLETE** |
+| **1G** | Regional NDVI Statistics | 🟢 **COMPLETE** |
+| **1H** | Regional NDVI Orchestration Pipeline (`DEC-011`) | 🟢 **COMPLETE** |
+| **1I** | Integration Boundary Verification | 🟢 **COMPLETE** |
+| **1J** | Final Documentation Consolidation | 🟢 **COMPLETE (This Document)** |
+| **1K** | Verification & Final Git Checkpoint | 🟡 **PENDING (Awaiting Checkpoint Execution)** |
+
+---
+
+> [!IMPORTANT]
+> **Subphase 1K Status:** Phase 1K remains **PENDING** until a formal verification and Git checkpoint commit is executed.

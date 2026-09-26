@@ -150,14 +150,15 @@ The `load_farmer_profile` node parses incoming queries to maintain session state
 
 ---
 
-## 🛰️ Planned Earth Engine Satellite Intelligence Flow (`🟡 PLANNED — Phase 1`)
+## 🛰️ Earth Engine Satellite Intelligence Flow (`🟢 SATELLITE ENGINE COMPLETE (Phase 1A–1H) | 🟡 MCP CONNECTION SCHEDULED (Phase 6)`)
 
 > [!IMPORTANT]
-> **Current Implementation Status:** **NOT IMPLEMENTED YET**.  
-> The current application does **not** yet query Google Earth Engine.  
-> The existing MCP server ([app/mcp_server.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/mcp_server.py)) remains the active **static/mock/catalog implementation** until a subsequent Phase 1 implementation step builds and connects the dedicated Earth Engine module.
+> **Current Implementation Status:**
+> - **Satellite Engine (`app/satellite/`):** 🟢 **COMPLETE & VERIFIED (Phase 1A–1H)**. Standalone deterministic satellite computation engine providing `analyze_regional_ndvi(...)`, single authoritative observation selection, Cloud Score+ quality masking, NDVI computation, and regional zonal reductions (`382 tests passing`).
+> - **FastMCP Server & Agent Connection:** 🟡 **SCHEDULED FOR PHASE 6**. The active MCP server ([app/mcp_server.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/mcp_server.py)) currently retains its initial static/catalog tools until Phase 6 implements the live `get_regional_satellite_analysis` tool adapter.
 
-In accordance with architectural decision [`DEC-004`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/docs/DECISION_LOG.md#L118-L168) (Option C), the planned Earth Engine architecture decouples MCP tool contracts from geospatial execution:
+In accordance with architectural decision [`DEC-004`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/docs/DECISION_LOG.md#L118-L168) (Option C), the Earth Engine architecture decouples MCP tool contracts from geospatial execution:
+
 
 ```mermaid
 graph TD
