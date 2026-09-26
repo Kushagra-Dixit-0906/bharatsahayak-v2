@@ -32,6 +32,10 @@ from .pipeline import (
 )
 from .historical import (
     DEFAULT_HISTORICAL_MAX_OBSERVATIONS,
+    build_annual_historical_composite,
+    build_annual_historical_ndvi_observation,
+    build_historical_ndvi_composite,
+    compute_annual_historical_ndvi,
     select_historical_observations,
 )
 from .sentinel2 import (
@@ -100,10 +104,14 @@ __all__ = [
     "SENTINEL2_SR_HARMONIZED",
     "STATISTICAL_INVARIANT_EPSILON",
     "analyze_regional_ndvi",
+    "build_annual_historical_composite",
+    "build_annual_historical_ndvi_observation",
+    "build_historical_ndvi_composite",
     "calculate_historical_target_years",
     "calculate_ndvi",
     "calculate_ndvi_statistics",
     "calculate_usable_coverage",
+    "compute_annual_historical_ndvi",
     "compute_ndvi",
     "compute_ndvi_statistics",
     "construct_historical_temporal_window",
