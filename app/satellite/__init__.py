@@ -30,6 +30,10 @@ from .pipeline import (
     STATISTICAL_INVARIANT_EPSILON,
     analyze_regional_ndvi,
 )
+from .historical import (
+    DEFAULT_HISTORICAL_MAX_OBSERVATIONS,
+    select_historical_observations,
+)
 from .sentinel2 import (
     CLOUD_SCORE_PLUS_S2_HARMONIZED,
     DEFAULT_CLEAR_THRESHOLD,
@@ -83,6 +87,7 @@ __all__ = [
     "CLOUD_SCORE_PLUS_S2_HARMONIZED",
     "DEFAULT_ANALYSIS_RADIUS_M",
     "DEFAULT_CLEAR_THRESHOLD",
+    "DEFAULT_HISTORICAL_MAX_OBSERVATIONS",
     "DEFAULT_HISTORICAL_YEARS",
     "DEFAULT_LOOKBACK_DAYS",
     "DEFAULT_MAX_CLOUD_PERCENTAGE",
@@ -108,6 +113,7 @@ __all__ = [
     "mask_observation_quality",
     "parse_utc_date",
     "resolve_date_range",
+    "select_historical_observations",
     "select_most_recent_sentinel2_image",
     "AnalysisRegionMetadata",
     "AnnualHistoricalNdviObservation",
