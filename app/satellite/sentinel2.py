@@ -46,11 +46,164 @@ from .types import EarthEngineError, EarthEngineResult, Sentinel2ImageMetadata
 # Canonical Earth Engine dataset ID for Sentinel-2 Level-2A Harmonized Surface Reflectance
 SENTINEL2_SR_HARMONIZED: str = "COPERNICUS/S2_SR_HARMONIZED"
 
+# Canonical Earth Engine dataset ID for Cloud Score+ Sentinel-2 Harmonized (DEC-010)
+CLOUD_SCORE_PLUS_S2_HARMONIZED: str = "GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"
+
+# Canonical quality band for Cloud Score+ (cumulative distribution function clear-sky score)
+DEFAULT_QUALITY_BAND: str = "cs_cdf"
+
+# Default minimum clear-sky quality score threshold (DEC-010)
+DEFAULT_CLEAR_THRESHOLD: float = 0.60
+
+# Default minimum usable regional pixel coverage ratio (DEC-010)
+DEFAULT_MIN_USABLE_COVERAGE: float = 0.70
+
 # Default lookback window in days for discovering recent satellite observations (DEC-008)
 DEFAULT_LOOKBACK_DAYS: int = 30
 
 # Default maximum scene cloudy pixel percentage threshold (DEC-008)
 DEFAULT_MAX_CLOUD_PERCENTAGE: float = 20.0
+
+
+def _validate_threshold(
+    name: str,
+    value: Union[int, float],
+    min_val: float = 0.0,
+    max_val: float = 1.0,
+) -> float:
+    """Validates that a numeric threshold is a finite float in [min_val, max_val].
+
+    Args:
+        name: Parameter name for descriptive error messaging.
+        value: The numeric value to validate.
+        min_val: Minimum acceptable value (inclusive).
+        max_val: Maximum acceptable value (inclusive).
+
+    Returns:
+        float: The validated float value.
+
+    Raises:
+        ValueError: If value is non-numeric, boolean, NaN, infinite, or out of range.
+    """
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or math.isnan(value)
+        or math.isinf(value)
+    ):
+        raise ValueError(f"{name} must be a valid finite number, got {value!r}")
+    val_float = float(value)
+    if not (min_val <= val_float <= max_val):
+        raise ValueError(
+            f"{name} must be between {min_val} and {max_val}, got {value}"
+        )
+    return val_float
+
+
+def _validate_string(name: str, value: str) -> str:
+    """Validates that a parameter is a non-empty string.
+
+    Args:
+        name: Parameter name for descriptive error messaging.
+        value: The string to validate.
+
+    Returns:
+        str: The stripped valid string.
+
+    Raises:
+        ValueError: If value is not a string or is empty/whitespace.
+    """
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"{name} must be a non-empty string, got {value!r}")
+    return value.strip()
+
+
+def mask_observation_quality(
+    image: ee.Image,
+    clear_threshold: float = DEFAULT_CLEAR_THRESHOLD,
+    quality_band: str = DEFAULT_QUALITY_BAND,
+) -> ee.Image:
+    """Applies Cloud Score+ pixel-level quality masking to a Sentinel-2 image.
+
+    Masks out pixels where the quality band value is strictly less than the clear threshold.
+    Masked pixels are preserved as invalid and will not contribute to downstream band
+    mathematics or statistical reductions (DEC-010).
+
+    Args:
+        image: Earth Engine image containing the quality band.
+        clear_threshold: Minimum clear-sky score threshold in [0.0, 1.0]. Defaults to 0.60.
+        quality_band: Quality band identifier. Defaults to 'cs_cdf'.
+
+    Returns:
+        ee.Image: The input image with unusable/cloudy pixels masked out.
+
+    Raises:
+        TypeError: If image is not an instance of ee.Image.
+        ValueError: If clear_threshold or quality_band are invalid.
+    """
+    if not isinstance(image, ee.Image):
+        raise TypeError(
+            f"image must be an instance of ee.Image, got {type(image)!r}"
+        )
+
+    thresh = _validate_threshold("clear_threshold", clear_threshold, 0.0, 1.0)
+    band = _validate_string("quality_band", quality_band)
+
+    quality_mask = image.select(band).gte(thresh)
+    return image.updateMask(quality_mask)
+
+
+def calculate_usable_coverage(
+    image: ee.Image,
+    region: ee.Geometry,
+    clear_threshold: float = DEFAULT_CLEAR_THRESHOLD,
+    quality_band: str = DEFAULT_QUALITY_BAND,
+) -> ee.Number:
+    """Calculates the usable pixel coverage ratio inside an analysis region.
+
+    Computes the fraction of pixels within the analysis region satisfying the
+    observation quality threshold (quality_band >= clear_threshold) using an
+    Earth Engine mean reducer over a binary mask (DEC-010).
+
+    Args:
+        image: Earth Engine image containing the quality band.
+        region: Analysis region geometry (ee.Geometry).
+        clear_threshold: Minimum clear-sky score threshold in [0.0, 1.0]. Defaults to 0.60.
+        quality_band: Quality band identifier. Defaults to 'cs_cdf'.
+
+    Returns:
+        ee.Number: Usable coverage ratio in [0.0, 1.0] (or 0.0 if unmeasurable/missing).
+
+    Raises:
+        TypeError: If image is not an ee.Image or region is not an ee.Geometry.
+        ValueError: If clear_threshold or quality_band are invalid.
+    """
+    if not isinstance(image, ee.Image):
+        raise TypeError(
+            f"image must be an instance of ee.Image, got {type(image)!r}"
+        )
+    if not isinstance(region, ee.Geometry):
+        raise TypeError(
+            f"region must be an instance of ee.Geometry, got {type(region)!r}"
+        )
+
+    thresh = _validate_threshold("clear_threshold", clear_threshold, 0.0, 1.0)
+    band = _validate_string("quality_band", quality_band)
+
+    mask = image.select(band).gte(thresh)
+    mean_dict = mask.reduceRegion(
+        reducer=ee.Reducer.mean(),
+        geometry=region,
+        scale=10,
+        maxPixels=1e6,
+    )
+    return ee.Number(
+        ee.Algorithms.If(
+            mean_dict.contains(band),
+            mean_dict.get(band),
+            0.0,
+        )
+    )
 
 
 def _parse_date(date_val: Union[str, date, datetime]) -> date:
@@ -137,8 +290,13 @@ def get_sentinel2_collection(
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
     max_cloud_percentage: float = DEFAULT_MAX_CLOUD_PERCENTAGE,
     dataset: str = SENTINEL2_SR_HARMONIZED,
+    quality_dataset: str = CLOUD_SCORE_PLUS_S2_HARMONIZED,
+    quality_band: str = DEFAULT_QUALITY_BAND,
+    clear_threshold: float = DEFAULT_CLEAR_THRESHOLD,
+    min_usable_coverage: float = DEFAULT_MIN_USABLE_COVERAGE,
+    apply_quality_filter: bool = True,
 ) -> ee.ImageCollection:
-    """Builds a spatially and temporally bounded, cloud-filtered, newest-first Sentinel-2 collection.
+    """Builds a spatially and temporally bounded, cloud-filtered, quality-linked Sentinel-2 collection.
 
     This function constructs the client-side Earth Engine ImageCollection proxy without
     performing server-side network evaluation (.getInfo()).
@@ -151,35 +309,33 @@ def get_sentinel2_collection(
             Defaults to 30 days.
         max_cloud_percentage: Maximum scene cloud cover threshold in percent (0.0 to 100.0).
             Defaults to 20.0%.
-        dataset: Earth Engine dataset identifier. Defaults to 'COPERNICUS/S2_SR_HARMONIZED'.
+        dataset: Sentinel-2 Earth Engine dataset identifier. Defaults to 'COPERNICUS/S2_SR_HARMONIZED'.
+        quality_dataset: Cloud Score+ dataset identifier. Defaults to 'GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'.
+        quality_band: Quality band identifier. Defaults to 'cs_cdf'.
+        clear_threshold: Clear-sky threshold for pixel usability in [0.0, 1.0]. Defaults to 0.60.
+        min_usable_coverage: Minimum regional coverage ratio in [0.0, 1.0]. Defaults to 0.70.
+        apply_quality_filter: Whether to link Cloud Score+ and filter candidates by regional usable
+            coverage. Defaults to True.
 
     Returns:
-        ee.ImageCollection: Earth Engine collection filtered by bounds, date range, and cloud
-            threshold, sorted descending by acquisition time (system:time_start).
+        ee.ImageCollection: Earth Engine collection filtered by bounds, date range, cloud threshold,
+            and regional quality coverage, sorted descending by acquisition time (system:time_start).
 
     Raises:
         TypeError: If region is not an instance of ee.Geometry.
-        ValueError: If max_cloud_percentage or date parameters are invalid.
+        ValueError: If max_cloud_percentage, clear_threshold, min_usable_coverage, or date parameters are invalid.
     """
     if not isinstance(region, ee.Geometry):
         raise TypeError(
             f"region must be an instance of ee.Geometry, got {type(region)!r}"
         )
 
-    if (
-        not isinstance(max_cloud_percentage, (int, float))
-        or isinstance(max_cloud_percentage, bool)
-        or math.isnan(max_cloud_percentage)
-        or math.isinf(max_cloud_percentage)
-    ):
-        raise ValueError(
-            f"max_cloud_percentage must be a valid finite number, got {max_cloud_percentage!r}"
-        )
-
-    if not (0.0 <= float(max_cloud_percentage) <= 100.0):
-        raise ValueError(
-            f"max_cloud_percentage must be between 0.0 and 100.0, got {max_cloud_percentage}"
-        )
+    _validate_threshold("max_cloud_percentage", max_cloud_percentage, 0.0, 100.0)
+    _validate_threshold("clear_threshold", clear_threshold, 0.0, 1.0)
+    _validate_threshold("min_usable_coverage", min_usable_coverage, 0.0, 1.0)
+    _validate_string("quality_band", quality_band)
+    _validate_string("dataset", dataset)
+    _validate_string("quality_dataset", quality_dataset)
 
     start_str, end_str = resolve_date_range(
         start_date=start_date,
@@ -187,7 +343,7 @@ def get_sentinel2_collection(
         lookback_days=lookback_days,
     )
 
-    collection = (
+    s2_collection = (
         ee.ImageCollection(dataset)
         .filterBounds(region)
         .filterDate(start_str, end_str)
@@ -195,7 +351,35 @@ def get_sentinel2_collection(
         .sort("system:time_start", False)
     )
 
-    return collection
+    if not apply_quality_filter:
+        return s2_collection
+
+    cs_plus = ee.ImageCollection(quality_dataset)
+    linked = s2_collection.linkCollection(cs_plus, [quality_band])
+
+    def _score_usable_coverage(img: ee.Image) -> ee.Image:
+        mask = img.select(quality_band).gte(float(clear_threshold))
+        mean_dict = mask.reduceRegion(
+            reducer=ee.Reducer.mean(),
+            geometry=region,
+            scale=10,
+            maxPixels=1e6,
+        )
+        coverage = ee.Number(
+            ee.Algorithms.If(
+                mean_dict.contains(quality_band),
+                mean_dict.get(quality_band),
+                0.0,
+            )
+        )
+        return img.set("USABLE_COVERAGE", coverage)
+
+    scored = linked.map(_score_usable_coverage)
+    qualified = scored.filter(
+        ee.Filter.gte("USABLE_COVERAGE", float(min_usable_coverage))
+    )
+
+    return qualified
 
 
 def get_most_recent_sentinel2_image(
@@ -205,11 +389,17 @@ def get_most_recent_sentinel2_image(
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
     max_cloud_percentage: float = DEFAULT_MAX_CLOUD_PERCENTAGE,
     dataset: str = SENTINEL2_SR_HARMONIZED,
+    quality_dataset: str = CLOUD_SCORE_PLUS_S2_HARMONIZED,
+    quality_band: str = DEFAULT_QUALITY_BAND,
+    clear_threshold: float = DEFAULT_CLEAR_THRESHOLD,
+    min_usable_coverage: float = DEFAULT_MIN_USABLE_COVERAGE,
+    apply_quality_mask: bool = True,
 ) -> ee.Image:
     """Returns the un-evaluated ee.Image proxy for the most recent usable Sentinel-2 observation.
 
-    This helper provides the raw ee.Image object needed for downstream band mathematics
-    (such as NDVI calculation in Phase 1F) without executing immediate server-side evaluation.
+    Discovers the newest candidate meeting the regional usable coverage threshold (DEC-010)
+    and applies pixel-level quality masking so unusable pixels do not corrupt downstream
+    computations (such as NDVI calculation in Phase 1F).
 
     Args:
         region: The analysis region geometry (ee.Geometry).
@@ -217,10 +407,16 @@ def get_most_recent_sentinel2_image(
         end_date: Optional search window end date.
         lookback_days: Lookback window in days if start_date is omitted.
         max_cloud_percentage: Maximum scene cloud cover threshold in percent.
-        dataset: Earth Engine dataset identifier.
+        dataset: Sentinel-2 Earth Engine dataset identifier.
+        quality_dataset: Cloud Score+ dataset identifier.
+        quality_band: Quality band identifier.
+        clear_threshold: Clear-sky threshold for pixel usability in [0.0, 1.0].
+        min_usable_coverage: Minimum regional coverage ratio in [0.0, 1.0].
+        apply_quality_mask: Whether to apply updateMask(cs_cdf >= clear_threshold). Defaults to True.
 
     Returns:
-        ee.Image: The newest candidate image from the filtered collection (.first()).
+        ee.Image: The newest qualified candidate image from the filtered collection (.first()),
+            with quality mask optionally applied.
     """
     collection = get_sentinel2_collection(
         region=region,
@@ -229,8 +425,20 @@ def get_most_recent_sentinel2_image(
         lookback_days=lookback_days,
         max_cloud_percentage=max_cloud_percentage,
         dataset=dataset,
+        quality_dataset=quality_dataset,
+        quality_band=quality_band,
+        clear_threshold=clear_threshold,
+        min_usable_coverage=min_usable_coverage,
+        apply_quality_filter=True,
     )
-    return collection.first()
+    raw_image = collection.first()
+    if apply_quality_mask:
+        return mask_observation_quality(
+            raw_image,
+            clear_threshold=clear_threshold,
+            quality_band=quality_band,
+        )
+    return raw_image
 
 
 def select_most_recent_sentinel2_image(
@@ -240,11 +448,15 @@ def select_most_recent_sentinel2_image(
     lookback_days: int = DEFAULT_LOOKBACK_DAYS,
     max_cloud_percentage: float = DEFAULT_MAX_CLOUD_PERCENTAGE,
     dataset: str = SENTINEL2_SR_HARMONIZED,
+    quality_dataset: str = CLOUD_SCORE_PLUS_S2_HARMONIZED,
+    quality_band: str = DEFAULT_QUALITY_BAND,
+    clear_threshold: float = DEFAULT_CLEAR_THRESHOLD,
+    min_usable_coverage: float = DEFAULT_MIN_USABLE_COVERAGE,
 ) -> EarthEngineResult:
     """Discovers and selects the most recent usable Sentinel-2 image, returning a structured result.
 
-    Evaluates the filtered collection against Earth Engine servers, handles errors and
-    zero-data states gracefully, and extracts observation metadata for downstream processing.
+    Evaluates candidate scenes against Cloud Score+ observation quality inside the AnalysisRegion.
+    Selects the newest candidate satisfying the minimum usable regional coverage (DEC-010).
 
     Args:
         region: The analysis region geometry (ee.Geometry).
@@ -252,12 +464,17 @@ def select_most_recent_sentinel2_image(
         end_date: Optional search window end date.
         lookback_days: Lookback window in days if start_date is omitted. Defaults to 30.
         max_cloud_percentage: Maximum scene cloud cover threshold in percent. Defaults to 20.0%.
-        dataset: Earth Engine dataset identifier. Defaults to 'COPERNICUS/S2_SR_HARMONIZED'.
+        dataset: Sentinel-2 Earth Engine dataset identifier. Defaults to 'COPERNICUS/S2_SR_HARMONIZED'.
+        quality_dataset: Cloud Score+ dataset identifier. Defaults to 'GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED'.
+        quality_band: Quality band identifier. Defaults to 'cs_cdf'.
+        clear_threshold: Clear-sky threshold for pixel usability in [0.0, 1.0]. Defaults to 0.60.
+        min_usable_coverage: Minimum regional coverage ratio in [0.0, 1.0]. Defaults to 0.70.
 
     Returns:
         EarthEngineResult:
-            - status="success": Found usable candidates; data contains Sentinel2ImageMetadata.
-            - status="no_data": Zero usable scenes found in the search window; image_count=0.
+            - status="success": Found qualifying candidates; data contains Sentinel2ImageMetadata with
+              usable_coverage_percentage populated.
+            - status="no_data": Zero qualifying scenes found in the search window; image_count=0.
             - status="error": Earth Engine exception occurred; error contains details.
     """
     try:
@@ -268,6 +485,11 @@ def select_most_recent_sentinel2_image(
             lookback_days=lookback_days,
             max_cloud_percentage=max_cloud_percentage,
             dataset=dataset,
+            quality_dataset=quality_dataset,
+            quality_band=quality_band,
+            clear_threshold=clear_threshold,
+            min_usable_coverage=min_usable_coverage,
+            apply_quality_filter=True,
         )
 
         image_count = int(collection.size().getInfo())
@@ -302,6 +524,11 @@ def select_most_recent_sentinel2_image(
         mgrs_tile = properties.get("MGRS_TILE")
         product_id = properties.get("PRODUCT_ID")
 
+        usable_coverage_ratio = properties.get("USABLE_COVERAGE")
+        usable_coverage_pct: float | None = None
+        if usable_coverage_ratio is not None:
+            usable_coverage_pct = round(float(usable_coverage_ratio) * 100.0, 2)
+
         metadata = Sentinel2ImageMetadata(
             image_id=image_id,
             acquisition_date=acquisition_date_iso,
@@ -310,6 +537,9 @@ def select_most_recent_sentinel2_image(
             mgrs_tile=mgrs_tile,
             product_id=product_id,
             system_time_start=system_time_start,
+            usable_coverage_percentage=usable_coverage_pct,
+            clear_threshold=float(clear_threshold),
+            quality_band=str(quality_band),
         )
 
         return EarthEngineResult(

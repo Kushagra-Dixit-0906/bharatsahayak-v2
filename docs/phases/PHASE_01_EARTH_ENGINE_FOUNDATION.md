@@ -391,29 +391,34 @@ Implement a dedicated, deterministic Sentinel-2 Surface Reflectance imagery sele
 
 ### Substep Breakdown & Execution Record
 
-#### 1E.1 Sentinel-2 Imagery Selection Pipeline (`DEC-008`) — 🟢 COMPLETE
+#### 1E.1 Sentinel-2 Imagery Selection Pipeline (`DEC-008`, `DEC-010`) — 🟢 COMPLETE
 - **Code Implementation:**
-  - Created [`app/satellite/sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/sentinel2.py) implementing:
-    - `get_sentinel2_collection(region, start_date, end_date, lookback_days=30, max_cloud_percentage=20.0, dataset='COPERNICUS/S2_SR_HARMONIZED') -> ee.ImageCollection`: Constructs spatially and temporally bounded, cloud-filtered collection sorted descending by acquisition time (`system:time_start`).
-    - `select_most_recent_sentinel2_image(...) -> EarthEngineResult`: Evaluates candidate scenes, selects `.first()`, extracts structured metadata into `Sentinel2ImageMetadata`, and handles `no_data` (`image_count = 0`) and errors cleanly.
-    - `get_most_recent_sentinel2_image(...) -> ee.Image`: Returns the un-evaluated `ee.Image` proxy for downstream band mathematics in Phase 1F.
+  - Implemented [`app/satellite/sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/sentinel2.py):
+    - `get_sentinel2_collection(region, start_date, end_date, lookback_days=30, max_cloud_percentage=20.0, dataset='COPERNICUS/S2_SR_HARMONIZED', quality_dataset='GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED', quality_band='cs_cdf', clear_threshold=0.60, min_usable_coverage=0.70, apply_quality_filter=True) -> ee.ImageCollection`: Constructs spatially/temporally bounded, cloud-filtered collection, links Cloud Score+, computes parcel usable coverage server-side, and filters by `min_usable_coverage` sorted descending (`system:time_start`).
+    - `select_most_recent_sentinel2_image(...) -> EarthEngineResult`: Evaluates qualifying candidate scenes, selects newest qualifying `.first()`, extracts metadata into `Sentinel2ImageMetadata` with `usable_coverage_percentage`, `clear_threshold`, and `quality_band`, handling `no_data` (`image_count = 0`) and errors cleanly.
+    - `get_most_recent_sentinel2_image(...) -> ee.Image`: Returns the quality-masked `ee.Image` proxy for downstream NDVI computation in Phase 1F.
+    - `mask_observation_quality(image, clear_threshold=0.60, quality_band='cs_cdf') -> ee.Image`: Applies pixel-level quality masking (`updateMask(cs_cdf >= clear_threshold)`).
+    - `calculate_usable_coverage(image, region, clear_threshold=0.60, quality_band='cs_cdf') -> ee.Number`: Computes parcel-level usable coverage ratio inside `AnalysisRegion` using `ee.Reducer.mean()` on binary mask.
     - `resolve_date_range(...) -> tuple[str, str]`: Standardizes and validates ISO string, date, and datetime inputs with positive lookback calculation.
-  - Updated [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py) adding [`Sentinel2ImageMetadata`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py#L34-L44) and `SatelliteImageMetadata` alias.
+  - Updated [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py) adding optional backward-compatible fields (`usable_coverage_percentage`, `clear_threshold`, `quality_band`) to `Sentinel2ImageMetadata`.
   - Exported all pipeline functions, constants, and types in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py).
 - **Unit Test Verification:**
-  - Created [`tests/unit/test_satellite_sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_sentinel2.py) containing **46 unit tests**.
-  - Verified: constant definitions, date parsing across multiple formats, lookback date calculations, start/end ordering validation, client-side proxy instantiation, parameter bounds checking, Pydantic model serialization, and error encapsulation.
-  - Execution result: **46 passed** (`uv run pytest tests/unit/test_satellite_sentinel2.py -v`).
+  - Created [`tests/unit/test_satellite_sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_sentinel2.py) (46 tests) and [`tests/unit/test_satellite_observation_quality.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_observation_quality.py) (20 tests).
+  - Total unit test suite: **190 passed** (`uv run pytest tests/unit/ -v`).
 - **Live Earth Engine Integration Testing:**
-  - Extended [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) with 4 live pipeline tests (Tests 6–9):
-    - **Test 6 (`test_select_most_recent_sentinel2_image_success`):** Over Ludhiana test fixture (`[75.7196, 30.9157]`, 100m radius, Aug 2026, cloud < 20%), returned `image_count = 1` scene from `2026-08-16T05:50:41.321000+00:00` (`Sentinel-2A`, cloud $\approx 10.995\%$) with `status="success"`.
+  - Extended [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py) with 8 live pipeline and quality tests (Tests 6–9 and Tests 13–16):
+    - **Test 6 (`test_select_most_recent_sentinel2_image_success`):** Over Ludhiana test fixture (`[75.7196, 30.9157]`, 100m radius, Aug 2026, cloud < 20%), returned `image_count >= 1` scene from `2026-08-16T05:50:41.321000+00:00` with `status="success"`.
     - **Test 7 (`test_select_most_recent_sentinel2_image_no_data`):** Over historical pre-Sentinel-2 dates (Jan 1990), returned `image_count = 0` mapped cleanly to `status="no_data"`.
-    - **Test 8 (`test_sentinel2_candidate_ordering_and_most_recent_selection`):** Verified multiple candidate scenes over 2 months are sorted strictly descending by acquisition timestamp and that `select_most_recent_sentinel2_image()` selects the newest candidate.
+    - **Test 8 (`test_sentinel2_candidate_ordering_and_most_recent_selection`):** Verified candidate scenes are sorted strictly descending by acquisition timestamp.
     - **Test 9 (`test_select_most_recent_sentinel2_image_error`):** Verified invalid asset IDs produce `status="error"` with `EEException` details.
-  - Total test suite: **105 passed** in 70.95s.
+    - **Test 13 (`test_cloud_score_plus_linkage_and_band_association`):** Verified candidate image contains optical bands (`B8`, `B4`) and Cloud Score+ quality band (`cs_cdf`), with valid sampled scores.
+    - **Test 14 (`test_observation_quality_selection_success`):** Verified selection produces `usable_coverage_percentage >= 70.0%`, `clear_threshold=0.60`, `quality_band="cs_cdf"`.
+    - **Test 15 (`test_observation_quality_masked_ndvi_evaluation`):** Verified NDVI computed on quality-masked image evaluates strictly in $[-1.0, 1.0]$.
+    - **Test 16 (`test_observation_quality_strict_threshold_rejection`):** Verified zero qualifying candidates return `status="no_data"`, `image_count=0` without fabricating NDVI.
+  - Total integration test suite: **16 passed** in 40.34s.
+  - Total combined test suite: **219 passed** (0 failed).
 - **Documented Limitations & Scope Boundaries:**
-  - **Scene-Level Cloud Metadata vs Observation Quality:** `cloud_percentage` represents scene-level metadata (`CLOUDY_PIXEL_PERCENTAGE`). Fine-grained parcel-level observation quality is governed by Cloud Score+ (`DEC-010`).
-  - **Observation Quality Strategy Locked:** Pixel-level observation quality via Cloud Score+ `GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED` (`cs_cdf >= 0.60`, parcel usable coverage `>= 0.70`) is locked in `DEC-010` and conceptually part of the imagery selection pipeline.
+  - **Observation Quality Strategy Verified:** Pixel-level observation quality via Cloud Score+ `GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED` (`cs_cdf >= 0.60`, parcel usable coverage `>= 0.70`) is implemented and live-verified.
   - **Terminology:** Avoids subjective terms like *"best image"*; strictly uses *"most recent usable image"*.
   - **Missing Imagery:** Missing observations or scenes with insufficient usable coverage are strictly represented as `no_data`, **never** as NDVI=0.
   - **Strict Scope Preserved:** Regional NDVI summary statistics (Phase 1G), multi-temporal time-series, historical baseline comparisons, Dynamic World / NDWI, MCP server tool upgrades, and farmer UI components remain deferred.

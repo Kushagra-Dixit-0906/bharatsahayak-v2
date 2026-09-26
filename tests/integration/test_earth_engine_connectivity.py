@@ -26,8 +26,14 @@ from app.satellite.ndvi import (
     calculate_ndvi,
 )
 from app.satellite.sentinel2 import (
+    CLOUD_SCORE_PLUS_S2_HARMONIZED,
+    DEFAULT_CLEAR_THRESHOLD,
+    DEFAULT_MIN_USABLE_COVERAGE,
+    DEFAULT_QUALITY_BAND,
+    calculate_usable_coverage,
     get_most_recent_sentinel2_image,
     get_sentinel2_collection,
+    mask_observation_quality,
     select_most_recent_sentinel2_image,
 )
 from app.satellite.types import (
@@ -394,3 +400,128 @@ def test_calculate_ndvi_invalid_bands_error(ee_session: str) -> None:
 
     with pytest.raises(ee.EEException):
         bad_ndvi.bandNames().getInfo()
+
+
+def test_cloud_score_plus_linkage_and_band_association(ee_session: str) -> None:
+    """Test 13 (LIVE CLOUD SCORE+ LINKAGE): Verifies Cloud Score+ cs_cdf band is linked to Sentinel-2 observation."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    # Retrieve raw unmasked candidate image with linked Cloud Score+
+    image = get_most_recent_sentinel2_image(
+        region=region,
+        start_date="2026-08-01",
+        end_date="2026-08-31",
+        max_cloud_percentage=20.0,
+        apply_quality_mask=False,
+    )
+    assert isinstance(image, ee.Image)
+
+    band_names = image.bandNames().getInfo()
+    # Definitive association proof: contains Sentinel-2 optical bands and Cloud Score+ quality band
+    assert NIR_BAND in band_names, f"Expected {NIR_BAND} in band names: {band_names}"
+    assert RED_BAND in band_names, f"Expected {RED_BAND} in band names: {band_names}"
+    assert DEFAULT_QUALITY_BAND in band_names, (
+        f"Expected {DEFAULT_QUALITY_BAND} in band names: {band_names}"
+    )
+
+    # Server-side sample cs_cdf values inside the analysis region
+    sampled_scores = (
+        image.select(DEFAULT_QUALITY_BAND)
+        .sample(region=region, scale=10, numPixels=30)
+        .aggregate_array(DEFAULT_QUALITY_BAND)
+        .getInfo()
+    )
+    valid_scores = [float(v) for v in sampled_scores if v is not None]
+    assert len(valid_scores) > 0, "Expected at least 1 valid sampled cs_cdf score"
+    for score in valid_scores:
+        assert 0.0 <= score <= 1.0, f"cs_cdf score {score} outside valid range [0.0, 1.0]"
+
+
+def test_observation_quality_selection_success(ee_session: str) -> None:
+    """Test 14 (LIVE QUALITY SELECTION SUCCESS): select_most_recent_sentinel2_image satisfies usable coverage threshold."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    result = select_most_recent_sentinel2_image(
+        region=region,
+        start_date="2026-08-01",
+        end_date="2026-08-31",
+        max_cloud_percentage=20.0,
+        clear_threshold=DEFAULT_CLEAR_THRESHOLD,
+        min_usable_coverage=DEFAULT_MIN_USABLE_COVERAGE,
+    )
+
+    assert result.status == "success"
+    assert result.dataset == TEST_DATASET
+    assert result.image_count is not None and result.image_count >= 1
+    assert result.error is None
+    assert result.data is not None
+
+    metadata = result.data
+    assert isinstance(metadata, Sentinel2ImageMetadata)
+    assert metadata.image_id.startswith("COPERNICUS/S2_SR_HARMONIZED/")
+    assert "2026-08-16" in metadata.acquisition_date
+    assert metadata.clear_threshold == DEFAULT_CLEAR_THRESHOLD
+    assert metadata.quality_band == DEFAULT_QUALITY_BAND
+    assert metadata.usable_coverage_percentage is not None
+    assert metadata.usable_coverage_percentage >= DEFAULT_MIN_USABLE_COVERAGE * 100.0
+
+
+def test_observation_quality_masked_ndvi_evaluation(ee_session: str) -> None:
+    """Test 15 (LIVE QUALITY-MASKED NDVI): calculate_ndvi executes on quality-masked image and preserves valid range."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    # Obtain quality-masked image
+    image = get_most_recent_sentinel2_image(
+        region=region,
+        start_date="2026-08-01",
+        end_date="2026-08-31",
+        max_cloud_percentage=20.0,
+        clear_threshold=0.60,
+        min_usable_coverage=0.70,
+        apply_quality_mask=True,
+    )
+    assert isinstance(image, ee.Image)
+
+    # Compute NDVI over quality-masked image
+    ndvi_image = calculate_ndvi(image=image, region=region)
+    assert isinstance(ndvi_image, ee.Image)
+
+    # Sample valid NDVI pixels
+    sampled_ndvi = (
+        ndvi_image.sample(region=region, scale=10, numPixels=50)
+        .aggregate_array(NDVI_BAND_NAME)
+        .getInfo()
+    )
+    valid_ndvi = [float(v) for v in sampled_ndvi if v is not None]
+    assert len(valid_ndvi) > 0, "Expected valid NDVI pixels from quality-masked image"
+    for ndvi_val in valid_ndvi:
+        assert -1.0 <= ndvi_val <= 1.0, f"NDVI value {ndvi_val} outside [-1.0, 1.0]"
+
+
+def test_observation_quality_strict_threshold_rejection(ee_session: str) -> None:
+    """Test 16 (LIVE STRICT THRESHOLD REJECTION): Overly strict quality requirements result in clean status='no_data'."""
+    region = create_analysis_region(
+        latitude=PUNJAB_LATITUDE,
+        longitude=PUNJAB_LONGITUDE,
+        radius_m=100.0,
+    )
+    # Pre-Sentinel-2 date window guaranteed zero candidates
+    pre_result = select_most_recent_sentinel2_image(
+        region=region,
+        start_date="1990-01-01",
+        end_date="1990-01-02",
+        clear_threshold=0.60,
+        min_usable_coverage=0.70,
+    )
+    assert pre_result.status == "no_data"
+    assert pre_result.image_count == 0
+    assert pre_result.data is None

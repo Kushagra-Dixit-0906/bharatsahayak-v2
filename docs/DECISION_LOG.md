@@ -591,10 +591,30 @@ Prior to DEC-010:
 - **Phase 3 (Water & Additional Indices):** Reuses the same Cloud Score+ quality masking pipeline for NDWI, EVI, and SAVI calculations.
 
 #### 📊 Current Status & Next Steps
-- **Status:** 🟢 **DECISION LOCKED (Documentation & Boundaries Recorded)**
+- **Status:** 🟢 **IMPLEMENTED & LIVE VERIFIED (DEC-010 Complete)**
+- **Verified Implementation:**
+  - Extended [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py) adding backward-compatible optional fields (`usable_coverage_percentage`, `clear_threshold`, `quality_band`) to `Sentinel2ImageMetadata`.
+  - Updated [`app/satellite/sentinel2.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/sentinel2.py):
+    - Added constants: `CLOUD_SCORE_PLUS_S2_HARMONIZED = "GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED"`, `DEFAULT_QUALITY_BAND = "cs_cdf"`, `DEFAULT_CLEAR_THRESHOLD = 0.60`, `DEFAULT_MIN_USABLE_COVERAGE = 0.70`.
+    - Added helpers: `mask_observation_quality(image, clear_threshold, quality_band)` and `calculate_usable_coverage(image, region, clear_threshold, quality_band)`.
+    - Enhanced `get_sentinel2_collection()` to link `GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED` by `system:index`, compute `USABLE_COVERAGE` per scene via `ee.Reducer.mean()` on binary `cs_cdf >= clear_threshold` mask, and filter candidates where `USABLE_COVERAGE >= min_usable_coverage`.
+    - Enhanced `get_most_recent_sentinel2_image()` to return quality-masked observation raster for downstream consumption.
+    - Enhanced `select_most_recent_sentinel2_image()` to return candidate count, populated metadata, or structured `status="no_data"` when no candidate meets quality criteria.
+  - Exported all new constants and helpers in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py).
+  - Confirmed zero modifications required in [`app/satellite/ndvi.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/ndvi.py).
+- **Unit Test Verification:**
+  - Created [`tests/unit/test_satellite_observation_quality.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_observation_quality.py) with 20 unit tests covering constants, parameter bounds validation, Pydantic metadata validation, proxy creation without network calls, and backward compatibility.
+  - Total unit test suite: **190 passed** (`uv run pytest tests/unit/ -v`).
+- **Live Earth Engine Verification:**
+  - Added 4 live integration tests (Tests 13–16) in [`tests/integration/test_earth_engine_connectivity.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_earth_engine_connectivity.py):
+    - **Test 13 (`test_cloud_score_plus_linkage_and_band_association`):** Live verified that candidate image contains both Sentinel-2 optical bands (`B8`, `B4`) and Cloud Score+ quality band (`cs_cdf`), with sampled scores strictly in $[0.0, 1.0]$.
+    - **Test 14 (`test_observation_quality_selection_success`):** Over Ludhiana test fixture (`[75.7196, 30.9157]`, 100m radius, Aug 2026), selected scene from `2026-08-16T05:50:41` with `status="success"`, `clear_threshold=0.60`, `quality_band="cs_cdf"`, and `usable_coverage_percentage >= 70.0%`.
+    - **Test 15 (`test_observation_quality_masked_ndvi_evaluation`):** Computed NDVI on the quality-masked observation raster; sampled valid pixels evaluated strictly in $[-1.0, 1.0]$.
+    - **Test 16 (`test_observation_quality_strict_threshold_rejection`):** Verified pre-Sentinel-2 date window returns `status="no_data"`, `image_count=0` without fabricating artificial NDVI.
+  - Total integration test suite: **16 passed** in 40.34s.
+  - Total combined test suite: **219 passed** (0 failed).
 - **Strict Scope Boundaries Maintained:**
-  - Implementation code in `app/satellite/` has **NOT** been modified.
-  - Phase 1G implementation has **NOT** started.
-  - Cloud Score+ implementation is **NOT** active yet in runtime.
-  - MCP tools, Gemini prompts, and UI components remain deferred.
-- **Next Step:** Incorporate observation quality specifications into the satellite pipeline and proceed with Subphase 1G — Regional NDVI Statistics.
+  - Regional NDVI summary statistics (mean, median, min, max) are **NOT** implemented yet (Subphase 1G).
+  - Crop-health classification thresholds are **NOT** implemented yet.
+  - Gemini prompt reasoning, MCP tool changes, and farmer-facing UI components remain deferred.
+- **Next Step:** Subphase 1G — Regional NDVI Statistics (Earth Engine zonal reducers computing mean, median, min, max over farm geometry).

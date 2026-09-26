@@ -25,11 +25,17 @@ from .ndvi import (
     compute_ndvi,
 )
 from .sentinel2 import (
+    CLOUD_SCORE_PLUS_S2_HARMONIZED,
+    DEFAULT_CLEAR_THRESHOLD,
     DEFAULT_LOOKBACK_DAYS,
     DEFAULT_MAX_CLOUD_PERCENTAGE,
+    DEFAULT_MIN_USABLE_COVERAGE,
+    DEFAULT_QUALITY_BAND,
     SENTINEL2_SR_HARMONIZED,
+    calculate_usable_coverage,
     get_most_recent_sentinel2_image,
     get_sentinel2_collection,
+    mask_observation_quality,
     resolve_date_range,
     select_most_recent_sentinel2_image,
 )
@@ -45,18 +51,24 @@ from .types import (
 )
 
 __all__ = [
+    "CLOUD_SCORE_PLUS_S2_HARMONIZED",
     "DEFAULT_ANALYSIS_RADIUS_M",
+    "DEFAULT_CLEAR_THRESHOLD",
     "DEFAULT_LOOKBACK_DAYS",
     "DEFAULT_MAX_CLOUD_PERCENTAGE",
+    "DEFAULT_MIN_USABLE_COVERAGE",
+    "DEFAULT_QUALITY_BAND",
     "NDVI_BAND_NAME",
     "NIR_BAND",
     "RED_BAND",
     "SENTINEL2_SR_HARMONIZED",
     "calculate_ndvi",
+    "calculate_usable_coverage",
     "compute_ndvi",
     "create_analysis_region",
     "get_most_recent_sentinel2_image",
     "get_sentinel2_collection",
+    "mask_observation_quality",
     "resolve_date_range",
     "select_most_recent_sentinel2_image",
     "EarthEngineError",

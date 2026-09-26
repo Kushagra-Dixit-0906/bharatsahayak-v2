@@ -41,6 +41,9 @@ class Sentinel2ImageMetadata(BaseModel):
     mgrs_tile: str | None = None
     product_id: str | None = None
     system_time_start: int | None = None
+    usable_coverage_percentage: float | None = Field(default=None, ge=0.0, le=100.0)
+    clear_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    quality_band: str | None = None
 
 
 SatelliteImageMetadata = Sentinel2ImageMetadata
