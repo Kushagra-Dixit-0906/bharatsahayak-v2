@@ -7,6 +7,29 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
+### 🟢 Complete & Verified — Phase 4: Multi-Source Evidence Fusion (`DEC-022` — 42 Unit Tests + 1 Live Integration Test)
+- **Multi-Source Evidence Fusion Envelope & Domain Contracts ([`app/fusion/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/fusion/types.py)):**
+  - Implemented strongly typed `AgriculturalEnvironmentalEvidence` root envelope (`pipeline_version="4.0.0"`) with direct composition of validated domain models: `vegetation: HistoricalNdviAnalysis`, `reanalysis: ERA5LandAnalysis`, `rainfall: CHIRPSRainfallAnalysis`, `land_cover: DynamicWorldAnalysis`.
+  - Defined 4-tier `FusionStatus` literal (`success`, `partial`, `no_data`, `error`) and exact availability counters (`sources_requested_count=4`, `sources_available_count`, `sources_fully_available_count`, `is_fully_available`).
+  - Added `@property current_vegetation` returning `vegetation.current` for direct backward-compatible access to current NDVI without object duplication.
+  - Enforced strict model immutability (`frozen=True`, `extra="forbid"`) and model validator enforcing count bounds and status-error invariants.
+- **Pure Mathematical & Assembly Engine ([`app/fusion/fusion.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/fusion/fusion.py)):**
+  - Implemented `fuse_agricultural_environmental_evidence(...)` with zero Earth Engine imports, zero network calls, and zero filesystem I/O.
+  - Implemented deterministic subsystem availability evaluation:
+    - Treats `status == "success"` as FULL.
+    - Treats `HistoricalNdviAnalysis.status == "insufficient_history"` with valid current NDVI as PARTIAL availability (preserving valid instantaneous NDVI).
+    - Evaluates 4-tier fusion matrix (`success` if all 4 FULL; `partial` if usable evidence exists; `no_data` if all 4 `no_data`; `error` if all 4 `error` or mixed zero-usable).
+  - Preserves all input domain objects, missing fields (`None`), native spatial resolutions (10m, 5.566km, 11.1km), observation dates, and data lags without mutation or synthetic scoring.
+- **Root Orchestration Pipeline ([`app/fusion/pipeline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/fusion/pipeline.py)):**
+  - Implemented `fetch_agricultural_environmental_evidence(...)` coordinating sequential sub-pipeline executions: Current NDVI $\to$ Historical NDVI (with Phase 1 pre-computed result reuse) $\to$ ERA5-Land $\to$ CHIRPS $\to$ Dynamic World $\to$ Pure Fusion Assembly.
+  - Implemented failure isolation: subsystem execution failures or unhandled exceptions are captured into structured fallback error domain models without aborting healthy subsystems.
+- **Public API Exports & Test Infrastructure ([`app/fusion/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/fusion/__init__.py)):**
+  - Exported `AgriculturalEnvironmentalEvidence`, `FusionStatus`, `fuse_agricultural_environmental_evidence`, `fetch_agricultural_environmental_evidence`.
+  - Created 7 deterministic offline JSON scenarios in `tests/fixtures/fusion/` and typed loader in `tests/fixtures/fusion_fixtures.py`.
+  - Added unit test suites `tests/unit/test_fusion_types.py` (11 tests), `tests/unit/test_fusion_assembly.py` (20 design scenarios), `tests/unit/test_fusion_pipeline.py` (11 tests).
+  - Added live Earth Engine integration test in `tests/integration/test_fusion_integration.py` (1 live test passing against `bharatsahayak-v2`).
+- **Regression Verification:** Full repository test suite passed with 919 unit tests passing (0 failures, 0 regressions).
+
 ### 🟢 Complete & Frozen — Phase 3: Additional Agricultural & Environmental Data Sources (Subphases 3A, 3B & 3C Complete & Verified — `DEC-018`, `DEC-019`, `DEC-020`, `DEC-021`; Phase 3D Deferred)
 - **Phase 3 Scope Freeze & Phase 3D Deferral (🔴 DEFERRED):**
   - Formally froze the environmental data foundation for the initial prototype across 5 complementary evidence streams (Sentinel-2 NDVI, historical NDVI anomaly, ERA5-Land reanalysis, CHIRPS precipitation, Dynamic World land cover).

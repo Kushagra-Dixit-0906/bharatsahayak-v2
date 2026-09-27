@@ -1773,7 +1773,70 @@ To enrich the environmental intelligence profile for the farmer's observation re
 
 #### 📊 Current Status & Next Steps
 - **Status:** 🟢 **IMPLEMENTED & VERIFIED (Phase 3C Complete)**
-- **Next Step:** Phase 3D (Unified Context Contract) or Phase 4 (Multi-Source Data Fusion) upon authorization.
+- **Next Step:** Phase 4 (Multi-Source Evidence Fusion) upon authorization.
+
+---
+
+### DEC-022: Multi-Source Evidence Fusion Architecture (Phase 4)
+
+- **Date:** 2026-09-28
+- **Status:** 🟢 **APPROVED / IMPLEMENTED**
+- **Deciders:** Core Engineering Team, Agricultural Analytics Working Group
+- **Consulted:** Earth Engine Integration Team, Multi-Agent Orchestration Team
+- **Informed:** Product Strategy
+
+#### 🎯 Context & Problem Statement
+With the completion of Phases 1, 2, 3A, 3B, and 3C, the system possesses five independent satellite and environmental evidence subsystems (Sentinel-2 current NDVI, 3-year historical baseline/anomaly, ERA5-Land reanalysis, CHIRPS daily precipitation, and Dynamic World land-cover context). Phase 4 must unify these disparate observational streams into a single strongly typed domain payload (`AgriculturalEnvironmentalEvidence`) for downstream consumption by Gemini 2.5 Flash reasoning advisors in Phase 5 and MCP tools in Phase 6.
+
+#### ⚖️ Decision Drivers
+1. **Core Architectural Principle:** *"Data sufficiency takes priority over dataset accumulation."*
+2. **Zero Schema Duplication:** Direct composition of validated domain models (`HistoricalNdviAnalysis`, `ERA5LandAnalysis`, `CHIRPSRainfallAnalysis`, `DynamicWorldAnalysis`) rather than unpacking ~100+ scalar fields into a flat model.
+3. **Deterministic Status Resolution:** Support graceful partial failure (`success`, `partial`, `no_data`, `error`) without swallowing errors or hallucinating missing data.
+4. **Spatial & Temporal Fidelity:** Preserve each dataset's native spatial resolution ($10\text{ m}$, $5.566\text{ km}$, $11.1\text{ km}$) and true dynamic publication latency (`data_lag_days`) anchored to a shared `reference_date` and `AnalysisRegion`.
+5. **Strict Scientific Boundaries:** Evidence aggregation only; strictly no crop disease diagnosis, drought scoring, irrigation/fertilizer prescriptions, yield predictions, or synthetic confidence scores.
+6. **Two-Tier Architecture:** Separate pure local assembly logic (100% offline testable) from the root orchestration pipeline coordinating Earth Engine queries.
+
+#### 🛠️ Architectural Decision & Invariants
+1. **Domain Contract (`app/fusion/types.py`):**
+   - Implement `AgriculturalEnvironmentalEvidence` containing `region: AnalysisRegionMetadata`, `reference_date: date`, `vegetation: HistoricalNdviAnalysis`, `reanalysis: ERA5LandAnalysis`, `rainfall: CHIRPSRainfallAnalysis`, `land_cover: DynamicWorldAnalysis`, `status: FusionStatus`, `sources_requested_count: int` (default 4), `sources_available_count: int`, `sources_fully_available_count: int`, `is_fully_available: bool`, `pipeline_version: str = "4.0.0"`, and `error: EarthEngineError | None`.
+   - Frozen, immutable Pydantic model (`frozen=True`, `extra="forbid"`).
+   - Computed property `current_vegetation` returns `self.vegetation.current` cleanly without duplication.
+2. **Subsystem Availability Semantics:**
+   - **FULL Availability:** `status == "success"`.
+   - **PARTIAL Availability:** Subsystem has usable evidence, but not complete (e.g. `HistoricalNdviAnalysis` with `status == "insufficient_history"` where current NDVI exists but multi-year baseline could not be formed).
+   - **UNAVAILABLE:** `status == "no_data"` or `status == "error"`.
+3. **Status Resolution Matrix (`FusionStatus`):**
+   - `success`: All 4 subsystems return `status == "success"` (`sources_available_count == 4`, `sources_fully_available_count == 4`, `is_fully_available = True`).
+   - `partial`: At least 1 subsystem has usable evidence (FULL or PARTIAL), but not all 4 are FULL (`1 <= sources_available_count <= 4`, `sources_fully_available_count < 4`, `is_fully_available = False`). Preserves all valid sub-models.
+   - `no_data`: All 4 subsystems return `no_data` (`sources_available_count == 0`, `is_fully_available = False`).
+   - `error`: Zero usable evidence exists and at least 1 subsystem failed with `error` (or top-level execution crash occurred before sub-pipeline execution) (`sources_available_count == 0`, `is_fully_available = False`).
+4. **Two-Tier Module Structure:**
+   - **Tier 1 (`app/fusion/fusion.py`):** Pure Python assembly function `fuse_agricultural_environmental_evidence(...)` executing deterministic status resolution, source counting, and envelope construction with zero Earth Engine imports.
+   - **Tier 2 (`app/fusion/pipeline.py`):** Root orchestrator `fetch_agricultural_environmental_evidence(...)` coordinating sub-pipelines sequentially, passing Phase 1 `RegionalNdviAnalysis` into existing Phase 2 historical analysis APIs, and handling exceptions gracefully into structured fallback error objects.
+5. **Spatial Invariant:**
+   - All subsystems query the identical $100\text{ m}$ circular `AnalysisRegion`. Sub-contracts preserve their true native resolution (`spatial_resolution_km=11.1`, `spatial_resolution_km=5.566`, `spatial_resolution_m=10.0`). Zero artificial resampling or sub-pixel weighting.
+6. **Temporal Invariant:**
+   - Subsystems receive the identical `reference_date: date`. Each source records its true acquisition date and derived `data_lag_days`. Zero timestamp fabrication.
+
+#### 💡 Rationale
+- Direct composition provides 100% type safety and zero maintenance overhead when upstream models evolve.
+- The two-tier architecture allows comprehensive offline unit testing across all partial-failure combinations without live Earth Engine credentials.
+- Reusing the Phase 1 current observation directly in Phase 2 leverages existing sealed APIs without redundant optical satellite queries in Earth Engine.
+
+#### 📊 Implementation & Verification Summary
+- **Implementation Status:** 🟢 **IMPLEMENTED & VERIFIED**
+- **Artifacts:**
+  - `app/fusion/types.py` (Domain contract, immutability, `FusionStatus`, `current_vegetation` property)
+  - `app/fusion/fusion.py` (Pure offline Tier 1 assembly and status matrix resolution engine)
+  - `app/fusion/pipeline.py` (Tier 2 root orchestrator with Phase 1 $\to$ Phase 2 reuse and error isolation)
+  - `app/fusion/__init__.py` (Public package exports)
+  - `tests/fixtures/fusion/` (7 deterministic offline JSON scenarios)
+  - `tests/unit/test_fusion_types.py`, `tests/unit/test_fusion_assembly.py`, `tests/unit/test_fusion_pipeline.py` (42 unit tests passed)
+  - `tests/integration/test_fusion_integration.py` (Live Earth Engine integration test passed)
+- **Full Repository Suite:** 919 unit tests passed (0 regressions).
+
+
+
 
 
 

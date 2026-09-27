@@ -1,0 +1,339 @@
+{
+  "region": {
+    "latitude": 30.901,
+    "longitude": 75.8573,
+    "radius_m": 100.0,
+    "geometry_type": "PointBuffer",
+    "scale_m": 10.0
+  },
+  "reference_date": "2026-09-20",
+  "vegetation": {
+    "current": {
+      "observation": {
+        "image_id": "COPERNICUS/S2_SR_HARMONIZED/20260918T054641_20260918T055819_T43SBT",
+        "acquisition_date": "2026-09-18",
+        "cloud_percentage": 4.5,
+        "usable_coverage_percentage": 98.2,
+        "clear_threshold": 0.6,
+        "quality_band": "cs_cdf"
+      },
+      "quality": {
+        "quality_dataset": "GOOGLE/CLOUD_SCORE_PLUS/V1/S2_HARMONIZED",
+        "min_usable_coverage_threshold": 0.7,
+        "max_scene_cloud_threshold": 20.0,
+        "quality_mask_applied": true,
+        "is_usable": true
+      },
+      "freshness": {
+        "reference_date": "2026-09-20",
+        "observation_age_days": 2,
+        "lookback_window_days": 30
+      },
+      "region": {
+        "latitude": 30.901,
+        "longitude": 75.8573,
+        "radius_m": 100.0,
+        "geometry_type": "PointBuffer",
+        "scale_m": 10.0
+      },
+      "statistics": {
+        "mean": 0.7,
+        "median": 0.71,
+        "min": 0.62,
+        "max": 0.78,
+        "valid_pixel_count": 314
+      },
+      "pipeline_version": "1.0.0"
+    },
+    "historical_observations": [
+      {
+        "target_year": 2025,
+        "temporal_window": {
+          "target_year": 2025,
+          "anchor_date": "2025-09-18",
+          "start_date": "2025-09-03",
+          "end_date": "2025-10-03",
+          "window_half_days": 15,
+          "ee_filter_start": "2025-09-03",
+          "ee_filter_end": "2025-10-04",
+          "reference_doy": 261,
+          "crosses_year_boundary": false
+        },
+        "available_usable_scenes_count": 3,
+        "selected_scenes_count": 3,
+        "selected_observations": [
+          {
+            "image_id": "COPERNICUS/S2_SR_HARMONIZED/20250918T054641",
+            "acquisition_date": "2025-09-18T05:58:19+00:00",
+            "target_year": 2025,
+            "cloud_percentage": 5.0,
+            "usable_coverage_percentage": 95.0,
+            "selection_rank": 1
+          },
+          {
+            "image_id": "COPERNICUS/S2_SR_HARMONIZED/20250913T054641",
+            "acquisition_date": "2025-09-13T05:58:19+00:00",
+            "target_year": 2025,
+            "cloud_percentage": 6.0,
+            "usable_coverage_percentage": 94.0,
+            "selection_rank": 2
+          },
+          {
+            "image_id": "COPERNICUS/S2_SR_HARMONIZED/20250908T054641",
+            "acquisition_date": "2025-09-08T05:58:19+00:00",
+            "target_year": 2025,
+            "cloud_percentage": 4.0,
+            "usable_coverage_percentage": 96.0,
+            "selection_rank": 3
+          }
+        ],
+        "statistics": {
+          "mean": 0.65,
+          "median": 0.64,
+          "min": 0.58,
+          "max": 0.72,
+          "valid_pixel_count": 314
+        },
+        "status": "success",
+        "composite_method": "pixel_median",
+        "pipeline_version": "1.0.0"
+      },
+      {
+        "target_year": 2024,
+        "temporal_window": {
+          "target_year": 2024,
+          "anchor_date": "2024-09-18",
+          "start_date": "2024-09-03",
+          "end_date": "2024-10-03",
+          "window_half_days": 15,
+          "ee_filter_start": "2024-09-03",
+          "ee_filter_end": "2024-10-04",
+          "reference_doy": 262,
+          "crosses_year_boundary": false
+        },
+        "available_usable_scenes_count": 2,
+        "selected_scenes_count": 2,
+        "selected_observations": [
+          {
+            "image_id": "COPERNICUS/S2_SR_HARMONIZED/20240918T054641",
+            "acquisition_date": "2024-09-18T05:58:19+00:00",
+            "target_year": 2024,
+            "cloud_percentage": 5.0,
+            "usable_coverage_percentage": 95.0,
+            "selection_rank": 1
+          },
+          {
+            "image_id": "COPERNICUS/S2_SR_HARMONIZED/20240913T054641",
+            "acquisition_date": "2024-09-13T05:58:19+00:00",
+            "target_year": 2024,
+            "cloud_percentage": 6.0,
+            "usable_coverage_percentage": 94.0,
+            "selection_rank": 2
+          }
+        ],
+        "statistics": {
+          "mean": 0.62,
+          "median": 0.61,
+          "min": 0.55,
+          "max": 0.68,
+          "valid_pixel_count": 314
+        },
+        "status": "success",
+        "composite_method": "pixel_median",
+        "pipeline_version": "1.0.0"
+      },
+      {
+        "target_year": 2023,
+        "temporal_window": {
+          "target_year": 2023,
+          "anchor_date": "2023-09-18",
+          "start_date": "2023-09-03",
+          "end_date": "2023-10-03",
+          "window_half_days": 15,
+          "ee_filter_start": "2023-09-03",
+          "ee_filter_end": "2023-10-04",
+          "reference_doy": 261,
+          "crosses_year_boundary": false
+        },
+        "available_usable_scenes_count": 2,
+        "selected_scenes_count": 2,
+        "selected_observations": [
+          {
+            "image_id": "COPERNICUS/S2_SR_HARMONIZED/20230918T054641",
+            "acquisition_date": "2023-09-18T05:58:19+00:00",
+            "target_year": 2023,
+            "cloud_percentage": 5.0,
+            "usable_coverage_percentage": 95.0,
+            "selection_rank": 1
+          },
+          {
+            "image_id": "COPERNICUS/S2_SR_HARMONIZED/20230913T054641",
+            "acquisition_date": "2023-09-13T05:58:19+00:00",
+            "target_year": 2023,
+            "cloud_percentage": 6.0,
+            "usable_coverage_percentage": 94.0,
+            "selection_rank": 2
+          }
+        ],
+        "statistics": {
+          "mean": 0.59,
+          "median": 0.58,
+          "min": 0.52,
+          "max": 0.65,
+          "valid_pixel_count": 314
+        },
+        "status": "success",
+        "composite_method": "pixel_median",
+        "pipeline_version": "1.0.0"
+      }
+    ],
+    "baseline": {
+      "median": 0.62,
+      "mean": 0.62,
+      "standard_deviation": 0.0245,
+      "min": 0.59,
+      "max": 0.65,
+      "represented_years": [2025, 2024, 2023],
+      "annual_values": [0.65, 0.62, 0.59],
+      "annual_count": 3
+    },
+    "sufficiency": {
+      "requested_years_count": 3,
+      "represented_years_count": 3,
+      "minimum_required_years": 2,
+      "is_sufficient": true,
+      "represented_years": [2025, 2024, 2023],
+      "missing_years": [],
+      "sufficiency_notes": "Sufficient baseline"
+    },
+    "anomaly": {
+      "current_mean": 0.70,
+      "baseline_median": 0.62,
+      "absolute_departure": 0.08,
+      "percentage_departure": 12.9,
+      "historical_mean": 0.62,
+      "historical_std_dev": 0.0245,
+      "z_score": 3.27,
+      "departure_band": "Strong Positive Spectral Departure"
+    },
+    "status": "success",
+    "pipeline_version": "2.0.0"
+  },
+  "reanalysis": {
+    "region": {
+      "latitude": 30.901,
+      "longitude": 75.8573,
+      "radius_m": 100.0,
+      "geometry_type": "PointBuffer",
+      "scale_m": 10.0
+    },
+    "requested_end_date": "2026-09-20",
+    "latest_available_date": "2026-09-15",
+    "data_lag_days": 5,
+    "recent_7_days": {
+      "window_name": "recent_7_days",
+      "window_start": "2026-09-09",
+      "window_end": "2026-09-15",
+      "days_requested": 7,
+      "days_available": 7,
+      "is_complete": true,
+      "mean_temperature_c": 28.5,
+      "min_temperature_c": 22.1,
+      "max_temperature_c": 34.2,
+      "total_precipitation_mm": 2.5,
+      "mean_soil_water_layer_1": 0.28,
+      "total_runoff_mm": 0.0
+    },
+    "recent_30_days": {
+      "window_name": "recent_30_days",
+      "window_start": "2026-08-17",
+      "window_end": "2026-09-15",
+      "days_requested": 30,
+      "days_available": 30,
+      "is_complete": true,
+      "mean_temperature_c": 29.1,
+      "min_temperature_c": 21.5,
+      "max_temperature_c": 36.8,
+      "total_precipitation_mm": 45.0,
+      "mean_soil_water_layer_1": 0.27,
+      "total_runoff_mm": 1.2
+    },
+    "recent_90_days": {
+      "window_name": "recent_90_days",
+      "window_start": "2026-06-18",
+      "window_end": "2026-09-15",
+      "days_requested": 90,
+      "days_available": 90,
+      "is_complete": true,
+      "mean_temperature_c": 31.0,
+      "min_temperature_c": 20.0,
+      "max_temperature_c": 41.5,
+      "total_precipitation_mm": 210.0,
+      "mean_soil_water_layer_1": 0.26,
+      "total_runoff_mm": 12.0
+    },
+    "daily_observations": [
+      {
+        "observation_date": "2026-09-15",
+        "temperature_c": 28.5,
+        "precipitation_mm": 2.5,
+        "volumetric_soil_water_layer_1": 0.28,
+        "runoff_sum_mm": 0.0
+      }
+    ],
+    "dataset": "ECMWF/ERA5_LAND/DAILY_AGGR",
+    "spatial_resolution_km": 11.1,
+    "status": "success",
+    "pipeline_version": "3.0.0"
+  },
+  "rainfall": {
+    "region": {
+      "latitude": 30.901,
+      "longitude": 75.8573,
+      "radius_m": 100.0,
+      "geometry_type": "PointBuffer",
+      "scale_m": 10.0
+    },
+    "requested_end_date": "2026-09-20",
+    "latest_available_date": null,
+    "data_lag_days": null,
+    "recent_7_days": null,
+    "recent_30_days": null,
+    "recent_90_days": null,
+    "daily_observations": [],
+    "dataset": "UCSB-CHC/CHIRPS/V3/DAILY_SAT",
+    "spatial_resolution_km": 5.566,
+    "status": "no_data",
+    "pipeline_version": "3.1.0"
+  },
+  "land_cover": {
+    "region": {
+      "latitude": 30.901,
+      "longitude": 75.8573,
+      "radius_m": 100.0,
+      "geometry_type": "PointBuffer",
+      "scale_m": 10.0
+    },
+    "requested_end_date": "2026-09-20",
+    "observation_date": "2026-09-16",
+    "observation_id": "20260916T054641_20260916T055819_T43SBT",
+    "data_lag_days": 4,
+    "dominant_class": "crops",
+    "dominant_probability": 0.82,
+    "class_probabilities": {
+      "water": 0.002,
+      "trees": 0.08,
+      "grass": 0.01,
+      "flooded_vegetation": 0.005,
+      "crops": 0.82,
+      "shrub_and_scrub": 0.003,
+      "built": 0.05,
+      "bare": 0.03,
+      "snow_and_ice": 0.0
+    },
+    "dataset": "GOOGLE/DYNAMICWORLD/V1",
+    "spatial_resolution_m": 10.0,
+    "status": "success",
+    "pipeline_version": "3.1.0"
+  }
+}

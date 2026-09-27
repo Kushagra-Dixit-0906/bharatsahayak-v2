@@ -1,0 +1,103 @@
+{
+  "region": {
+    "latitude": 30.901,
+    "longitude": 75.8573,
+    "radius_m": 100.0,
+    "geometry_type": "PointBuffer",
+    "scale_m": 10.0
+  },
+  "reference_date": "2026-09-20",
+  "vegetation": {
+    "current": null,
+    "historical_observations": [],
+    "baseline": null,
+    "sufficiency": {
+      "requested_years_count": 3,
+      "represented_years_count": 0,
+      "minimum_required_years": 2,
+      "is_sufficient": false,
+      "represented_years": [],
+      "missing_years": [2025, 2024, 2023],
+      "sufficiency_notes": null
+    },
+    "anomaly": null,
+    "status": "error",
+    "pipeline_version": "2.0.0",
+    "error": {
+      "type": "EEException",
+      "message": "Sentinel-2 collection retrieval failed"
+    }
+  },
+  "reanalysis": {
+    "region": {
+      "latitude": 30.901,
+      "longitude": 75.8573,
+      "radius_m": 100.0,
+      "geometry_type": "PointBuffer",
+      "scale_m": 10.0
+    },
+    "requested_end_date": "2026-09-20",
+    "latest_available_date": null,
+    "data_lag_days": null,
+    "recent_7_days": null,
+    "recent_30_days": null,
+    "recent_90_days": null,
+    "daily_observations": [],
+    "dataset": "ECMWF/ERA5_LAND/DAILY_AGGR",
+    "spatial_resolution_km": 11.1,
+    "status": "error",
+    "pipeline_version": "3.0.0",
+    "error": {
+      "type": "EEException",
+      "message": "ERA5-Land asset access timeout"
+    }
+  },
+  "rainfall": {
+    "region": {
+      "latitude": 30.901,
+      "longitude": 75.8573,
+      "radius_m": 100.0,
+      "geometry_type": "PointBuffer",
+      "scale_m": 10.0
+    },
+    "requested_end_date": "2026-09-20",
+    "latest_available_date": null,
+    "data_lag_days": null,
+    "recent_7_days": null,
+    "recent_30_days": null,
+    "recent_90_days": null,
+    "daily_observations": [],
+    "dataset": "UCSB-CHC/CHIRPS/V3/DAILY_SAT",
+    "spatial_resolution_km": 5.566,
+    "status": "error",
+    "pipeline_version": "3.1.0",
+    "error": {
+      "type": "EEException",
+      "message": "CHIRPS asset unavailable"
+    }
+  },
+  "land_cover": {
+    "region": {
+      "latitude": 30.901,
+      "longitude": 75.8573,
+      "radius_m": 100.0,
+      "geometry_type": "PointBuffer",
+      "scale_m": 10.0
+    },
+    "requested_end_date": "2026-09-20",
+    "observation_date": null,
+    "observation_id": null,
+    "data_lag_days": null,
+    "dominant_class": null,
+    "dominant_probability": null,
+    "class_probabilities": null,
+    "dataset": "GOOGLE/DYNAMICWORLD/V1",
+    "spatial_resolution_m": 10.0,
+    "status": "error",
+    "pipeline_version": "3.1.0",
+    "error": {
+      "type": "EEException",
+      "message": "Dynamic World collection error"
+    }
+  }
+}

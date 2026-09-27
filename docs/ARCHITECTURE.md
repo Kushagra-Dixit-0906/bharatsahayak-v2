@@ -248,6 +248,59 @@ graph TD
    - **Dynamic World Land Cover:** 9-class probabilistic land-cover context.
    Phase 3D (e.g. MODIS MOD16A2 evapotranspiration candidate) is deferred. The project now transitions from expanding environmental data collection to multi-source evidence fusion (Phase 4) and agricultural reasoning (Phase 5).
 
+---
+
+## 🌐 Multi-Source Evidence Fusion Architecture (`🟢 PHASE 4 COMPLETE & VERIFIED / DEC-022`)
+
+Phase 4 provides deterministic, immutable evidence aggregation across the validated satellite and environmental subsystems without performing agricultural reasoning or synthetic scoring:
+
+```mermaid
+graph TD
+    subgraph Input ["Spatial & Temporal Inputs"]
+        Geo["Latitude, Longitude, Radius (100m)"]
+        RefDate["Authoritative Reference Date (T_ref)"]
+    end
+
+    subgraph Tier2Pipeline ["Tier 2: Root Orchestration Pipeline (app/fusion/pipeline.py)"]
+        P1["1. analyze_regional_ndvi(...)"]
+        P2["2. analyze_historical_years(..., current_analysis=P1)"]
+        P3["3. analyze_era5_land(...)"]
+        P4["4. analyze_chirps_rainfall(...)"]
+        P5["5. analyze_dynamic_world_land_cover(...)"]
+        
+        Geo & RefDate --> P1
+        P1 -. Pre-computed Current NDVI .-> P2
+        Geo & RefDate --> P3
+        Geo & RefDate --> P4
+        Geo & RefDate --> P5
+    end
+
+    subgraph Tier1PureAssembly ["Tier 1: Pure Assembly Engine (app/fusion/fusion.py - 0 EE Calls, 0 I/O)"]
+        P2 & P3 & P4 & P5 --> Fuse["fuse_agricultural_environmental_evidence(...)"]
+        Fuse --> StatusEval["Subsystem Availability & Counts Evaluation\n(requested=4, available, fully_available, is_fully_available)"]
+        StatusEval --> Matrix["4-Tier Fusion Status Matrix\n(success | partial | no_data | error)"]
+    end
+
+    subgraph OutputEnvelope ["Authoritative Fusion Envelope (app/fusion/types.py)"]
+        Matrix --> Out["AgriculturalEnvironmentalEvidence\n(pipeline_version='4.0.0')"]
+        Out --> Prop["@property current_vegetation -> vegetation.current"]
+    end
+```
+
+### Key Architectural Tenets for Phase 4:
+1. **Pure Evidence Aggregation Layer:** Phase 4 assembles existing validated evidence pipelines into one coherent, traceable, immutable evidence envelope. It contains zero agricultural diagnoses, yield predictions, crop stress scores, irrigation recommendations, or synthetic confidence scores.
+2. **Two-Tier Engine Structure:**
+   - **Tier 1 (Pure Assembly — `app/fusion/fusion.py`):** Deterministic pure Python with zero Earth Engine imports, zero network calls, and zero filesystem I/O. Computes subsystem availability, 4-tier fusion status, and availability counts from passed domain models without mutating inputs.
+   - **Tier 2 (Root Orchestration — `app/fusion/pipeline.py`):** Coordinates sequential execution of sub-pipelines, reuses Phase 1 current NDVI results for Phase 2 historical analysis, isolates subsystem exceptions into structured fallback error objects, and delegates to Tier 1.
+3. **Direct Domain Composition:** Models are directly composed without flattening or discarding underlying fields (`vegetation: HistoricalNdviAnalysis`, `reanalysis: ERA5LandAnalysis`, `rainfall: CHIRPSRainfallAnalysis`, `land_cover: DynamicWorldAnalysis`).
+4. **Four-Tier Status & Availability Semantics:**
+   - `success`: All 4 subsystems provide `status == "success"`.
+   - `partial`: Usable evidence exists across $\ge 1$ subsystem, but at least one subsystem is partial (e.g. `insufficient_history` with valid current NDVI) or unavailable (`no_data` / `error`).
+   - `no_data`: All 4 subsystems report `status == "no_data"`.
+   - `error`: Zero usable evidence with at least one `error` status, or top-level pipeline failure.
+5. **Preservation of Native Resolution & Latency Semantics:** Native resolutions (10m Sentinel-2, 10m Dynamic World, 5.566km CHIRPS, 11.1km ERA5-Land), observation dates, and dataset-specific publication lags are strictly preserved without synthetic spatial downscaling or timestamp fabrication.
+
+
 
 
 
