@@ -1,0 +1,22 @@
+{
+  "description": "Deterministic test fixture representing an empty/no-data CHIRPS query response",
+  "region": {
+    "latitude": 30.9157,
+    "longitude": 75.7196,
+    "radius_m": 100.0,
+    "geometry_type": "PointBuffer",
+    "scale_m": 10.0
+  },
+  "requested_end_date": "2026-09-25",
+  "latest_available_date": null,
+  "data_lag_days": null,
+  "recent_7_days": null,
+  "recent_30_days": null,
+  "recent_90_days": null,
+  "daily_observations": [],
+  "dataset": "UCSB-CHC/CHIRPS/V3/DAILY_SAT",
+  "spatial_resolution_km": 5.566,
+  "status": "no_data",
+  "pipeline_version": "3.1.0",
+  "error": null
+}

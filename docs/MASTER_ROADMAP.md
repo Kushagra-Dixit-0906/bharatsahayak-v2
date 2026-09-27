@@ -105,7 +105,7 @@ graph TD
 ---
 
 ### Phase 3: Additional Agricultural & Environmental Data Sources
-- **Status:** 🟡 **IN PROGRESS (Subphase 3A Complete & Sealed — DEC-018 / DEC-019)**
+- **Status:** 🟡 **IN PROGRESS (Subphase 3A Complete & Sealed — `74fd372`; Subphase 3B Design Sealed — `DEC-020`)**
 - **Purpose:** Provide physical grounded evidence of the meteorological, hydrological, and land-cover regime surrounding the farmer's parcel to explain the environmental drivers behind satellite vegetation signals.
 - **Sub-Roadmap:**
   - **3A — ERA5-Land Daily Reanalysis Environmental Context (🟢 COMPLETE & SEALED — DEC-018 / DEC-019):**
@@ -117,15 +117,20 @@ graph TD
     - Reanalysis Data Lag Tracking: Explicit `requested_end_date`, `latest_available_date`, and `data_lag_days`.
     - Coarse Regional Context Boundary: Standardized at $\approx 11.1\text{ km}$ ($0.1^\circ$) grid resolution; strictly non-field-scale.
     - Data Reliability Invariants: Missing precipitation/runoff $\ne 0.0\text{ mm}$; negative GEE packing artifacts rejected rather than clamped.
-    - Strict Non-Agronomic Boundary: Physical measurements only (no drought/heat stress/irrigation classifications).
-  - **3B — CHIRPS High-Resolution Precipitation Regime (🟡 PLANNED):**
-    - UCSB-CHG/CHIRPS/DAILY (~5.5 km resolution) for rainfall event frequency, dry spell tracking, and precipitation seasonality.
+  - **3B — CHIRPS Regional Rainfall Backup Subsystem (🟢 COMPLETE & VERIFIED — `DEC-020`):**
+    - Architecture and implementation complete: `UCSB-CHC/CHIRPS/V3/DAILY_SAT` (~5.566 km resolution) utilizing IMERG Late V07 daily partitioning for true structural independence from ERA5-Land reanalysis.
+    - Zero-conversion ingestion: native $\text{mm/day}$ floating-point preservation without unit multipliers, rounding, or clamping. Rejects negative artifacts to `None` and preserves missing != zero.
+    - Dedicated domain contracts in [`app/environment/chirps_types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/chirps_types.py): `DailyRainfallObservation`, `RainfallWindowStatistics`, `CHIRPSRainfallAnalysis` (`pipeline_version="3.1.0"`).
+    - Pure-Python temporal aggregation in [`app/environment/chirps_aggregation.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/chirps_aggregation.py): 7-day, 30-day, and 90-day window metrics (`total_precipitation_mm`, `mean_daily_precipitation_mm`, `max_daily_precipitation_mm`), duplicate-date rejection, order-invariance, explicit available-observation partial window semantics (`is_complete=False`).
+    - Option A unweighted zonal mean spatial reduction over 100m parcel buffer at native $5566\text{ m}$ nominal scale in [`app/environment/chirps.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/chirps.py) (coarse regional context boundary, no synthetic downscaling or continuous interpolation).
+    - Normalization and root orchestration in [`app/environment/chirps_pipeline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/chirps_pipeline.py) (`normalize_raw_chirps_record`, `analyze_chirps_rainfall`).
+    - Verification: 5 deterministic offline fixtures in `tests/fixtures/chirps/`, 49/49 CHIRPS unit tests passed, 838/838 full unit tests passed, 3 live EE integration tests passed.
   - **3C — Dynamic World Land Use / Land Cover (🟡 PLANNED):**
     - GOOGLE/DYNAMICWORLD/V1 (10m Sentinel-2 aligned LULC) for crop vs bare ground vs tree probability.
   - **3D — Environmental Provider Abstraction & Unified Context Contract (🟡 PLANNED):**
     - Unified multi-provider abstraction and end-to-end integration testing.
 - **Dependencies:** Phase 1 (`60f8d90`), Phase 2 (`583dbf8`).
-- **Next Subphase Implementation:** Phase 3B (CHIRPS High-Resolution Precipitation Regime).
+- **Next Subphase Implementation:** Phase 3C (Dynamic World Land Use / Land Cover).
 
 - **Future Upgrades (`🔴 IDEA`):** SoilGrids / ICAR soil profiles, live forecast API feeds (IMD / Open-Meteo), live mandi prices via Agmarknet / e-NAM APIs.
 

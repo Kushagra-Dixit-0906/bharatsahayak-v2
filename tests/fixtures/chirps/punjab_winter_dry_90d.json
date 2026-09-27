@@ -1,0 +1,380 @@
+{
+  "description": "Deterministic test fixture for Punjab winter dry 90-day CHIRPS precipitation context",
+  "region": {
+    "latitude": 30.9157,
+    "longitude": 75.7196,
+    "radius_m": 100.0,
+    "geometry_type": "PointBuffer",
+    "scale_m": 10.0
+  },
+  "requested_end_date": "2026-01-29",
+  "latest_available_date": "2026-01-29",
+  "data_lag_days": 0,
+  "daily_observations": [
+    {
+      "observation_date": "2025-11-01",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-02",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-03",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-04",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-05",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-06",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-07",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-08",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-09",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-10",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-11",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-12",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-13",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-14",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-15",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-16",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-17",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-18",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-19",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-20",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-21",
+      "precipitation_mm": 3.5
+    },
+    {
+      "observation_date": "2025-11-22",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-23",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-24",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-25",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-26",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-27",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-28",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-29",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-11-30",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-01",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-02",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-03",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-04",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-05",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-06",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-07",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-08",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-09",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-10",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-11",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-12",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-13",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-14",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-15",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-16",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-17",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-18",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-19",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-20",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-21",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-22",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-23",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-24",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-25",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-26",
+      "precipitation_mm": 1.2
+    },
+    {
+      "observation_date": "2025-12-27",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-28",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-29",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-30",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2025-12-31",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-01",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-02",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-03",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-04",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-05",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-06",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-07",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-08",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-09",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-10",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-11",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-12",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-13",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-14",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-15",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-16",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-17",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-18",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-19",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-20",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-21",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-22",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-23",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-24",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-25",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-26",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-27",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-28",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-01-29",
+      "precipitation_mm": 0.0
+    }
+  ],
+  "dataset": "UCSB-CHC/CHIRPS/V3/DAILY_SAT",
+  "spatial_resolution_km": 5.566,
+  "status": "success",
+  "pipeline_version": "3.1.0",
+  "error": null
+}

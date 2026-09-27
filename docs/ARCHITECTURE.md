@@ -198,38 +198,43 @@ graph TD
 
 ---
 
-## 🌦️ Agricultural & Environmental Context Architecture (`🟡 PHASE 3 IN PROGRESS / DEC-018, DEC-019`)
+## 🌦️ Agricultural & Environmental Context Architecture (`🟢 PHASE 3A & 3B COMPLETE & VERIFIED / DEC-018, DEC-019, DEC-020`)
 
 Phase 3 introduces physical meteorological, hydrological, and land-cover context layers to explain the physical drivers behind satellite vegetation signals:
 
 ```mermaid
 graph TD
-    subgraph EarthEngineCatalog ["Google Earth Engine Reanalysis Archive"]
-        ERA["ECMWF/ERA5_LAND/DAILY_AGGR\n(Daily Aggregated Reanalysis, ~11.1 km)"]
+    subgraph EarthEngineCatalog ["Google Earth Engine Catalog"]
+        ERA["ECMWF/ERA5_LAND/DAILY_AGGR\n(Daily Reanalysis, ~11.1 km)"]
+        CHIRPS["UCSB-CHC/CHIRPS/V3/DAILY_SAT\n(Satellite Precipitation, ~5.566 km)"]
     end
 
-    subgraph DataExtraction ["1. Remote Extraction Layer"]
-        ERA --> Query["Temporal Range Query\n(Up to 90 Days Lookback)"]
-        Query --> Sample["Zonal Sampling / Mean Reduction\n(over AnalysisRegion Geometry)"]
+    subgraph DataExtraction ["1. Remote Extraction Layer (ee.Reducer.mean)"]
+        ERA --> QueryERA["90-Day Range Query [E-89, E+1)\n(scale=11132m)"]
+        CHIRPS --> QueryCHIRPS["90-Day Range Query [E-89, E+1)\n(scale=5566m)"]
     end
 
     subgraph ValidationEngine ["2. Pure Math & Validation Engine (0 EE Calls)"]
-        Sample --> Val["Validation & Quality Gate\n(Reject Negative Precipitation / Runoff)"]
-        Val --> Norm["Unit Normalization\n(K -> °C, m -> mm, m³/m³ direct)"]
-        Norm --> Win["Multi-Window Aggregator\n(Recent 7-Day, 30-Day, 90-Day Envelopes)"]
+        QueryERA --> NormERA["ERA5 Normalization & Validation\n(K -> °C, m -> mm, SW [0, 1])"]
+        QueryCHIRPS --> NormCHIRPS["CHIRPS Normalization & Validation\n(1:1 mm/day, Reject < 0.0)"]
+        NormERA --> WinERA["ERA5 Window Aggregator\n(7d, 30d, 90d Envelopes)"]
+        NormCHIRPS --> WinCHIRPS["CHIRPS Rainfall Window Aggregator\n(7d, 30d, 90d Total/Mean/Max)"]
     end
 
     subgraph DomainAssembly ["3. Root Domain Payload Composition (0 EE Calls)"]
-        Win --> Lag["Data Lag & Completeness Tracker\n(requested_end_date vs latest_available_date)"]
-        Lag --> Out["ERA5LandAnalysis\n(pipeline_version='3.0.0')"]
+        WinERA --> OutERA["ERA5LandAnalysis\n(pipeline_version='3.0.0')"]
+        WinCHIRPS --> OutCHIRPS["CHIRPSRainfallAnalysis\n(pipeline_version='3.1.0')"]
     end
 ```
 
-### Key Architectural Tenets for Phase 3A:
-1. **Separation of Measurement from Agronomic Interpretation:** Phase 3A produces pure physical observations (temperature in $^\circ\text{C}$, precipitation in $\text{mm}$, soil water in $\text{m}^3/\text{m}^3$, runoff in $\text{mm}$). Drought, heat stress, and irrigation classifications are strictly deferred to Phase 4 (Fusion) and Phase 5 (Reasoning).
-2. **Explicit Reanalysis Data Lag:** Atmospheric reanalysis exhibits publication latency (typically 3–7 days). The domain contract tracks `data_lag_days` explicitly rather than misrepresenting reanalysis as real-time forecasts.
-3. **Coarse Regional Context Non-Claim:** Standardized at $\approx 11.1\text{ km}$ grid resolution, ERA5-Land is strictly coarse regional context, never claimed as field-scale (10m/100m) parcel microclimate.
-4. **Missing Data & Artifact Invariants:** Missing precipitation is never converted to $0.0\text{ mm}$; negative accumulated precipitation/runoff values from GEE data-packing artifacts are rejected as invalid (never silently clamped to 0.0).
+### Key Architectural Tenets for Phase 3:
+1. **Subsystem Independence:** ERA5-Land (Phase 3A) and CHIRPS (Phase 3B) are strictly independent subsystems with dedicated domain contracts (`ERA5LandAnalysis` vs `CHIRPSRainfallAnalysis`). Cross-source comparison and fusion are strictly deferred to Phase 4.
+2. **Separation of Measurement from Agronomic Interpretation:** Phase 3 produces pure physical observations (temperature in $^\circ\text{C}$, precipitation in $\text{mm}$, soil water in $\text{m}^3/\text{m}^3$, runoff in $\text{mm}$). Drought, heat stress, and irrigation classifications are strictly deferred to Phase 4 (Fusion) and Phase 5 (Reasoning).
+3. **Explicit Reanalysis & Satellite Data Lag:** Datasets exhibit publication latency. Domain contracts track `requested_end_date`, `latest_available_date`, and `data_lag_days` dynamically rather than hardcoding static constants or misrepresenting observations as real-time forecasts.
+4. **Coarse Regional Context Non-Claim:** Standardized at $\approx 11.1\text{ km}$ (ERA5-Land) and $\approx 5.566\text{ km}$ (CHIRPS), environmental outputs represent coarse regional context and are never claimed as field-scale (100m) parcel measurements. Zero synthetic downscaling, continuous interpolation, or unverified sub-pixel weighting claims are prohibited.
+5. **Missing Data & Artifact Invariants:** Missing precipitation is never converted to $0.0\text{ mm}$; negative values ($< 0.0$) from GEE data-packing artifacts are rejected as invalid (never silently clamped to 0.0).
+6. **Partial-Window Available-Observation Semantics:** For incomplete windows (`is_complete=False`), metric totals and averages represent observed totals/means over available non-null observations, NOT complete-window totals or zero-filled averages. Prohibits imputation or interpolation for missing dates.
+
 
 
 

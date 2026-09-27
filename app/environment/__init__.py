@@ -17,6 +17,26 @@ from app.environment.aggregation import (
     aggregate_window_statistics,
     compute_environmental_window_suite,
 )
+from app.environment.chirps import (
+    CHIRPS_BANDS,
+    CHIRPS_DATASET,
+    CHIRPS_NOMINAL_SCALE_M,
+    DEFAULT_LOOKBACK_DAYS as CHIRPS_DEFAULT_LOOKBACK_DAYS,
+    fetch_raw_chirps_rainfall_timeseries,
+)
+from app.environment.chirps_aggregation import (
+    aggregate_rainfall_window_statistics,
+    compute_rainfall_window_suite,
+)
+from app.environment.chirps_pipeline import (
+    analyze_chirps_rainfall,
+    normalize_raw_chirps_record,
+)
+from app.environment.chirps_types import (
+    CHIRPSRainfallAnalysis,
+    DailyRainfallObservation,
+    RainfallWindowStatistics,
+)
 from app.environment.era5 import (
     fetch_raw_era5_land_timeseries,
 )
@@ -31,6 +51,7 @@ from app.environment.types import (
 )
 
 __all__ = [
+    # Phase 3A: ERA5-Land
     "DailyEnvironmentalObservation",
     "EnvironmentalWindowStatistics",
     "ERA5LandAnalysis",
@@ -39,5 +60,19 @@ __all__ = [
     "compute_environmental_window_suite",
     "fetch_raw_era5_land_timeseries",
     "normalize_raw_era5_record",
+    # Phase 3B: CHIRPS Rainfall Backup
+    "CHIRPSRainfallAnalysis",
+    "CHIRPS_BANDS",
+    "CHIRPS_DATASET",
+    "CHIRPS_DEFAULT_LOOKBACK_DAYS",
+    "CHIRPS_NOMINAL_SCALE_M",
+    "DailyRainfallObservation",
+    "RainfallWindowStatistics",
+    "aggregate_rainfall_window_statistics",
+    "analyze_chirps_rainfall",
+    "compute_rainfall_window_suite",
+    "fetch_raw_chirps_rainfall_timeseries",
+    "normalize_raw_chirps_record",
 ]
+
 

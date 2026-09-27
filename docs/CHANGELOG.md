@@ -7,8 +7,30 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 3: Additional Agricultural & Environmental Data Sources (Subphase 3A Complete & Sealed — `DEC-018` / `DEC-019`)
-- **Phase 3A Step 3 — Earth Engine Collection Ingestion & Adapter Boundary (🟢 COMPLETE — 29 Unit Tests + 3 Live Integration Tests):**
+### 🟡 In Progress — Phase 3: Additional Agricultural & Environmental Data Sources (Subphase 3A & 3B Complete & Verified — `DEC-018`, `DEC-019`, `DEC-020`)
+- **Phase 3B — CHIRPS Regional Rainfall Backup Subsystem Implementation (🟢 COMPLETE & VERIFIED — `DEC-020` — 49 Unit Tests + 3 Live Integration Tests):**
+  - Implemented strongly typed domain models in [`app/environment/chirps_types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/chirps_types.py):
+    - `DailyRainfallObservation`: Physical daily precipitation observation with native mm/day unit, valid zero ($0.0\text{ mm}$), missing preservation (`None`), and negative artifact rejection.
+    - `RainfallWindowStatistics`: Aggregated summary statistics (`total_precipitation_mm`, `mean_daily_precipitation_mm`, `max_daily_precipitation_mm`) over 7-day, 30-day, and 90-day envelopes with completeness tracking (`is_complete`, `days_available`, `days_requested`).
+    - `CHIRPSRainfallAnalysis`: Authoritative root domain payload (`pipeline_version="3.1.0"`, dataset `UCSB-CHC/CHIRPS/V3/DAILY_SAT`, spatial resolution $5.566\text{ km}$), integrating `AnalysisRegionMetadata`, dynamic publication lag tracking (`latest_available_date`, `data_lag_days`), and universal status semantics (`success`, `no_data`, `error`).
+  - Created Earth Engine CHIRPS adapter module [`app/environment/chirps.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/chirps.py):
+    - Queries `UCSB-CHC/CHIRPS/V3/DAILY_SAT` collection over parcel circular buffer (`create_analysis_region`) across $[E-89, E+1)$.
+    - Selects `precipitation` band.
+    - Implements Option A spatial reduction: unweighted zonal mean reduction (`ee.Reducer.mean()`) at native nominal scale $5566.0\text{ m}$ (coarse regional context boundary, no synthetic downscaling or continuous interpolation).
+    - Captures server-side errors into structured `EarthEngineError` result envelopes without leaking exceptions.
+  - Created pure mathematical window aggregation engine [`app/environment/chirps_aggregation.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/chirps_aggregation.py):
+    - `aggregate_rainfall_window_statistics`: Inclusive 7d ($E-6$), 30d ($E-29$), and 90d ($E-89$) envelopes, order invariance, duplicate date rejection (`ValueError`), partial-window available-observation semantics (`is_complete=False`), empty-window handling (metrics `None`).
+    - `compute_rainfall_window_suite`: Standardized 3-window tuple generator.
+  - Created pure normalization and root orchestration module [`app/environment/chirps_pipeline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/chirps_pipeline.py):
+    - `normalize_raw_chirps_record`: 1:1 unit preservation ($\text{mm/day}$), zero scaling/rounding/clamping, missing != 0.0, negative artifact rejection to `None`.
+    - `analyze_chirps_rainfall`: Orchestrates spatial validation, Tier 1 retrieval, Tier 2 normalization, dynamic publication data lag computation, pure rainfall window aggregation, and root payload composition.
+  - Updated public API exports in [`app/environment/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/__init__.py).
+  - Created 5 deterministic offline JSON fixtures in `tests/fixtures/chirps/` and loader in `tests/fixtures/chirps_fixtures.py`.
+  - Created offline unit test suites in `tests/unit/test_chirps_types.py`, `tests/unit/test_chirps_aggregation.py`, `tests/unit/test_chirps_pipeline.py` (49 unit tests passing; 838 full repository unit tests passing).
+  - Created live Earth Engine integration test suite in `tests/integration/test_chirps_integration.py` (3 live tests passing against `bharatsahayak-v2`).
+
+
+- **Phase 3A Step 3 — Earth Engine Collection Ingestion & Adapter Boundary (🟢 COMPLETE & SEALED — Commit `74fd372` — 29 Unit Tests + 3 Live Integration Tests):**
   - Created Earth Engine ERA5-Land adapter module [`app/environment/era5.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/era5.py):
     - Queries `ECMWF/ERA5_LAND/DAILY_AGGR` collection over parcel geometry (`create_analysis_region`) across $[E-89, E+1)$.
     - Selects 4 target bands: `temperature_2m`, `total_precipitation_sum`, `volumetric_soil_water_layer_1`, `runoff_sum`.

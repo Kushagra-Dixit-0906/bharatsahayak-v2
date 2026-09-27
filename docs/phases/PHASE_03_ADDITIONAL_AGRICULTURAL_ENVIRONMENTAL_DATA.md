@@ -1,11 +1,10 @@
 # Phase 3 — Additional Agricultural & Environmental Data Sources
 
 > **Canonical Record of Phase 3 Architecture, Environmental Data Sources, ERA5-Land Reanalysis, CHIRPS Precipitation, and Dynamic World Land Cover.**  
-> *Status: 🟡 PHASE 3 IN PROGRESS (Subphase 3A Step 1 Contracts, Step 2 Pure Math, & Step 3 Ingestion Boundary Complete — 79 Subsystem Tests Passing + 3 Live Integration Tests Passing; Phase 3A Sealed)*<br>
+> *Status: 🟡 PHASE 3 IN PROGRESS (Phase 3A Complete & Sealed — Commit 74fd372; Phase 3B Complete & Verified — DEC-020)*<br>
 > *Base Sealed Checkpoint: `583dbf8 — docs: seal Phase 2 historical satellite intelligence`*<br>
-> *Current Subphase: Phase 3A (ERA5-Land Daily Reanalysis Environmental Context) — COMPLETE*<br>
-> *Next Subphase Implementation: Phase 3B (CHIRPS High-Resolution Precipitation Regime)*
-
+> *Current Subphase: Phase 3B (CHIRPS Regional Rainfall Backup Subsystem) — 🟢 IMPLEMENTED & VERIFIED*<br>
+> *Next Subphase: Phase 3C (Dynamic World Real-Time Land Use / Land Cover)*
 
 ---
 
@@ -27,7 +26,7 @@ While satellite NDVI provides direct radiometric evidence of vegetative vigor, *
 ├─────────────────────────────────────────────────────────────────────────────────────────┤
 │ 2. ENVIRONMENTAL & METEOROLOGICAL CONTEXT (Phase 3 — CURRENT PHASE)                     │
 │    - Phase 3A: ERA5-Land Daily Reanalysis (Temperature, Precipitation, Soil Moisture)   │
-│    - Phase 3B: CHIRPS High-Resolution Daily Precipitation Regime (Rainfall Distribution)│
+│    - Phase 3B: CHIRPS Regional Rainfall Backup Subsystem (Rainfall Distribution)        │
 │    - Phase 3C: Dynamic World Real-Time Land Use / Land Cover (Crop / Soil / Trees)      │
 │    - Physical evidence: "What environmental conditions were observed over recent days?" │
 ├─────────────────────────────────────────────────────────────────────────────────────────┤
@@ -41,9 +40,9 @@ While satellite NDVI provides direct radiometric evidence of vegetative vigor, *
 ```
 
 > [!IMPORTANT]
-> **The Core Conceptual Boundary of Phase 3A:**
-> - **Phase 3A:** *"What physical environmental conditions were observed over recent windows?"* (Empirical physical measurements: temperature, cumulative precipitation, root-zone soil moisture fraction, runoff).
-> - **Phase 4:** *"How does that environmental evidence correlate with the satellite NDVI anomaly?"* (Multi-source data fusion).
+> **The Core Conceptual Boundary of Phase 3:**
+> - **Phase 3A & 3B:** *"What physical environmental and rainfall conditions were observed over recent windows?"* (Empirical physical measurements: temperature, cumulative precipitation, topsoil moisture fraction, runoff).
+> - **Phase 4:** *"How does that environmental evidence correlate with the satellite NDVI anomaly?"* (Multi-source data fusion and cross-source rainfall validation).
 > - **Phase 5:** *"What does this mean for the farmer and what actions should they take?"* (Gemini 2.5 Flash agricultural reasoning and localized advisory).
 
 ---
@@ -52,14 +51,20 @@ While satellite NDVI provides direct radiometric evidence of vegetative vigor, *
 
 ```
 Phase 3: Additional Agricultural & Environmental Data Sources
-├── 3A: ERA5-Land Daily Reanalysis Environmental Context (🟡 IN PROGRESS / Steps 1 & 2 Complete / Step 3 Design Sealed — DEC-019 / Step 3 Implementation Pending)
+├── 3A: ERA5-Land Daily Reanalysis Environmental Context (🟢 COMPLETE & SEALED — Commit 74fd372)
 │    ├── 4 Core Variables (2m Temp, Total Precipitation, 0-7cm Soil Water, Runoff)
 │    ├── 3 Analysis Windows (Recent 7-Day, 30-Day, 90-Day Observation Envelopes)
 │    ├── Data Lag & Reanalysis Latency Tracking (requested vs latest available date)
-│    └── Coarse-Resolution Context Boundary (~11.1 km Grid)
-├── 3B: CHIRPS High-Resolution Precipitation Regime (🟡 PLANNED)
-│    ├── UCSB-CHG/CHIRPS/DAILY (~5.5 km resolution)
-│    └── Rainfall Event Frequency, Dry Spells & Precipitation Seasonality
+│    ├── Coarse-Resolution Regional Context Boundary (~11.1 km Grid)
+│    └── Unweighted Zonal Mean Reduction (Option A at 11132m nominal scale)
+├── 3B: CHIRPS Regional Rainfall Backup Subsystem (🟢 COMPLETE & VERIFIED — DEC-020)
+│    ├── UCSB-CHC/CHIRPS/V3/DAILY_SAT (~5.566 km native pixel scale)
+│    ├── Satellite-Partitioned Independent Ingestion (IMERG Late V07 daily partitioning)
+│    ├── Native Unit Ingestion (mm/day with 1:1 floating-point preservation, zero rounding)
+│    ├── Dedicated Rainfall Domain Contracts (DailyRainfallObservation, RainfallWindowStatistics, CHIRPSRainfallAnalysis)
+│    ├── 3 Analysis Windows (Recent 7-Day, 30-Day, 90-Day Rainfall Envelopes)
+│    ├── Dynamic Publication Lag Tracking (requested vs latest available date)
+│    └── Coarse Regional Context Boundary (Option A unweighted zonal mean at 5566m nominal scale)
 ├── 3C: Dynamic World Land Use / Land Cover (🟡 PLANNED)
 │    ├── GOOGLE/DYNAMICWORLD/V1 (10m Sentinel-2 aligned LULC)
 │    └── Probabilistic Land Cover (Crops, Bare Ground, Trees, Built-up)
@@ -232,58 +237,280 @@ Phase 3A adopts the same proven three-tier decoupling established in Phase 2 (`D
 │    - Reuses create_analysis_region(...) and AnalysisRegionMetadata.                    │
 │    - Returns raw multi-day timeseries dictionary wrapped in EarthEngineResult.         │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ 2. Pure Statistical & Window Aggregation Engine (app/environment/baseline.py / pure)    │
-│    - Unit conversions: Kelvin -> Celsius, meters -> millimeters.                       │
-│    - Physical validation: rejects negative precipitation/runoff, checks ranges.        │
-│    - Computes 7-day, 30-day, 90-day rolling sums and means.                            │
+│ 2. Pure Statistical & Window Aggregation Engine (app/environment/aggregation.py / pure) │
+│    - Pure math rolling window aggregator (7-day, 30-day, 90-day).                      │
+│    - Computes temperature min/max/mean, precipitation sum, soil moisture mean, runoff. │
 │    - ZERO Earth Engine imports, ZERO getInfo() calls, ZERO network I/O.                │
 ├────────────────────────────────────────────────────────────────────────────────────────┤
-│ 3. Root Domain Composition Layer                                                       │
-│    - Assembles ERA5LandAnalysis contract with status resolution.                       │
-│    - Calculates data_lag_days and window completeness flags.                           │
-│    - ZERO Earth Engine imports, ZERO getInfo() calls, ZERO network I/O.                │
+│ 3. Root Domain Composition Layer (app/environment/pipeline.py)                         │
+│    - Ingestion normalization (K -> °C, m -> mm, soil water [0, 1]).                    │
+│    - Rejects negative artifacts (< 0.0) without clamping; preserves Missing != 0.0.    │
+│    - Calculates dynamic data_lag_days and window completeness flags.                   │
+│    - Assembles ERA5LandAnalysis contract (v3.0.0) with status resolution.              │
 └────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 6. Fixture & Test Architecture
+## 6. Phase 3B: CHIRPS Regional Rainfall Backup Subsystem (Design Specification)
 
-To guarantee rapid, deterministic unit testing without hitting Earth Engine network quotas during development:
-1. **Deterministic Test Fixtures:**
-   - Store realistic, validated multi-day ERA5-Land JSON payloads (covering monsoon rainy season, winter dry season, leap year February, missing dates, and negative artifact edge cases) in `tests/fixtures/era5_land/`.
-   - Explicitly document fixtures as **static test/demo fallback data**, never represented as live observations.
-2. **Unit Test Suite:**
-   - Test conversion math ($K \to ^\circ\text{C}$, $m \to \text{mm}$).
-   - Test validation filters (negative artifact rejection, range checks).
-   - Test 7, 30, and 90-day window aggregation logic.
-   - Test data lag computation and missing-date completeness flags.
-   - Test status propagation (`success`, `no_data`, `error`).
-3. **Live Earth Engine Integration Tests:**
-   - Dedicated integration test against project `bharatsahayak-v2` verifying live querying of `ECMWF/ERA5_LAND/DAILY_AGGR` over the Ludhiana, Punjab test fixture (`[75.7196, 30.9157]`).
+### 6.1 Problem Statement & Dataset Selection
+
+Agricultural advisory systems require specialized precipitation monitoring to validate rainfall events, dry spells, and seasonal rainfall distribution. While ERA5-Land provides reanalysis-based precipitation, having an **independent, satellite-derived rainfall evidence path** is critical for:
+1. **Independent Rainfall Evidence:** Providing specialized precipitation data alongside atmospheric reanalysis.
+2. **Backup Rainfall Source:** Maintaining continuous rainfall context even if atmospheric reanalysis data lag is extended.
+3. **Cross-Source Comparison (Phase 4):** Enabling future multi-source validation comparing reanalysis rainfall with satellite-partitioned precipitation.
+
+#### Dataset Selection: `UCSB-CHC/CHIRPS/V3/DAILY_SAT`
+
+| Property | Specification |
+|---|---|
+| **Earth Engine Asset** | `UCSB-CHC/CHIRPS/V3/DAILY_SAT` |
+| **Generation** | CHIRPS v3 (Current Generation — DO NOT use legacy CHIRPS v2) |
+| **Target Band** | `precipitation` |
+| **Native Physical Unit** | $\text{mm/day}$ |
+| **Native Pixel Scale** | $\approx 5566\text{ m}$ ($0.05^\circ \times 0.05^\circ$ at the equator) |
+| **Coverage Archive** | 1981 to near-present |
+| **Daily Partitioning Model** | IMERG Late V07 Satellite-only precipitation |
+
+#### Rationale for `DAILY_SAT` vs `DAILY_RNL`
+
+CHIRPS v3 provides two daily disaggregation products:
+- **`DAILY_RNL` (Reanalysis Partitioned):** Uses **ERA5 daily precipitation** to partition pentadal CHIRPS totals into daily amounts.
+- **`DAILY_SAT` (Satellite Partitioned — SELECTED):** Uses **IMERG Late V07** satellite precipitation to partition pentadal CHIRPS totals into daily amounts.
+
+> [!IMPORTANT]
+> **Why `DAILY_SAT` was chosen for MVP:**  
+> Using `DAILY_RNL` would introduce a hidden mathematical dependency on ERA5 precipitation into the CHIRPS subsystem. To ensure an independent rainfall evidence source relative to the ERA5-Land subsystem for cross-source validation in Phase 4, `DAILY_SAT` is selected. This provides an independent rainfall evidence source relative to the ERA5-Land subsystem without claiming that `DAILY_SAT` is universally more accurate across all meteorological conditions.
+
+### 6.2 Three-Tier Architectural Decoupling
+
+Phase 3B adheres to the repository's strict three-tier architecture:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ PHASE 3B ARCHITECTURAL TIERS                                                           │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ Tier 1: Remote Earth Engine Adapter (app/environment/chirps.py)                        │
+│   - Sole module importing `ee` and evaluating `.getInfo()`.                           │
+│   - Queries `UCSB-CHC/CHIRPS/V3/DAILY_SAT` over `create_analysis_region(...)`.         │
+│   - Applies temporal filter [requested_end_date - 89 days, requested_end_date + 1 day).│
+│   - Executes Option A zonal reduction (`ee.Reducer.mean()`) at scale 5566m.           │
+│   - Returns raw daily observation list with structured exception handling.            │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ Tier 2: Pure Normalization & Pure Window Aggregation (app/environment/chirps_*.py)     │
+│   - Ingestion: `normalize_raw_chirps_record(raw_record: dict)`                        │
+│     - Preserves raw floating-point values 1:1 without unit scaling (mm/day).           │
+│     - Rejects negative artifacts (< 0.0 mm) to None.                                   │
+│     - Preserves missing data as None (Missing != 0.0 mm).                              │
+│   - Aggregation: `compute_rainfall_window_suite(observations, requested_end_date)`     │
+│     - Pure Python calculation of 7-day, 30-day, 90-day rainfall window statistics.     │
+│     - Rejects duplicate observation dates with ValueError.                             │
+│     - Order-invariant, supports partial/empty windows with explicit semantics.         │
+│   - ZERO `ee` imports, ZERO network I/O, 100% offline testable.                       │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ Tier 3: Root Domain Composition (app/environment/chirps_pipeline.py)                   │
+│   - `analyze_chirps_rainfall(latitude, longitude, requested_end_date, radius_m=100.0)`│
+│   - Coordinates Tier 1 retrieval, Tier 2 normalization, dynamic data lag derivation,   │
+│     and Tier 2 rainfall window aggregation.                                            │
+│   - Assembles and returns authoritative `CHIRPSRainfallAnalysis` (v3.1.0).             │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+### 6.3 Dedicated Domain Contracts
+
+Rainfall is a specialized single-variable hydrological time series. Rather than overloading the 4-variable ERA5 `DailyEnvironmentalObservation` (which would leave temperature, soil water, and runoff as empty/None fields), Phase 3B defines dedicated domain models in `app/environment/chirps_types.py`:
+
+```mermaid
+classDiagram
+    class CHIRPSRainfallAnalysis {
+        +AnalysisRegionMetadata region
+        +date requested_end_date
+        +date latest_available_date
+        +int data_lag_days
+        +RainfallWindowStatistics recent_7_days
+        +RainfallWindowStatistics recent_30_days
+        +RainfallWindowStatistics recent_90_days
+        +list~DailyRainfallObservation~ daily_observations
+        +str dataset
+        +float spatial_resolution_km
+        +EarthEngineStatus status
+        +str pipeline_version
+        +EarthEngineError error
+    }
+    class RainfallWindowStatistics {
+        +Literal window_name
+        +date window_start
+        +date window_end
+        +int days_requested
+        +int days_available
+        +bool is_complete
+        +float total_precipitation_mm
+        +float mean_daily_precipitation_mm
+        +float max_daily_precipitation_mm
+    }
+    class DailyRainfallObservation {
+        +date observation_date
+        +float precipitation_mm
+    }
+    class AnalysisRegionMetadata {
+        +float latitude
+        +float longitude
+        +float radius_m
+    }
+    class EarthEngineError {
+        +str type
+        +str message
+    }
+
+    CHIRPSRainfallAnalysis --> AnalysisRegionMetadata
+    CHIRPSRainfallAnalysis --> RainfallWindowStatistics : recent_7_days
+    CHIRPSRainfallAnalysis --> RainfallWindowStatistics : recent_30_days
+    CHIRPSRainfallAnalysis --> RainfallWindowStatistics : recent_90_days
+    CHIRPSRainfallAnalysis --> DailyRainfallObservation : daily_observations
+    CHIRPSRainfallAnalysis --> EarthEngineError
+```
+
+### 6.4 Spatial Extraction Semantics (Option A)
+
+- **Geometry Contract:** Reuses existing `create_analysis_region(latitude, longitude, radius_m=100.0) -> ee.Geometry`.
+- **Extraction Mechanism:** Option A — Unweighted zonal spatial mean (`ee.Reducer.mean()`) at native nominal scale $5566\text{ m}$.
+- **Technical Reduction Semantics:**
+  - Evaluates the zonal spatial mean of intersecting CHIRPS grid cells at the native dataset scale ($5566\text{ m}$).
+  - The resulting reduction value serves strictly as **coarse regional rainfall context** ($\approx 5.566\text{ km}$).
+  - The 100m `AnalysisRegion` must **NEVER** be described, labelled, or presented as a 100m field-scale rainfall measurement.
+  - Prohibits synthetic downscaling, continuous spatial interpolation, inverse-distance weighting, or sub-pixel weighting claims.
+- **Scientific Boundary:**
+  > [!WARNING]
+  > CHIRPS provides **coarse regional rainfall context** ($\approx 5.566\text{ km}$).  
+  > The 100m `AnalysisRegion` must **NEVER** be described, labelled, or presented as a 100m field-scale rainfall measurement.
+
+### 6.5 Temporal Windowing & Latency Tracking
+
+- **Lookback Envelope:** Standard 90-day retrospective lookback $[E-89, E]$ anchored to `requested_end_date` (providing 90-day cumulative rainfall / longer-term recent rainfall context).
+- **Earth Engine Query Boundary:** Half-open interval `[start_date, requested_end_date + 1 day)` ensuring inclusive calendar filtering.
+- **Dynamic Publication Data Lag:**
+  - `latest_available_date = max(obs.observation_date for obs in daily_observations if obs.precipitation_mm is not None)`
+  - `data_lag_days = (requested_end_date - latest_available_date).days`
+  - No static publication lag constants are hardcoded.
+- **No Date Fabrication:** Missing calendar dates in the archive are never fabricated.
+
+### 6.6 Zero-Conversion Ingestion & Missing Data Semantics
+
+1. **Zero-Conversion Preservation:**
+   - Raw CHIRPS band `precipitation` is natively measured in $\text{mm/day}$.
+   - No multiplication by 1000, no division, no unit scaling.
+   - Preserves exact floating-point value: no rounding, no clamping.
+2. **Missing != Zero Invariant:**
+   - If precipitation is unavailable: `precipitation_mm = None`.
+   - If precipitation is explicitly 0.0 mm: `precipitation_mm = 0.0`.
+   - Missing values are never converted to 0.0 mm (which would fabricate false dry spells).
+3. **Rejection of Negative Packing Artifacts:**
+   - Any raw observation with $\text{precipitation} < 0.0\text{ mm}$ is invalid and set to `None`.
+   - Prohibits silent clamping ($\text{clamp}(x, 0) \to 0.0$ is prohibited).
+
+### 6.7 Pure-Python Multi-Window Aggregation Engine
+
+Evaluates three standard temporal envelopes:
+1. **Recent 7 Days (`recent_7_days`):** $[E-6, E]$, $\text{days\_requested}=7$ (immediate acute rain events).
+2. **Recent 30 Days (`recent_30_days`):** $[E-29, E]$, $\text{days\_requested}=30$ (monthly cumulative rainfall, aligns with S2 lookback).
+3. **Recent 90 Days (`recent_90_days`):** $[E-89, E]$, $\text{days\_requested}=90$ (90-day cumulative rainfall / longer-term recent rainfall context).
+
+#### Window Metrics Suite:
+- `window_name`: `"recent_7_days"` | `"recent_30_days"` | `"recent_90_days"`
+- `window_start`: Date of window start
+- `window_end`: Date of window end
+- `days_requested`: Integer span ($7$, $30$, $90$)
+- `days_available`: Count of distinct returned observation dates falling within $[ \text{window\_start}, \text{window\_end} ]$
+- `is_complete`: `bool = (days_available == days_requested)`
+- `total_precipitation_mm`: $\sum P_i$ over available non-null observations ($\ge 0.0$)
+- `mean_daily_precipitation_mm`: $\frac{1}{N} \sum P_i$ over available non-null observations ($\ge 0.0$)
+- `max_daily_precipitation_mm`: $\max(P_i)$ over available non-null observations ($\ge 0.0$)
+
+#### Aggregation & Partial-Window Invariants:
+- **Partial-Window Semantics (`is_complete=False`):**
+  - When an observation window has missing days (`days_available < days_requested`), metrics are calculated strictly over available non-null observations.
+  - `total_precipitation_mm` represents the observed precipitation total over available non-null observations, NOT a complete-window rainfall total.
+  - `mean_daily_precipitation_mm` represents the mean over available non-null observations, NOT a mean over missing days treated as zero.
+  - `max_daily_precipitation_mm` represents the maximum daily value over available non-null observations.
+  - Prohibits imputation, continuous interpolation, or zero-filling for missing dates.
+- **Duplicate Date Rejection:** Sequences with duplicate `observation_date` entries raise `ValueError`.
+- **Order Invariance:** Input sequence sorting (chronological, reverse, shuffled) produces identical window statistics.
+- **Empty Window Handling:** Windows with 0 available observations return `days_available=0`, `is_complete=False`, and `None` for all metric fields.
+- **Strict Non-Agronomic Scope:** Prohibits drought indices (SPI), anomaly scores, flood risk alerts, rainfall adequacy scores, and crop water requirement thresholds.
+
+### 6.8 Status Semantics
+
+Reuses foundational `EarthEngineStatus`:
+- `status="success"`: Valid normalized observations exist and window statistics are computed.
+- `status="no_data"`: Earth Engine query succeeds with 0 observations in the requested window (`daily_observations=[]`, window statistics `None`, `latest_available_date=None`, `data_lag_days=None`).
+- `status="error"`: Earth Engine compute, authorization, or network failure captured into structured `EarthEngineError`.
 
 ---
 
-## 7. Implementation Progress & Roadmap (Phase 3A)
- 
-- **Step 1 — Domain Contracts & Deterministic Offline Fixtures (🟢 COMPLETE — 31 Tests Passing):**
-  - Strongly typed Pydantic domain models in [`app/environment/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/types.py): `DailyEnvironmentalObservation`, `EnvironmentalWindowStatistics`, and `ERA5LandAnalysis` (`pipeline_version="3.0.0"`).
-  - Reused `AnalysisRegionMetadata`, `EarthEngineStatus`, and `EarthEngineError` without duplicate status enums.
-  - Deterministic offline fixtures in `tests/fixtures/era5_land/` (`punjab_monsoon_90d.json`, `punjab_winter_dry_90d.json`, `lagged_partial_90d.json`, `negative_artifact_edge_case.json`, `no_data_empty.json`) and typed loader in `tests/fixtures/era5_fixtures.py`.
-  - Comprehensive contract test suite in [`tests/unit/test_environment_types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_environment_types.py) (31 tests passed).
-- **Step 2 — Pure Math & Window Aggregation Engine (🟢 COMPLETE — 19 Tests Passing):**
-  - Implemented pure mathematical window aggregation engine in [`app/environment/aggregation.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/aggregation.py) with zero Earth Engine dependencies: `aggregate_window_statistics` and `compute_environmental_window_suite`.
-  - Inclusive calendar window spans $[E - N + 1, E]$ for 7-day, 30-day, and 90-day observation envelopes.
-  - Temporal availability and completeness invariants: `days_available` counts distinct observation dates in window; `is_complete == (days_available == days_requested)`.
-  - Metric-level missingness handling: metrics calculate over available non-null values; zero vs None distinction strictly preserved ($\text{Missing} \ne 0.0\text{ mm}$).
-  - Duplicate date detection: input sequences with duplicate `observation_date` values explicitly raise `ValueError`.
-  - Incomplete windows calculated from available observations without discarding data; empty windows return `None` metrics.
-  - Order-invariant processing: input order does not affect computed statistics.
-  - Comprehensive aggregation test suite in [`tests/unit/test_environment_aggregation.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_environment_aggregation.py) (19 tests passed; 50 environmental tests total).
-- **Step 3 — Earth Engine Collection Adapter & Integration (🟢 COMPLETE — 29 Unit Tests + 3 Live Integration Tests Passing):**
-  - **Tier 1 (Remote EE Adapter — `app/environment/era5.py`):** Queries `ECMWF/ERA5_LAND/DAILY_AGGR` collection over parcel region buffer (`create_analysis_region`), executes 90-day time series reduction $[E-89, E+1)$, selects target bands (`temperature_2m`, `total_precipitation_sum`, `volumetric_soil_water_layer_1`, `runoff_sum`), applies unweighted zonal mean spatial reduction (`ee.Reducer.mean()`) at nominal scale $11132\text{ m}$ (Option A), and returns raw band dictionaries with structured exception handling (`EarthEngineError`).
-  - **Tier 2 (Ingestion & Unit Normalization Boundary — `app/environment/pipeline.py`):** Pure parser converting raw units ($T_{^\circ\text{C}} = T_K - 273.15$, $P_{\text{mm}} = P_m \times 1000.0$, $R_{\text{mm}} = R_m \times 1000.0$), preserving soil water fraction $[0.0, 1.0]$, rejecting negative artifacts ($< 0.0$) without clamping, preserving missing fields as `None` ($\text{Missing} \ne 0.0\text{ mm}$), and constructing `list[DailyEnvironmentalObservation]`. ZERO `ee` dependencies, 100% testable offline.
-  - **Tier 3 (Root Domain Composition — `analyze_era5_land`):** Coordinates Tier 1 & 2, dynamically derives `latest_available_date` and `data_lag_days = (requested_end_date - latest_available_date).days`, delegates to Step 2 `compute_environmental_window_suite`, and assembles authoritative `ERA5LandAnalysis` with `EarthEngineStatus` (`success`, `no_data`, `error`).
-  - **Spatial Strategy:** Option A — Region Mean Reduction over 100m buffer geometry at native $11132\text{ m}$ scale without synthetic downscaling or sub-pixel weighting.
-  - **Testing:** 29 comprehensive offline unit tests in [`tests/unit/test_environment_pipeline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_environment_pipeline.py) + 3 live Earth Engine integration tests in [`tests/integration/test_era5_land_integration.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_era5_land_integration.py) (All 788 repository unit tests green).
+## 7. Architectural Boundary & Subsystem Independence
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ SUBSYSTEM INDEPENDENCE INVARIANT                                                       │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ - Phase 3A (ERA5-Land) and Phase 3B (CHIRPS) are completely independent subsystems.    │
+│ - Zero code coupling between era5.py and chirps.py.                                    │
+│ - Zero modification to existing sealed Phase 3A codebase.                              │
+│ - Cross-source correlation and multi-sensor validation is strictly deferred to Phase 4.│
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 8. Fixture & Test Architecture
+
+### 8.1 Deterministic Test Fixtures (`tests/fixtures/chirps/`)
+Store deterministic offline JSON fixtures:
+1. `punjab_monsoon_wet_90d.json`: High precipitation events with realistic dry intervals during Kharif monsoon.
+2. `punjab_winter_dry_90d.json`: Predominantly zero-rainfall observations during Rabi dry winter.
+3. `lagged_partial_90d.json`: Incomplete recent window simulating publication latency.
+4. `negative_artifact_edge_case.json`: Contains negative packing artifacts ($< 0.0$) and missing null values.
+5. `no_data_empty.json`: Empty observation list for zero-data query verification.
+
+### 8.2 Pure Unit Test Suite (`tests/unit/`)
+- Test raw record parsing and zero-conversion $1:1$ preservation.
+- Test rejection of negative artifacts to `None` without clamping.
+- Test missing != zero distinction.
+- Test duplicate date rejection with `ValueError`.
+- Test order invariance.
+- Test 7-day, 30-day, and 90-day window metrics (total, mean, max).
+- Test dynamic data lag calculation.
+- Test partial and empty window edge cases with verified `is_complete=False` semantics.
+- Test Pydantic contract validation and serialization.
+
+### 8.3 Live Earth Engine Integration Tests (`tests/integration/`)
+Dedicated integration test suite in `tests/integration/test_chirps_integration.py` verifying:
+- Live accessibility of `UCSB-CHC/CHIRPS/V3/DAILY_SAT` collection.
+- Availability of `precipitation` band.
+- Spatial reduction over `create_analysis_region` at Ludhiana fixture.
+- Non-negative evaluated rainfall measurements ($\text{mm/day}$).
+- Dynamic publication lag calculation.
+- Full end-to-end `CHIRPSRainfallAnalysis` domain construction.
+
+---
+
+## 9. Implementation Progress & Roadmap
+
+- **Phase 3A — ERA5-Land Daily Reanalysis Context (🟢 COMPLETE & SEALED — Commit `74fd372`):**
+  - Step 1: Strongly typed domain models (`app/environment/types.py`) and offline fixtures.
+  - Step 2: Pure mathematical window aggregation engine (`app/environment/aggregation.py`).
+  - Step 3: Earth Engine collection adapter (`app/environment/era5.py`), normalization & pipeline (`app/environment/pipeline.py`), Option A spatial reduction, and live integration tests.
+  - Verification: 80 environmental subsystem tests passed, 789 full unit tests passed, 3 live EE integration tests passed.
+- **Phase 3B — CHIRPS Regional Rainfall Backup Subsystem (🟢 COMPLETE & VERIFIED — DEC-020):**
+  - Architecture and domain design complete (DEC-020).
+  - Dataset: `UCSB-CHC/CHIRPS/V3/DAILY_SAT` (~5.566 km resolution, IMERG Late V07 daily partitioning).
+  - Ingestion: Zero-conversion native $\text{mm/day}$ floating-point preservation without artificial rounding.
+  - Domain contracts: Dedicated `DailyRainfallObservation`, `RainfallWindowStatistics`, `CHIRPSRainfallAnalysis` (`app/environment/chirps_types.py`).
+  - Earth Engine Adapter: Isolated in `app/environment/chirps.py` (`fetch_raw_chirps_rainfall_timeseries`) with Option A unweighted zonal mean reduction at 5566m scale.
+  - Pure Aggregation & Normalization: `app/environment/chirps_aggregation.py` and `app/environment/chirps_pipeline.py`.
+  - Verification: 49/49 CHIRPS unit tests passed, 838/838 full unit tests passed, 3 live EE integration tests passed.
+  - Next Step: Phase 3C (Dynamic World Land Use / Land Cover) upon user instruction.
+
+
 

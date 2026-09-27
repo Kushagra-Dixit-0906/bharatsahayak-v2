@@ -1,0 +1,360 @@
+{
+  "description": "Deterministic test fixture for 90-day CHIRPS query with 5-day publication latency and partial available window",
+  "region": {
+    "latitude": 30.9157,
+    "longitude": 75.7196,
+    "radius_m": 100.0,
+    "geometry_type": "PointBuffer",
+    "scale_m": 10.0
+  },
+  "requested_end_date": "2026-09-25",
+  "latest_available_date": "2026-09-20",
+  "data_lag_days": 5,
+  "daily_observations": [
+    {
+      "observation_date": "2026-06-28",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-06-29",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-06-30",
+      "precipitation_mm": 12.5
+    },
+    {
+      "observation_date": "2026-07-01",
+      "precipitation_mm": 45.0
+    },
+    {
+      "observation_date": "2026-07-02",
+      "precipitation_mm": 18.2
+    },
+    {
+      "observation_date": "2026-07-03",
+      "precipitation_mm": 4.0
+    },
+    {
+      "observation_date": "2026-07-04",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-05",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-06",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-07",
+      "precipitation_mm": 28.5
+    },
+    {
+      "observation_date": "2026-07-08",
+      "precipitation_mm": 52.0
+    },
+    {
+      "observation_date": "2026-07-09",
+      "precipitation_mm": 14.0
+    },
+    {
+      "observation_date": "2026-07-10",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-11",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-12",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-13",
+      "precipitation_mm": 2.5
+    },
+    {
+      "observation_date": "2026-07-14",
+      "precipitation_mm": 8.0
+    },
+    {
+      "observation_date": "2026-07-15",
+      "precipitation_mm": 35.0
+    },
+    {
+      "observation_date": "2026-07-16",
+      "precipitation_mm": 22.0
+    },
+    {
+      "observation_date": "2026-07-17",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-18",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-19",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-20",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-21",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-22",
+      "precipitation_mm": 16.0
+    },
+    {
+      "observation_date": "2026-07-23",
+      "precipitation_mm": 40.5
+    },
+    {
+      "observation_date": "2026-07-24",
+      "precipitation_mm": 15.0
+    },
+    {
+      "observation_date": "2026-07-25",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-26",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-27",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-07-28",
+      "precipitation_mm": 5.0
+    },
+    {
+      "observation_date": "2026-07-29",
+      "precipitation_mm": 30.0
+    },
+    {
+      "observation_date": "2026-07-30",
+      "precipitation_mm": 60.0
+    },
+    {
+      "observation_date": "2026-07-31",
+      "precipitation_mm": 18.0
+    },
+    {
+      "observation_date": "2026-08-01",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-02",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-03",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-04",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-05",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-06",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-07",
+      "precipitation_mm": 25.0
+    },
+    {
+      "observation_date": "2026-08-08",
+      "precipitation_mm": 50.0
+    },
+    {
+      "observation_date": "2026-08-09",
+      "precipitation_mm": 10.0
+    },
+    {
+      "observation_date": "2026-08-10",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-11",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-12",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-13",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-14",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-15",
+      "precipitation_mm": 8.5
+    },
+    {
+      "observation_date": "2026-08-16",
+      "precipitation_mm": 32.0
+    },
+    {
+      "observation_date": "2026-08-17",
+      "precipitation_mm": 14.0
+    },
+    {
+      "observation_date": "2026-08-18",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-19",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-20",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-21",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-22",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-23",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-24",
+      "precipitation_mm": 18.0
+    },
+    {
+      "observation_date": "2026-08-25",
+      "precipitation_mm": 42.0
+    },
+    {
+      "observation_date": "2026-08-26",
+      "precipitation_mm": 5.0
+    },
+    {
+      "observation_date": "2026-08-27",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-28",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-29",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-30",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-08-31",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-01",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-02",
+      "precipitation_mm": 12.0
+    },
+    {
+      "observation_date": "2026-09-03",
+      "precipitation_mm": 28.0
+    },
+    {
+      "observation_date": "2026-09-04",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-05",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-06",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-07",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-08",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-09",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-10",
+      "precipitation_mm": 6.5
+    },
+    {
+      "observation_date": "2026-09-11",
+      "precipitation_mm": 20.0
+    },
+    {
+      "observation_date": "2026-09-12",
+      "precipitation_mm": 35.0
+    },
+    {
+      "observation_date": "2026-09-13",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-14",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-15",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-16",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-17",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-18",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-19",
+      "precipitation_mm": 0.0
+    },
+    {
+      "observation_date": "2026-09-20",
+      "precipitation_mm": 10.0
+    }
+  ],
+  "dataset": "UCSB-CHC/CHIRPS/V3/DAILY_SAT",
+  "spatial_resolution_km": 5.566,
+  "status": "success",
+  "pipeline_version": "3.1.0",
+  "error": null
+}
