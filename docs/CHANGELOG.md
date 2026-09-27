@@ -7,16 +7,20 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 3: Additional Agricultural & Environmental Data Sources (Subphase 3A Step 3 Design Sealed — `DEC-019`)
-- **Phase 3A Step 3 — Earth Engine Collection Ingestion & Adapter Boundary Design (🟢 DESIGN SEALED / `DEC-019`):**
-  - Completed architecture and design specification for integrating Google Earth Engine ERA5-Land Daily Aggregated collection (`ECMWF/ERA5_LAND/DAILY_AGGR`).
-  - Formulated and locked `DEC-019`:
-    - 3-tier boundary architecture: Remote EE Materialization (`app/environment/era5.py`), Pure Unit Normalization & Parsing (`app/environment/pipeline.py`), Root Domain Composition (`analyze_era5_land`).
-    - Standardized on Option A (Region Mean Reduction over 100m parcel geometry at native $11132\text{ m}$ scale).
-    - Source-unit conversion boundary: $K \to ^\circ\text{C}$ ($K - 273.15$) and $m \to \text{mm}$ ($m \times 1000.0$) executed during raw record normalization; Step 2 engine remains completely decoupled.
-    - Dynamic publication latency measurement: derived from returned observations without static 3–7 day assumptions.
-    - Comprehensive test strategy separating pure offline unit tests from dedicated live Earth Engine integration tests.
-  - Confirmed zero application code implementation; implementation deferred to subsequent execution step.
+### 🟡 In Progress — Phase 3: Additional Agricultural & Environmental Data Sources (Subphase 3A Complete & Sealed — `DEC-018` / `DEC-019`)
+- **Phase 3A Step 3 — Earth Engine Collection Ingestion & Adapter Boundary (🟢 COMPLETE — 29 Unit Tests + 3 Live Integration Tests):**
+  - Created Earth Engine ERA5-Land adapter module [`app/environment/era5.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/era5.py):
+    - Queries `ECMWF/ERA5_LAND/DAILY_AGGR` collection over parcel geometry (`create_analysis_region`) across $[E-89, E+1)$.
+    - Selects 4 target bands: `temperature_2m`, `total_precipitation_sum`, `volumetric_soil_water_layer_1`, `runoff_sum`.
+    - Implements Option A spatial reduction: unweighted zonal mean reduction (`ee.Reducer.mean()`) at nominal scale $11132\text{ m}$.
+    - Captures server-side errors into structured `EarthEngineError` result envelopes without leaking exceptions.
+  - Created pure normalization and root orchestration module [`app/environment/pipeline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/pipeline.py):
+    - `normalize_raw_era5_record`: Converts Kelvin to Celsius ($T - 273.15$), meters to millimeters ($P \times 1000.0$, $R \times 1000.0$), preserves topsoil moisture fraction in $[0.0, 1.0]$, enforces strict missing != zero semantics, rejects negative precipitation/runoff artifacts without clamping.
+    - `analyze_era5_land`: Orchestrates spatial validation, Tier 1 retrieval, Tier 2 normalization, dynamic publication data lag computation (`latest_available_date`, `data_lag_days`), Step 2 multi-window statistical aggregation (7d, 30d, 90d), and assembling authoritative `ERA5LandAnalysis` payload (`pipeline_version="3.0.0"`).
+  - Updated public API exports in [`app/environment/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/__init__.py).
+  - Added comprehensive offline test suite in [`tests/unit/test_environment_pipeline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_environment_pipeline.py) (29 tests passing; 79 total environmental subsystem tests passing; 788 full repository unit tests passing).
+  - Added live Earth Engine integration test suite in [`tests/integration/test_era5_land_integration.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_era5_land_integration.py) (3 live tests passing against `bharatsahayak-v2`).
+
 - **Phase 3A Step 2 — Pure Math & Window Aggregation Engine (🟢 COMPLETE — 19 Tests):**
   - Created pure mathematical window aggregation module [`app/environment/aggregation.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/aggregation.py) and public exports in [`app/environment/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/__init__.py).
   - Implemented `aggregate_window_statistics`:

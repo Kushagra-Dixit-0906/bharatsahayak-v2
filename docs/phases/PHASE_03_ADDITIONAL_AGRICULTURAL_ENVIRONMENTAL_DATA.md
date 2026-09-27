@@ -1,10 +1,11 @@
 # Phase 3 — Additional Agricultural & Environmental Data Sources
 
 > **Canonical Record of Phase 3 Architecture, Environmental Data Sources, ERA5-Land Reanalysis, CHIRPS Precipitation, and Dynamic World Land Cover.**  
-> *Status: 🟡 PHASE 3 IN PROGRESS (Subphase 3A Step 1 Contracts & Step 2 Pure Math Complete — 50 Subsystem Tests Passing; Step 3 Design Sealed / DEC-019 / Implementation Pending)*<br>
+> *Status: 🟡 PHASE 3 IN PROGRESS (Subphase 3A Step 1 Contracts, Step 2 Pure Math, & Step 3 Ingestion Boundary Complete — 79 Subsystem Tests Passing + 3 Live Integration Tests Passing; Phase 3A Sealed)*<br>
 > *Base Sealed Checkpoint: `583dbf8 — docs: seal Phase 2 historical satellite intelligence`*<br>
-> *Current Subphase: Phase 3A (ERA5-Land Daily Reanalysis Environmental Context)*<br>
-> *Next Subphase Implementation: Phase 3A Step 3 (Earth Engine Ingestion Boundary & Collection Adapter Implementation)*
+> *Current Subphase: Phase 3A (ERA5-Land Daily Reanalysis Environmental Context) — COMPLETE*<br>
+> *Next Subphase Implementation: Phase 3B (CHIRPS High-Resolution Precipitation Regime)*
+
 
 ---
 
@@ -279,9 +280,10 @@ To guarantee rapid, deterministic unit testing without hitting Earth Engine netw
   - Incomplete windows calculated from available observations without discarding data; empty windows return `None` metrics.
   - Order-invariant processing: input order does not affect computed statistics.
   - Comprehensive aggregation test suite in [`tests/unit/test_environment_aggregation.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_environment_aggregation.py) (19 tests passed; 50 environmental tests total).
-- **Step 3 — Earth Engine Collection Adapter & Integration (🟢 DESIGN SEALED — DEC-019 / 🟡 IMPLEMENTATION PENDING):**
-  - **Tier 1 (Remote EE Adapter — `app/environment/era5.py`):** Query `ECMWF/ERA5_LAND/DAILY_AGGR` collection over parcel region buffer (`create_analysis_region`), execute 90-day time series reduction $[E-89, E+1)$, and return raw band dictionaries with structured exception handling (`EarthEngineError`).
-  - **Tier 2 (Ingestion & Unit Normalization Boundary):** Pure parser converting raw units ($T_{^\circ\text{C}} = T_K - 273.15$, $P_{\text{mm}} = P_m \times 1000.0$, $R_{\text{mm}} = R_m \times 1000.0$), rejecting negative artifacts ($< 0.0$), preserving missing fields as `None` ($\text{Missing} \ne 0.0\text{ mm}$), and constructing `list[DailyEnvironmentalObservation]`. Zero `ee` dependencies, 100% testable offline.
-  - **Tier 3 (Root Domain Composition — `analyze_era5_land`):** Coordinate Tier 1 & 2, dynamically derive `latest_available_date` and `data_lag_days`, delegate to Step 2 `compute_environmental_window_suite`, and assemble authoritative `ERA5LandAnalysis` with `EarthEngineStatus`.
-  - **Spatial Strategy:** Region Mean Reduction over 100m buffer geometry at native $11132\text{ m}$ scale (Option A).
-  - **Testing:** Offline unit tests for conversion/parsing + live Earth Engine integration tests in `tests/integration/test_era5_land_integration.py`.
+- **Step 3 — Earth Engine Collection Adapter & Integration (🟢 COMPLETE — 29 Unit Tests + 3 Live Integration Tests Passing):**
+  - **Tier 1 (Remote EE Adapter — `app/environment/era5.py`):** Queries `ECMWF/ERA5_LAND/DAILY_AGGR` collection over parcel region buffer (`create_analysis_region`), executes 90-day time series reduction $[E-89, E+1)$, selects target bands (`temperature_2m`, `total_precipitation_sum`, `volumetric_soil_water_layer_1`, `runoff_sum`), applies unweighted zonal mean spatial reduction (`ee.Reducer.mean()`) at nominal scale $11132\text{ m}$ (Option A), and returns raw band dictionaries with structured exception handling (`EarthEngineError`).
+  - **Tier 2 (Ingestion & Unit Normalization Boundary — `app/environment/pipeline.py`):** Pure parser converting raw units ($T_{^\circ\text{C}} = T_K - 273.15$, $P_{\text{mm}} = P_m \times 1000.0$, $R_{\text{mm}} = R_m \times 1000.0$), preserving soil water fraction $[0.0, 1.0]$, rejecting negative artifacts ($< 0.0$) without clamping, preserving missing fields as `None` ($\text{Missing} \ne 0.0\text{ mm}$), and constructing `list[DailyEnvironmentalObservation]`. ZERO `ee` dependencies, 100% testable offline.
+  - **Tier 3 (Root Domain Composition — `analyze_era5_land`):** Coordinates Tier 1 & 2, dynamically derives `latest_available_date` and `data_lag_days = (requested_end_date - latest_available_date).days`, delegates to Step 2 `compute_environmental_window_suite`, and assembles authoritative `ERA5LandAnalysis` with `EarthEngineStatus` (`success`, `no_data`, `error`).
+  - **Spatial Strategy:** Option A — Region Mean Reduction over 100m buffer geometry at native $11132\text{ m}$ scale without synthetic downscaling or sub-pixel weighting.
+  - **Testing:** 29 comprehensive offline unit tests in [`tests/unit/test_environment_pipeline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_environment_pipeline.py) + 3 live Earth Engine integration tests in [`tests/integration/test_era5_land_integration.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/integration/test_era5_land_integration.py) (All 788 repository unit tests green).
+

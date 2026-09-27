@@ -17,6 +17,13 @@ from app.environment.aggregation import (
     aggregate_window_statistics,
     compute_environmental_window_suite,
 )
+from app.environment.era5 import (
+    fetch_raw_era5_land_timeseries,
+)
+from app.environment.pipeline import (
+    analyze_era5_land,
+    normalize_raw_era5_record,
+)
 from app.environment.types import (
     DailyEnvironmentalObservation,
     EnvironmentalWindowStatistics,
@@ -28,5 +35,9 @@ __all__ = [
     "EnvironmentalWindowStatistics",
     "ERA5LandAnalysis",
     "aggregate_window_statistics",
+    "analyze_era5_land",
     "compute_environmental_window_suite",
+    "fetch_raw_era5_land_timeseries",
+    "normalize_raw_era5_record",
 ]
+
