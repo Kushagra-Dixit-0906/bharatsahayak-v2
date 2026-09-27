@@ -344,3 +344,179 @@ class AnnualHistoricalNdviObservation(BaseModel):
 
 
 SatelliteAnnualHistoricalNdviObservation = AnnualHistoricalNdviObservation
+
+
+# ==============================================================================
+# PHASE 2D DOMAIN CONTRACTS (DEC-013 / DEC-014 / DEC-017)
+# ==============================================================================
+
+
+class HistoricalNdviBaseline(BaseModel):
+    """Statistical baseline derived across represented annual historical NDVI observations (DEC-013 / DEC-014 / DEC-017).
+
+    Encapsulates the central tendency (median) and descriptive population dispersion across
+    at least 2 represented historical target years.
+    """
+
+    median: float = Field(
+        ge=-1.0, le=1.0, description="Primary historical baseline: median of represented annual regional NDVI means"
+    )
+    mean: float = Field(
+        ge=-1.0, le=1.0, description="Secondary descriptive baseline: arithmetic mean of annual regional NDVI means"
+    )
+    standard_deviation: float = Field(
+        ge=0.0,
+        description="Population standard deviation (ddof=0) describing dispersion among represented historical means",
+    )
+    min: float = Field(
+        ge=-1.0, le=1.0, description="Minimum annual regional NDVI mean observed in historical horizon"
+    )
+    max: float = Field(
+        ge=-1.0, le=1.0, description="Maximum annual regional NDVI mean observed in historical horizon"
+    )
+    represented_years: list[int] = Field(
+        description="Historical target years contributing valid observations, sorted descending"
+    )
+    annual_values: list[float] = Field(
+        description="Annual regional mean NDVI values corresponding to represented_years"
+    )
+    annual_count: int = Field(
+        ge=2, description="Count of represented annual observations (N_annual >= 2 required for a valid baseline)"
+    )
+
+    @model_validator(mode="after")
+    def validate_baseline_invariants(self) -> "HistoricalNdviBaseline":
+        if len(self.represented_years) != self.annual_count:
+            raise ValueError(
+                f"Length of represented_years ({len(self.represented_years)}) must equal annual_count ({self.annual_count})"
+            )
+        if len(self.annual_values) != self.annual_count:
+            raise ValueError(
+                f"Length of annual_values ({len(self.annual_values)}) must equal annual_count ({self.annual_count})"
+            )
+        if len(set(self.represented_years)) != len(self.represented_years):
+            raise ValueError("Duplicate target years detected in represented_years")
+        for i, val in enumerate(self.annual_values):
+            if not (-1.0 <= val <= 1.0):
+                raise ValueError(f"annual_values[{i}]={val} is outside valid NDVI range [-1.0, 1.0]")
+        if not (self.min <= self.median <= self.max):
+            raise ValueError(f"Baseline median ({self.median}) outside [min ({self.min}), max ({self.max})]")
+        if not (self.min <= self.mean <= self.max):
+            raise ValueError(f"Baseline mean ({self.mean}) outside [min ({self.min}), max ({self.max})]")
+        return self
+
+
+SatelliteHistoricalNdviBaseline = HistoricalNdviBaseline
+
+
+class HistoricalSufficiencyEvidence(BaseModel):
+    """Empirical data sufficiency evidence for multi-year historical comparison (DEC-014 / DEC-017)."""
+
+    requested_years_count: int = Field(
+        default=3, gt=0, description="Number of historical years requested in lookback horizon"
+    )
+    represented_years_count: int = Field(
+        ge=0, description="Number of distinct historical years with valid usable observations"
+    )
+    minimum_required_years: int = Field(
+        default=2, gt=0, description="Minimum distinct historical years required for a valid baseline (default 2)"
+    )
+    is_sufficient: bool = Field(
+        description="True if represented_years_count >= minimum_required_years (N_annual >= 2 and Y >= 2)"
+    )
+    represented_years: list[int] = Field(
+        default_factory=list, description="List of historical target years successfully represented"
+    )
+    missing_years: list[int] = Field(
+        default_factory=list, description="List of historical target years with no usable data or errors"
+    )
+    sufficiency_notes: str | None = Field(
+        default=None, description="Neutral evidence-based explanation of historical sufficiency state"
+    )
+
+
+SatelliteHistoricalSufficiencyEvidence = HistoricalSufficiencyEvidence
+
+
+SpectralDepartureBand = Literal[
+    "Strong Positive Spectral Departure",
+    "Moderate Positive Spectral Departure",
+    "Near-Baseline Spectral Alignment",
+    "Moderate Negative Spectral Departure",
+    "Strong Negative Spectral Departure",
+]
+SatelliteSpectralDepartureBand = SpectralDepartureBand
+
+
+class NdviAnomalyEvidence(BaseModel):
+    """Quantified mathematical departures between current NDVI and historical baseline (DEC-013 / DEC-014 / DEC-017)."""
+
+    current_mean: float = Field(
+        ge=-1.0, le=1.0, description="Current observation regional mean NDVI"
+    )
+    baseline_median: float = Field(
+        ge=-1.0, le=1.0, description="Historical baseline median NDVI"
+    )
+    absolute_departure: float = Field(
+        ge=-2.0, le=2.0, description="Primary anomaly: current_mean - baseline_median (in NDVI units)"
+    )
+    percentage_departure: float | None = Field(
+        default=None, description="Gated relative departure (%): ((current - baseline) / baseline) * 100"
+    )
+    historical_mean: float = Field(
+        ge=-1.0, le=1.0, description="Historical descriptive arithmetic mean NDVI used for Z-score"
+    )
+    historical_std_dev: float = Field(
+        ge=0.0, description="Historical population standard deviation (ddof=0) used for Z-score"
+    )
+    z_score: float | None = Field(
+        default=None, description="Gated standardized anomaly: (current_mean - historical_mean) / historical_std_dev"
+    )
+    departure_band: SpectralDepartureBand = Field(
+        description="Empirical non-agronomic spectral departure classification"
+    )
+    percentage_unavailable_reason: str | None = Field(
+        default=None, description="Explicit reason percentage departure was withheld (e.g. 'baseline_below_threshold')"
+    )
+    z_score_unavailable_reason: str | None = Field(
+        default=None, description="Explicit reason Z-score was withheld (e.g. 'insufficient_sample_size', 'negligible_variance')"
+    )
+
+
+SatelliteNdviAnomalyEvidence = NdviAnomalyEvidence
+
+
+HistoricalAnalysisStatus = Literal["success", "insufficient_history", "no_data", "error"]
+SatelliteHistoricalAnalysisStatus = HistoricalAnalysisStatus
+
+
+class HistoricalNdviAnalysis(BaseModel):
+    """Complete multi-year historical satellite intelligence payload (DEC-014 / DEC-017)."""
+
+    current: RegionalNdviAnalysis | None = Field(
+        default=None, description="Authoritative Phase 1 current observation payload"
+    )
+    historical_observations: list[AnnualHistoricalNdviObservation] = Field(
+        default_factory=list, description="Per-year historical observation results for Y-1, Y-2, Y-3"
+    )
+    baseline: HistoricalNdviBaseline | None = Field(
+        default=None, description="Multi-year statistical baseline (present if status='success')"
+    )
+    sufficiency: HistoricalSufficiencyEvidence = Field(
+        description="Data sufficiency evaluation and year completeness evidence"
+    )
+    anomaly: NdviAnomalyEvidence | None = Field(
+        default=None, description="Mathematical anomaly metrics (present if status='success')"
+    )
+    status: HistoricalAnalysisStatus = Field(
+        description="Universal operational status of the historical comparison"
+    )
+    pipeline_version: str = Field(
+        default="2.0.0", description="Semantic version of the historical baseline pipeline"
+    )
+    error: EarthEngineError | None = Field(
+        default=None, description="Error details if status is 'error'"
+    )
+
+
+SatelliteHistoricalNdviAnalysis = HistoricalNdviAnalysis
