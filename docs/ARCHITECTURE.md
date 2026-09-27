@@ -196,4 +196,40 @@ graph TD
 4. **Pure Local Mathematics Boundary (`DEC-017`):** Earth Engine is strictly limited to remote pixel filtering, masking, compositing, and zonal reductions (`historical.py`). All multi-year statistical distributions, dispersion metrics, sufficiency evaluations, metric gating, and departure classifications execute as deterministic, pure-Python logic without Earth Engine dependencies (`baseline.py`, `historical_analysis.py`).
 5. **Pluggable Data Source Architecture:** The Earth Engine client implements a decoupled provider interface so that future datasets (Dynamic World LULC, NDWI moisture, soil grids) can be plugged in without refactoring the core multi-agent workflow.
 
+---
+
+## 🌦️ Agricultural & Environmental Context Architecture (`🟡 PHASE 3 DESIGN SEALED / DEC-018`)
+
+Phase 3 introduces physical meteorological, hydrological, and land-cover context layers to explain the physical drivers behind satellite vegetation signals:
+
+```mermaid
+graph TD
+    subgraph EarthEngineCatalog ["Google Earth Engine Reanalysis Archive"]
+        ERA["ECMWF/ERA5_LAND/DAILY_AGGR\n(Daily Aggregated Reanalysis, ~11.1 km)"]
+    end
+
+    subgraph DataExtraction ["1. Remote Extraction Layer"]
+        ERA --> Query["Temporal Range Query\n(Up to 90 Days Lookback)"]
+        Query --> Sample["Zonal Sampling / Mean Reduction\n(over AnalysisRegion Geometry)"]
+    end
+
+    subgraph ValidationEngine ["2. Pure Math & Validation Engine (0 EE Calls)"]
+        Sample --> Val["Validation & Quality Gate\n(Reject Negative Precipitation / Runoff)"]
+        Val --> Norm["Unit Normalization\n(K -> °C, m -> mm, m³/m³ direct)"]
+        Norm --> Win["Multi-Window Aggregator\n(Recent 7-Day, 30-Day, 90-Day Envelopes)"]
+    end
+
+    subgraph DomainAssembly ["3. Root Domain Payload Composition (0 EE Calls)"]
+        Win --> Lag["Data Lag & Completeness Tracker\n(requested_end_date vs latest_available_date)"]
+        Lag --> Out["ERA5LandAnalysis\n(pipeline_version='3.0.0')"]
+    end
+```
+
+### Key Architectural Tenets for Phase 3A:
+1. **Separation of Measurement from Agronomic Interpretation:** Phase 3A produces pure physical observations (temperature in $^\circ\text{C}$, precipitation in $\text{mm}$, soil water in $\text{m}^3/\text{m}^3$, runoff in $\text{mm}$). Drought, heat stress, and irrigation classifications are strictly deferred to Phase 4 (Fusion) and Phase 5 (Reasoning).
+2. **Explicit Reanalysis Data Lag:** Atmospheric reanalysis exhibits publication latency (typically 3–7 days). The domain contract tracks `data_lag_days` explicitly rather than misrepresenting reanalysis as real-time forecasts.
+3. **Coarse Regional Context Non-Claim:** Standardized at $\approx 11.1\text{ km}$ grid resolution, ERA5-Land is strictly coarse regional context, never claimed as field-scale (10m/100m) parcel microclimate.
+4. **Missing Data & Artifact Invariants:** Missing precipitation is never converted to $0.0\text{ mm}$; negative accumulated precipitation/runoff values from GEE data-packing artifacts are rejected as invalid (never silently clamped to 0.0).
+
+
 

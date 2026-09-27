@@ -1,7 +1,7 @@
 # BharatSahayak V2 — Master Project Roadmap
 
 > **Master roadmap and progressive implementation plan for BharatSahayak V2.**  
-> *Last Updated: Phase 2 Historical Satellite Intelligence Completion*  
+> *Last Updated: Phase 3A ERA5-Land Environmental Context Design Sealed*  
 > *Baseline Branch: `bharatsahayak-v2` | Commit: `e0fcc29` | GCP Project ID: `bharatsahayak-v2`*
 
 ---
@@ -105,14 +105,28 @@ graph TD
 ---
 
 ### Phase 3: Additional Agricultural & Environmental Data Sources
-- **Status:** 🟡 **PLANNED**
-- **Purpose:** Lay the foundation for external environmental and open agricultural datasets via a modular, pluggable provider architecture.
-- **Major Work:**
-  - Design pluggable provider interface for environmental data.
-  - Integrate live meteorological feeds (precipitation forecast, temperature extremes, humidity, wind).
-  - Prepare data structures for soil properties (pH, organic carbon, texture) and regional agro-climatic zones.
-- **Dependencies:** Phase 0, Phase 1.
-- **Future Upgrades (`🔴 IDEA`):** SoilGrids / ICAR soil profiles, ERA5-Land historical climate reanalysis, live mandi prices via Agmarknet / e-NAM APIs.
+- **Status:** 🟡 **IN PROGRESS (Subphase 3A Step 1 Complete — 31 Tests Passing; Steps 2 & 3 Pending)**
+- **Purpose:** Provide physical grounded evidence of the meteorological, hydrological, and land-cover regime surrounding the farmer's parcel to explain the environmental drivers behind satellite vegetation signals.
+- **Sub-Roadmap:**
+  - **3A — ERA5-Land Daily Reanalysis Environmental Context (🟡 IN PROGRESS / Step 1 Complete — 31 Tests / Steps 2 & 3 Pending):**
+    - **Step 1 — Domain Contracts & Deterministic Fixtures (🟢 COMPLETE — 31 Tests):** Strongly typed domain models (`DailyEnvironmentalObservation`, `EnvironmentalWindowStatistics`, `ERA5LandAnalysis` in [`app/environment/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/types.py)), 5 deterministic offline fixtures in `tests/fixtures/era5_land/`, typed loader in `tests/fixtures/era5_fixtures.py`, and comprehensive contract tests in [`tests/unit/test_environment_types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_environment_types.py).
+    - **Step 2 — Pure Math & Window Aggregation Engine (🟡 NEXT STEP / PENDING):** Unit conversions ($K \to ^\circ\text{C}$, $m \to \text{mm}$), negative artifact rejection, 7/30/90-day window aggregators in pure Python with zero Earth Engine dependencies.
+    - **Step 3 — Earth Engine Adapter & Integration (🟡 PENDING):** Earth Engine collection query (`ECMWF/ERA5_LAND/DAILY_AGGR`), live integration tests, and public exports.
+    - 4 Core Physical Variables: 2m Temperature ($K \to ^\circ\text{C}$), Total Precipitation ($m \to \text{mm}$), Volumetric Soil Water Layer 1 (0–7 cm, $\text{m}^3/\text{m}^3$), Total Runoff ($m \to \text{mm}$).
+    - 3 Retrospective Observation Windows: Recent 7-Day, 30-Day, 90-Day observation envelopes ending at latest available reanalysis observation.
+    - Reanalysis Data Lag Tracking: Explicit `requested_end_date`, `latest_available_date`, and `data_lag_days`.
+    - Coarse Regional Context Boundary: Standardized at $\approx 11.1\text{ km}$ ($0.1^\circ$) grid resolution; strictly non-field-scale.
+    - Data Reliability Invariants: Missing precipitation/runoff $\ne 0.0\text{ mm}$; negative GEE packing artifacts rejected rather than clamped.
+    - Strict Non-Agronomic Boundary: Physical measurements only (no drought/heat stress/irrigation classifications).
+  - **3B — CHIRPS High-Resolution Precipitation Regime (🟡 PLANNED):**
+    - UCSB-CHG/CHIRPS/DAILY (~5.5 km resolution) for rainfall event frequency, dry spell tracking, and precipitation seasonality.
+  - **3C — Dynamic World Land Use / Land Cover (🟡 PLANNED):**
+    - GOOGLE/DYNAMICWORLD/V1 (10m Sentinel-2 aligned LULC) for crop vs bare ground vs tree probability.
+  - **3D — Environmental Provider Abstraction & Unified Context Contract (🟡 PLANNED):**
+    - Unified multi-provider abstraction and end-to-end integration testing.
+- **Dependencies:** Phase 1 (`60f8d90`), Phase 2 (`583dbf8`).
+- **Next Subphase Implementation:** Phase 3A Step 2 (Pure Math & Window Aggregation Engine).
+- **Future Upgrades (`🔴 IDEA`):** SoilGrids / ICAR soil profiles, live forecast API feeds (IMD / Open-Meteo), live mandi prices via Agmarknet / e-NAM APIs.
 
 ---
 

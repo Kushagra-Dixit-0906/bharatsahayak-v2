@@ -7,6 +7,27 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
+### 🟡 In Progress — Phase 3: Additional Agricultural & Environmental Data Sources (Subphase 3A Step 1 Complete — 31 Tests)
+- **Phase 3A Step 1 — Domain Contracts & Deterministic Offline Fixtures (🟢 COMPLETE — 31 Tests):**
+  - Created dedicated environment domain contract module [`app/environment/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/types.py) and exports in [`app/environment/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/__init__.py).
+  - Implemented domain models:
+    - `DailyEnvironmentalObservation`: Normalized daily meteorological & hydrological variables ($T_{^\circ\text{C}}$, $P_{\text{mm}}$, $\text{SW}_{\text{m}^3/\text{m}^3}$, $R_{\text{mm}}$) with explicit rejection of negative values ($\ge 0.0$) and preservation of missing fields as `None` ($\text{Missing} \ne 0.0$).
+    - `EnvironmentalWindowStatistics`: 7-day, 30-day, and 90-day window aggregations with strict invariants (`days_available <= days_requested`, `is_complete == (days_available == days_requested)`, temperature bound checks).
+    - `ERA5LandAnalysis`: Authoritative root domain model (`pipeline_version="3.0.0"`, dataset `ECMWF/ERA5_LAND/DAILY_AGGR`, spatial resolution $11.1\text{ km}$), integrating existing `AnalysisRegionMetadata`, `EarthEngineStatus`, and `EarthEngineError` without duplicate status enums.
+  - Implemented 5 deterministic offline fixtures in `tests/fixtures/era5_land/` (`punjab_monsoon_90d.json`, `punjab_winter_dry_90d.json`, `lagged_partial_90d.json`, `negative_artifact_edge_case.json`, `no_data_empty.json`) and typed loader in `tests/fixtures/era5_fixtures.py`.
+  - Implemented contract and fixture test suite in [`tests/unit/test_environment_types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_environment_types.py) with 31 unit tests passing. Full test suite passing (740 tests passed, 0 failures).
+- **Phase 3A ERA5-Land Reanalysis Architecture & Design Review (🟢 DESIGN SEALED / `DEC-018`):**
+  - Conducted architectural, data-engineering, and scientific design review for incorporating meteorological and hydrological reanalysis context from Google Earth Engine.
+  - Formulated and locked `DEC-018`:
+    - Standardized on ECMWF ERA5-Land Daily Aggregated (`ECMWF/ERA5_LAND/DAILY_AGGR`, $\approx 11.1\text{ km}$ resolution).
+    - Selected 4 core physical variables: `temperature_2m` ($K \to ^\circ\text{C}$), `total_precipitation_sum` ($m \to \text{mm}$), `volumetric_soil_water_layer_1` (0–7 cm topsoil moisture, $\text{m}^3/\text{m}^3$), and `runoff_sum` ($m \to \text{mm}$).
+    - Established 3 retrospective observation windows: Recent 7-Day, 30-Day, and 90-Day envelopes.
+    - Explicitly designed reanalysis publication lag tracking (`requested_end_date`, `latest_available_date`, `data_lag_days`).
+    - Enforced data reliability invariants: missing precipitation/runoff is never zero ($\text{Missing} \ne 0.0\text{ mm}$); negative GEE packing artifacts are rejected rather than clamped.
+    - Preserved strict non-agronomic boundary (pure physical measurements, no drought/heat stress/irrigation classifications in Phase 3A).
+    - Designed 3-tier testing architecture utilizing deterministic offline JSON test fixtures.
+  - Created canonical Phase 3 specification in `docs/phases/PHASE_03_ADDITIONAL_AGRICULTURAL_ENVIRONMENTAL_DATA.md`.
+
 ### 🟢 Completed — Phase 2: Historical Satellite Intelligence (Subphases 2A–2D Complete & Sealed — `ebba070`)
 - **Phase 2A Architecture & Design Review (🟢 COMPLETE & APPROVED / `DEC-012`, `DEC-013`, `DEC-014`):**
   - Conducted comprehensive architecture, data-engineering, and scientific review for historical comparative satellite intelligence.

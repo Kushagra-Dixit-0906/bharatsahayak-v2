@@ -1,0 +1,29 @@
+{
+  "description": "Deterministic test fixture containing invalid negative precipitation and runoff artifacts to test explicit contract rejection",
+  "region": {
+    "latitude": 30.9157,
+    "longitude": 75.7196,
+    "radius_m": 100.0,
+    "geometry_type": "PointBuffer",
+    "scale_m": 10.0
+  },
+  "requested_end_date": "2026-09-25",
+  "latest_available_date": "2026-09-25",
+  "data_lag_days": 0,
+  "daily_observations": [
+    {
+      "observation_date": "2026-09-24",
+      "temperature_c": 31.5,
+      "precipitation_mm": 5.0,
+      "volumetric_soil_water_layer_1": 0.25,
+      "runoff_sum_mm": 0.5
+    },
+    {
+      "observation_date": "2026-09-25",
+      "temperature_c": 32.0,
+      "precipitation_mm": -2.5,
+      "volumetric_soil_water_layer_1": 0.24,
+      "runoff_sum_mm": -0.8
+    }
+  ]
+}

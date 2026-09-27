@@ -1467,3 +1467,72 @@ Prior to DEC-017:
   - Step 3 Integration Tests: **18 passed** in [`tests/unit/test_satellite_historical_baseline_integration.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_historical_baseline_integration.py)
   - Satellite Subsystem Suite: **700 passed** (0 failures)
   - Full Unit Test Suite: **709 passed** (0 failures)
+
+---
+
+### DEC-018: ERA5-Land Daily Reanalysis Environmental Context Engine
+
+- **Decision ID:** `DEC-018`
+- **Date / Context:** Phase 3A Additional Agricultural & Environmental Data (ERA5-Land Daily Reanalysis Architecture & Design)
+
+#### 📸 Before Snapshot
+Prior to DEC-018:
+- Phase 1 and Phase 2 established instantaneous and multi-year historical satellite NDVI analytics (`RegionalNdviAnalysis`, `HistoricalNdviAnalysis`).
+- However, the system possessed zero physical meteorological or environmental context to explain *why* vegetative vigor is lagging, recovering, or flourishing (e.g. whether a negative NDVI anomaly is driven by acute rainfall deficit, prolonged heat stress, or topsoil drying).
+- The existing MCP server (`app/mcp_server.py`) returns static catalog weather rules, and no live or reanalysis meteorological data pipeline exists in the codebase.
+
+#### 📜 Locked Decisions
+
+1. **Dataset Standardization:**
+   - Standardize on ECMWF ERA5-Land Daily Aggregated in Google Earth Engine (`ECMWF/ERA5_LAND/DAILY_AGGR`).
+
+2. **Four Physical Variables for MVP:**
+   - **Air Temperature (`temperature_2m`):** Ingested in Kelvin ($K$), normalized to Degrees Celsius ($^\circ\text{C}$) via $T_{^\circ\text{C}} = T_K - 273.15$.
+   - **Total Precipitation (`total_precipitation_sum`):** Ingested in meters ($m$), normalized to millimeters ($\text{mm}$) via $P_{\text{mm}} = P_m \times 1000.0$.
+   - **Volumetric Soil Water Layer 1 (`volumetric_soil_water_layer_1`):** Topsoil moisture (0–7 cm depth), represented as dimensionless volume fraction ($\text{m}^3/\text{m}^3$) in $[0.0, 1.0]$.
+   - **Total Runoff (`runoff_sum`):** Surface and subsurface runoff, ingested in meters ($m$), normalized to millimeters ($\text{mm}$) via $R_{\text{mm}} = R_m \times 1000.0$.
+   - Additional atmospheric variables (dewpoint, solar radiation, wind, lower soil layers) are explicitly deferred to the Future Backlog.
+
+3. **Three Retrospective Observation Windows:**
+   - **Recent 7 Days (`recent_7_days`):** Immediate short-term moisture and thermal dynamics.
+   - **Recent 30 Days (`recent_30_days`):** Monthly cumulative context aligning directly with Phase 1 Sentinel-2 30-day lookback.
+   - **Recent 90 Days (`recent_90_days`):** Seasonal cumulative envelope covering the active crop vegetative growth stage.
+
+4. **Coarse Regional Context Boundary ($\approx 11.1\text{ km}$ Resolution):**
+   - ERA5-Land data is explicitly defined and documented as **coarse-resolution regional environmental context**.
+   - The system must **never** describe ERA5-Land as a field-scale (10m or 100m) parcel measurement.
+   - Complex synthetic downscaling or spatial interpolation is prohibited in Phase 3A.
+
+5. **Reanalysis Latency & Data Lag Tracking:**
+   - As an atmospheric reanalysis dataset, ERA5-Land exhibits an operational publication lag (typically 3–7 days).
+   - The domain contract explicitly captures `requested_end_date`, `latest_available_date`, and `data_lag_days`.
+   - The system must **never** misrepresent reanalysis observations as real-time current weather or forecast telemetry.
+
+6. **Strict Missing Data & Packing Artifact Invariants:**
+   - **Missing $\ne 0.0$:** Missing precipitation or runoff is never converted to $0.0\text{ mm}$ (which would falsely imply severe drought).
+   - **Rejection of Negative Artifacts:** Negative values ($< 0.0$) for accumulated precipitation or runoff caused by GEE netCDF data-packing/re-projection artifacts are detected as invalid and excluded.
+   - **No Silent Clamping:** Prohibits silently clamping negative values to zero ($\text{clamp}(x, 0) \to 0.0$ is prohibited).
+
+7. **Strict Non-Agronomic Boundary:**
+   - Phase 3A delivers raw physical measurements only.
+   - No classification of drought stages, heat stress alerts, flood warnings, or irrigation advisories.
+   - All agronomic interpretations are strictly deferred to Phase 4 (Fusion) and Phase 5 (Gemini Agricultural Reasoning).
+
+8. **Deterministic Test Fixtures & Testing Architecture:**
+   - Unit test suites execute exclusively against deterministic offline JSON fixtures in `tests/fixtures/era5_land/`.
+   - Offline fixtures are explicitly documented as test/demo fallback data, never presented as live observations.
+   - Live Earth Engine calls are strictly confined to dedicated integration test suites.
+
+#### 💡 Rationale (Why Chosen)
+- **Physics-Grounded Environmental Reference:** ERA5-Land provides globally continuous, multi-decadal meteorological reanalysis with unified spatial-temporal consistency across India.
+- **Multi-Variable Ingestion:** Ingesting temperature, precipitation, soil water, and runoff from a single Earth Engine collection minimizes external API dependencies.
+- **Architectural Symmetry:** Mirrors the proven three-tier decoupling of Phase 2 (remote Earth Engine data materialization $\to$ pure local math & validation $\to$ typed domain composition).
+
+#### ⚖️ Trade-offs & Limitations
+- **Coarse Spatial Grid:** $\approx 11.1\text{ km}$ grid resolution does not resolve localized micro-topography or isolated convective showers.
+- **Operational Lag:** 3–7 day publication latency requires clear data lag communication; supplementary live forecasts will be integrated via live weather APIs in future phases.
+
+#### 📊 Current Status & Next Steps
+- **Status:** 🟢 **DESIGN SEALED & ARCHITECTURE APPROVED (Phase 3A Design Complete / Implementation Pending)**
+- **Next Step:** Phase 3A Step 1 — Implement typed domain contracts (`app/environment/types.py` or `app/satellite/types.py`) and pure calculation engine.
+
