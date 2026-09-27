@@ -150,34 +150,50 @@ The `load_farmer_profile` node parses incoming queries to maintain session state
 
 ---
 
-## 🛰️ Earth Engine Satellite Intelligence Flow (`🟢 PHASE 1 COMPLETE | 🟡 PHASE 2 IN PROGRESS | 🟡 MCP CONNECTION SCHEDULED (Phase 6)`)
+## 🛰️ Earth Engine Satellite Intelligence Flow (`🟢 PHASE 1 & PHASE 2 COMPLETE | 🟡 MCP CONNECTION SCHEDULED (Phase 6)`)
 
 > [!IMPORTANT]
 > **Current Implementation Status:**
 > - **Phase 1 Instantaneous Satellite Engine (`app/satellite/`):** 🟢 **COMPLETE & SEALED (`60f8d90`)**. Standalone deterministic satellite computation engine providing `analyze_regional_ndvi(...)`, single authoritative observation selection, Cloud Score+ quality masking, NDVI computation, and regional zonal reductions (`382 tests passing`).
-> - **Phase 2 Historical Intelligence & Anomaly Detection:** 🟡 **ARCHITECTURE APPROVED & SEALED (`DEC-012`–`DEC-016`, Subphases 2A, 2B & 2C Design Sealed; 2C Implementation Next)**. Extends the satellite engine with 3-year rolling baselines ($Y-1, Y-2, Y-3$), calendar-date-anchored seasonal windowing ($T_h \pm 15\text{ days}$), target-year window ownership, Option C annual matched-window regional observations, and empirical NDVI anomaly evidence.
+> - **Phase 2 Historical Intelligence & Anomaly Detection:** 🟢 **COMPLETE & SEALED (`DEC-012`–`DEC-017`, `ebba070`)**. Extends the satellite engine with 3-year rolling baselines ($Y-1, Y-2, Y-3$), calendar-date-anchored seasonal windowing ($T_h \pm 15\text{ days}$), target-year window ownership, Option C annual matched-window regional composite observations, pure-Python statistical baseline derivation (median, mean, population std dev ddof=0, sufficiency), empirical spectral departure anomaly quantification, and root payload integration (`700 satellite tests passing`).
 > - **FastMCP Server & Agent Connection:** 🟡 **SCHEDULED FOR PHASE 6**. The active MCP server ([app/mcp_server.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/mcp_server.py)) currently retains its initial static/catalog tools until Phase 6 implements the live `get_regional_satellite_analysis` tool adapter.
 
-In accordance with architectural decision [`DEC-004`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/docs/DECISION_LOG.md#L118-L168) (Option C), the Earth Engine architecture decouples MCP tool contracts from geospatial execution:
+### Multi-Year Historical Satellite Intelligence Architecture (`Phase 2D / DEC-017`)
 
+Phase 2 enforces a strict three-tier module separation between remote Earth Engine data materialization, local pure-Python mathematics, and root domain payload composition:
 
 ```mermaid
 graph TD
-    A["👨‍🌾 Farmer / User Interface"] --> B["🗺️ Map-Based / Farmer-Friendly Location\n(Place Search / Village / PIN / Pin Drop)"]
-    B --> C["📍 Coordinates & Farm Area\n(Latitude, Longitude, Bounding Area)"]
-    C --> D["🔌 MCP Capability Interface\n(Tool Contract: get_farm_satellite_intelligence)"]
-    D --> E["🛰️ Dedicated Earth Engine Module / Service\n(app/satellite/ engine)"]
-    E --> F["📸 Copernicus Sentinel-2 MSI Surface Reflectance\n(Harmonized + Cloud Score+ Quality DEC-010)"]
-    F --> G["🌱 NDVI Calculation\n(NIR - Red) / (NIR + Red)"]
-    G --> H["📊 Regional Statistics Reducer\n(Mean, Median, Min, Max)"]
-    H --> I["📦 Structured Satellite Result (JSON)\n(Vegetation Vigor, Stress Level, Uniformity)"]
-    I --> D
-    D --> J["🧠 Central Orchestrator & Specialized Advisors\n(Gemini 2.5 Flash Reasoning)"]
+    subgraph Phase1 ["Phase 1: Instantaneous Observation (pipeline.py)"]
+        P1["analyze_regional_ndvi(...)"] --> Cur["RegionalNdviAnalysis\n(Current Observation Y)"]
+    end
+
+    subgraph Phase2C ["Phase 2C: Multi-Year Historical Materialization (historical.py)"]
+        Cur -. Reference Date .-> P2C["analyze_historical_years(...)"]
+        P2C --> H1["Y-1: AnnualHistoricalNdviObservation"]
+        P2C --> H2["Y-2: AnnualHistoricalNdviObservation"]
+        P2C --> H3["Y-3: AnnualHistoricalNdviObservation"]
+        H1 & H2 & H3 --> HList["list[AnnualHistoricalNdviObservation]"]
+    end
+
+    subgraph Phase2DMath ["Phase 2D: Pure Statistical Engine (baseline.py)"]
+        Cur & HList --> Math["calculate_historical_ndvi_statistics(...)"]
+        Math --> Base["HistoricalNdviBaseline\n(Median, Mean, StdDev ddof=0, Min, Max)"]
+        Math --> Suff["HistoricalSufficiencyEvidence\n(N >= 2, Y >= 2)"]
+        Math --> Anom["NdviAnomalyEvidence\n(Absolute Δ, Gated %, Gated Z-Score, Departure Band)"]
+    end
+
+    subgraph Phase2DIntegration ["Phase 2D: Root Domain Composition (historical_analysis.py)"]
+        Cur & HList & Base & Suff & Anom --> Root["build_historical_ndvi_analysis(...)"]
+        Root --> Out["HistoricalNdviAnalysis\n(pipeline_version='2.0.0')"]
+    end
 ```
 
 ### Architectural Principles & Boundaries for Earth Engine Integration
 1. **Human-Centric Abstraction (`DEC-003`):** Farmers are never asked to enter raw coordinates or technical spatial projections. The frontend resolves human inputs (village name, PIN code, map tap) to spatial coordinates.
 2. **Layered Integration Boundary (`DEC-004`):** The MCP server provides the capability tool contract, while Earth Engine initialization, image filtering, observation quality validation (`DEC-010`), band mathematics (`DEC-009`), and reducer operations live in an isolated module.
 3. **Lean Statistical Aggregation First (`DEC-002`):** Compute robust zonal statistics (**mean**, **median**, **min**, **max**) for the farm area rather than transmitting heavy raster image arrays to LLMs.
-4. **Pluggable Data Source Architecture:** The Earth Engine client will implement a decoupled provider interface so that future datasets (Dynamic World LULC, NDWI moisture, soil grids) can be plugged in without refactoring the core multi-agent workflow.
+4. **Pure Local Mathematics Boundary (`DEC-017`):** Earth Engine is strictly limited to remote pixel filtering, masking, compositing, and zonal reductions (`historical.py`). All multi-year statistical distributions, dispersion metrics, sufficiency evaluations, metric gating, and departure classifications execute as deterministic, pure-Python logic without Earth Engine dependencies (`baseline.py`, `historical_analysis.py`).
+5. **Pluggable Data Source Architecture:** The Earth Engine client implements a decoupled provider interface so that future datasets (Dynamic World LULC, NDWI moisture, soil grids) can be plugged in without refactoring the core multi-agent workflow.
+
 

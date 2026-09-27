@@ -7,7 +7,7 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 2: Historical Satellite Intelligence (Subphases 2A, 2B & 2C Design Sealed; 2C Implementation Pending / Ready)
+### 🟢 Completed — Phase 2: Historical Satellite Intelligence (Subphases 2A–2D Complete & Sealed — `ebba070`)
 - **Phase 2A Architecture & Design Review (🟢 COMPLETE & APPROVED / `DEC-012`, `DEC-013`, `DEC-014`):**
   - Conducted comprehensive architecture, data-engineering, and scientific review for historical comparative satellite intelligence.
   - Formulated and locked `DEC-012`: 3-year rolling operational historical horizon ($Y-1, Y-2, Y-3$) with Day-of-Year centered temporal windowing ($\text{Reference DOY} \pm 15\text{ days}$). Explicitly documented that DOY matching normalizes astronomical/calendar seasonality without claiming identical crop growth stage.
@@ -15,30 +15,25 @@
   - Formulated and locked `DEC-014`: Established the strongly typed `HistoricalNdviAnalysis` domain contract with explicit observation units (`historical_annual_observation_count`, `distinct_years_count`, `raw_qualifying_scenes_count`) and sufficiency guardrails ($N_{\text{annual}} \ge 2 \land Y \ge 2$). Defined universal result states: `success`, `insufficient_history`, `no_data`, and `error`. Replaced synthetic confidence scores with transparent empirical evidence.
   - Established materialization budget target of maximum 3 client-side `.getInfo()` calls.
   - Created canonical Phase 2 architecture record in `docs/phases/PHASE_02_HISTORICAL_SATELLITE_INTELLIGENCE.md`.
-  - Recorded two future implementation questions (Option C server-side construct and leap-year DOY alignment).
-  - Confirmed zero application source-code modifications.
 - **Phase 2B Historical Temporal Window & Seasonality Strategy (🟢 COMPLETE & SEALED / `DEC-015`):**
   - Conducted master architectural design review and sealed the Calendar-Date-Anchored Seasonal Windowing strategy.
   - Formalized the 31-day inclusive calendar window ($T_h \pm 15\text{ days}$) across the 3 historical target years ($Y-1, Y-2, Y-3$).
   - Established the **Cross-Calendar-Year Window Ownership Invariant**: historical seasonal windows crossing January 1 or December 31 are strictly owned by their target historical anchor year $Y_h$. All qualifying scenes within the continuous window belong entirely to the annual baseline for $Y_h$ without calendar-year data partitioning.
   - Formalized simple leap-year calendar correctness as a calendar problem rather than a phenology problem (mapping February 29 to February 28 in common historical years).
   - Confirmed strict UTC calendar-date basis and defined Earth Engine half-open boundary contract `[start_date, end_date + 1 day)`.
-  - Evaluated and deferred complex phenological curve fitting and fractional DOY coordinates for the MVP.
   - Created canonical Phase 2B design record with 18-case edge verification matrix in `docs/phases/PHASE_02B_TEMPORAL_WINDOW_SEASONALITY.md`.
-  - Confirmed zero application source-code, test, or dependency modifications.
-- **Phase 2C Historical Satellite Collection & Annual Composite Strategy (🟢 DESIGN APPROVED & SEALED / `DEC-016`):**
-  - Conducted master architectural design review and sealed the historical collection querying, observation selection, and compositing architecture for Option C (Annual Matched-Window Regional Observations).
-  - Formulated and locked `DEC-016`:
-    - **Independent Yearly Processing:** Selected independent annual sub-pipelines for the bounded 3-year historical horizon ($Y-1, Y-2, Y-3$) within their respective Phase 2B 31-day seasonal windows $[S_h, E_h]$, ensuring fault isolation and unit testability.
-    - **Phase 1 Quality Gate Reuse:** Reused exact Phase 1 quality gates (`COPERNICUS/S2_SR_HARMONIZED` linked with Cloud Score+ `cs_cdf >= 0.60`, scene cloud $<20\%$, and parcel `min_usable_coverage >= 0.70`).
-    - **Temporal Recency Selection among Usable Scenes:** Established that usable coverage percentage serves strictly as a binary qualification gate ($\ge 70\%$) and empirical metadata, not a ranking score. Qualifying usable observations are sorted by acquisition date descending (`system:time_start` newest-first), selecting up to 3 most recent usable observations.
-    - **Bounded Selection Rule:** Enforced bounded selection ($N \ge 3 \to 3$ newest; $N = 2 \to 2$; $N = 1 \to 1$; $N = 0 \to \text{status} = \text{"no\_data"}$). Formally accepted $N=1$ as a valid annual observation while relying on multi-year sufficiency ($N_{\text{annual}} \ge 2 \land Y \ge 2$) to guard baseline reliability.
-    - **Pixel-Wise Median NDVI Compositing:** For selected scenes, compute per-image masked NDVI rasters first, composite via pixel-wise median (`ee.ImageCollection.median()`), and execute regional zonal reduction over the composite raster. Preserved non-equivalence mathematical invariants.
-    - **Masked-Pixel Preservation:** Earth Engine's median reducer operates exclusively over unmasked pixels at each coordinate without filling nulls with artificial zeros ($\text{NULL} \ne 0.0$). `valid_pixel_count` reflects unmasked spatial pixels in the regional reduction.
-    - **No Synthetic Data:** Replaced synthetic observations and scalar confidence scores with transparent empirical evidence.
-    - **Materialization Constraints:** Bounded execution graph designed to minimize client-side materialization calls (targeting $\le 3$ `.getInfo()` calls).
-  - Created canonical Phase 2C design specification with 19-case test matrix in `docs/phases/PHASE_02C_HISTORICAL_COLLECTION_COMPOSITE.md`.
-  - Confirmed zero application source-code, test, or dependency modifications; implementation deferred to subsequent step.
+- **Phase 2C Historical Satellite Collection & Annual Composite Strategy (🟢 COMPLETE & SEALED / `DEC-016` — `ba1ec1c`):**
+  - Implemented independent annual sub-pipelines in [`app/satellite/historical.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/historical.py) for the bounded 3-year historical horizon ($Y-1, Y-2, Y-3$) across Phase 2B 31-day seasonal windows.
+  - Reused exact Phase 1 Cloud Score+ quality gates (`COPERNICUS/S2_SR_HARMONIZED` linked with Cloud Score+ `cs_cdf >= 0.60`, scene cloud $<20\%$, and parcel `min_usable_coverage >= 0.70`).
+  - Applied temporal recency sorting (newest-first) selecting up to 3 usable scenes per historical year.
+  - Implemented per-scene NDVI calculation followed by pixel-wise median NDVI compositing (`ee.ImageCollection.median()`) and zonal statistical reduction (`calculate_ndvi_statistics`).
+  - Preserved Earth Engine masked-pixel semantics (excluding masked pixels from reductions, never filling with artificial zeros).
+  - Created comprehensive unit test suite in `tests/unit/test_satellite_historical_composite.py`.
+- **Phase 2D Multi-Year Baseline & Anomaly Engine (🟢 COMPLETE & SEALED / `DEC-017` — `ebba070`):**
+  - **Step 1 — Domain Contracts (`bdb8d69`):** Implemented strongly typed Pydantic models in [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py): `HistoricalNdviBaseline`, `HistoricalSufficiencyEvidence`, `SpectralDepartureBand`, `NdviAnomalyEvidence`, `HistoricalAnalysisStatus`, and `HistoricalNdviAnalysis` with invariant validation.
+  - **Step 2 — Pure Statistical Engine (`ccafc6f`):** Implemented deterministic pure-Python statistical calculation engine in [`app/satellite/baseline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/baseline.py) with zero Earth Engine dependencies: valid annual observation extraction, historical baseline derivation (median primary, arithmetic mean, population standard deviation with ddof=0, min, max), data sufficiency evaluation ($N_{\text{annual}} \ge 2 \land Y \ge 2$), absolute departure ($\Delta\text{NDVI}$), gated relative percentage departure ($\text{baseline} \ge 0.15$), gated standardized z-score ($N \ge 2, Y \ge 2, \sigma \ge 0.02$), and empirical non-agronomic spectral departure classification.
+  - **Step 3 — Root Integration & Composition (`ebba070`):** Implemented root domain composition function `build_historical_ndvi_analysis(...)` in [`app/satellite/historical_analysis.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/historical_analysis.py), joining Phase 1 current evidence with pre-materialized Phase 2C historical observations, enforcing current-error priority, and constructing `HistoricalNdviAnalysis` with `pipeline_version="2.0.0"`. Exported all contracts and entry points in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py).
+  - **Verification:** 18 integration tests passed in [`tests/unit/test_satellite_historical_baseline_integration.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_historical_baseline_integration.py), 700 satellite subsystem tests passed, 709 full unit tests passed, 0 failures.
 
 ### 🟢 Completed — Phase 1: Earth Engine Foundation (Subphases 1A–1K Complete & Sealed — `60f8d90`)
 - **Phase 1A Architecture & Integration Design (🟢 COMPLETE):**
@@ -91,7 +86,6 @@
   - Gemini prompt reasoning, multi-temporal time-series, historical baseline anomaly detection, NDWI, Dynamic World LULC, and UI map components remain deferred to subsequent phases.
 
 ### 🟡 Planned Phases
-- **Phase 2 (Historical Satellite Intelligence):** 3-year rolling baseline ($Y-1, Y-2, Y-3$), DOY $\pm 15$ days seasonal matching, Option C annual matched-window regional reductions, and NDVI anomaly calculation.
 - **Phase 3 (Environmental Data Sources):** Pluggable provider architecture for live meteorological forecasts and regional soil databases.
 - **Phase 4 (Data Fusion):** Normalization and fusion of satellite NDVI, weather indicators, and farmer profile context.
 - **Phase 5 (Gemini Agricultural Reasoning):** Enhanced prompt engineering for Gemini 2.5 Flash interpreting satellite vigor and localized agronomic advisories.

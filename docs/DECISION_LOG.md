@@ -1384,3 +1384,86 @@ Establish the canonical **Historical Satellite Collection Pipeline & Annual Pixe
 - **Per-Pixel Observation Depth:** Per-pixel observation depth rasters are deferred for the MVP to maintain a lightweight compute graph.
 
 ---
+
+### DEC-017: Multi-Year Historical Baseline & Anomaly Calculation Engine
+
+- **Decision ID:** `DEC-017`
+- **Date / Context:** Phase 2D Historical Satellite Intelligence (Multi-Year Baseline & Anomaly Engine Implementation & Verification)
+
+#### 📸 Before Snapshot
+Prior to DEC-017:
+- Phase 2C (`DEC-016`) established remote historical satellite collection querying, Cloud Score+ filtering (`cs_cdf >= 0.60`), recency sorting (up to 3 usable scenes), annual pixel-wise median NDVI compositing, and zonal statistical reduction across historical target years ($Y-1, Y-2, Y-3$).
+- However, the local analytical layer to compute multi-year baselines, evaluate historical data sufficiency, calculate gated absolute/percentage/standardized departures, classify non-agronomic spectral departure bands, and integrate instantaneous current observation evidence with multi-year historical evidence into the root `HistoricalNdviAnalysis` domain contract was unspecified and unimplemented.
+
+#### 📜 Locked Decisions
+
+1. **Three-Module Architectural Separation of Concerns:**
+   - **Remote Earth Engine Data Materialization (`app/satellite/historical.py` — Phase 2C):** Handles remote satellite scene discovery, Cloud Score+ quality filtering, pixel-wise median NDVI compositing, zonal reductions, and multi-year orchestration (`analyze_historical_years`).
+   - **Pure Statistical & Anomaly Engine (`app/satellite/baseline.py` — Phase 2D Step 2):** Implements deterministic pure-Python statistical calculations (`calculate_historical_ndvi_statistics`). Contains **zero Earth Engine imports**, **zero `.getInfo()` calls**, and **zero network I/O**.
+   - **Root Composition Layer (`app/satellite/historical_analysis.py` — Phase 2D Step 3):** Implements root domain assembly (`build_historical_ndvi_analysis`), joining Phase 1 current evidence with pre-materialized Phase 2C historical observations and delegating math to `baseline.py`. Contains **zero Earth Engine imports**, **zero `.getInfo()` calls**, and **zero network I/O**.
+
+2. **Option C Primary Observation Unit & Representative Population:**
+   - The primary statistical observation unit is the **annual regional mean NDVI** of each valid represented historical year ($[\text{val}_{Y_1}, \text{val}_{Y_2}, \dots]$).
+   - Raw satellite scenes within a seasonal window are composited into that year's representative observation; they are never pooled directly as independent multi-year samples.
+
+3. **Baseline Central Tendency & Dispersion Statistics:**
+   - **Primary Baseline:** **Historical Median NDVI** ($\text{median}([\text{val}_{Y_1}, \text{val}_{Y_2}, \dots])$), providing robust resistance against single-year drought or flood outliers.
+   - **Descriptive Mean:** Arithmetic mean of represented annual regional means.
+   - **Population Standard Deviation:** Evaluated using population standard deviation ($\text{ddof}=0$, $\sigma = \sqrt{\frac{1}{N}\sum (x_i - \mu)^2}$) via Python's `statistics.pstdev()`, reflecting dispersion across the finite historical sample.
+   - **Range:** Minimum and maximum annual regional means across the historical horizon.
+
+4. **Strict Historical Data Sufficiency ($N \ge 2 \land Y \ge 2$):**
+   - A valid baseline requires at least 2 valid historical annual observations across at least 2 distinct calendar years ($N_{\text{annual}} \ge 2 \land Y \ge 2$).
+   - A single valid historical year ($N=1$) does **NOT** produce a baseline or anomaly metrics; the result state is marked as `insufficient_history`.
+
+5. **Anomaly Departure Metrics & Mathematical Gating:**
+   - **Absolute Departure ($\Delta\text{NDVI}$):** Primary metric computed as:
+     $$\Delta\text{NDVI} = \text{current\_mean} - \text{baseline\_median}$$
+   - **Gated Percentage Departure:** Relative departure $\frac{\Delta}{\text{baseline\_median}} \times 100\%$ computed **only when** $\text{baseline\_median} \ge 0.15$. Returns `None` with `percentage_unavailable_reason` on lower baselines to prevent division-by-near-zero explosion over fallow/bare soil.
+   - **Gated Standardized Anomaly (Z-Score):** Standardized departure $\frac{\text{current\_mean} - \mu}{\sigma}$ computed **only when** $N \ge 2$, $Y \ge 2$, and $\sigma \ge 0.02$. Returns `None` with `z_score_unavailable_reason` when $\sigma < 0.02$ to prevent division-by-near-zero explosion on flat temporal baselines.
+
+6. **Empirical Spectral Departure Bands (Non-Agronomic Boundary):**
+   - Categorizes absolute departure $\Delta\text{NDVI}$:
+     - $\Delta \ge +0.15$: **Strong Positive Spectral Departure**
+     - $+0.05 \le \Delta < +0.15$: **Moderate Positive Spectral Departure**
+     - $-0.05 < \Delta < +0.05$: **Near-Baseline Spectral Alignment**
+     - $-0.15 < \Delta \le -0.05$: **Moderate Negative Spectral Departure**
+     - $\Delta \le -0.15$: **Strong Negative Spectral Departure**
+   - **Explicit Boundary:** These bands are strictly empirical optical departure classifications. They do **NOT** represent crop disease diagnoses, drought stress thresholds, fertilizer prescriptions, or universal agronomic confidence ratings.
+
+7. **Historical Failure Preservation & Isolation:**
+   - All requested historical target years ($Y-1, Y-2, Y-3$) remain represented in `historical_observations` (preserving `success`, `no_data`, and `error` states).
+   - Only successful observations with valid `statistics` contribute to the baseline population.
+   - Partial historical failures (e.g., 2 successful years + 1 failed year) produce overall `status="success"` while preserving failed year records in `historical_observations` and `missing_years`.
+
+8. **Status Semantics & Hierarchical Priority:**
+   - **`status="error"`:** Current observation failed with error; preserves exact `EarthEngineError`; `baseline` and `anomaly` are `None`.
+   - **`status="no_data"`:** Current observation returned zero usable scenes; `baseline` and `anomaly` are `None`.
+   - **`status="insufficient_history"`:** Current observation valid, but fewer than 2 valid historical years ($N < 2$); `baseline` and `anomaly` are `None`.
+   - **`status="success"`:** Current observation valid AND at least 2 valid historical years ($N \ge 2$); `baseline` and `anomaly` are computed.
+
+9. **Root Composition Contract:**
+   - `build_historical_ndvi_analysis(...)` in [`app/satellite/historical_analysis.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/historical_analysis.py) constructs the composite [`HistoricalNdviAnalysis`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py) domain model with `pipeline_version="2.0.0"`.
+
+10. **Public Module Exports:**
+    - [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py) exports all Phase 2D domain contracts (`HistoricalNdviBaseline`, `HistoricalSufficiencyEvidence`, `SpectralDepartureBand`, `NdviAnomalyEvidence`, `HistoricalAnalysisStatus`, `HistoricalNdviAnalysis`), mathematical helpers (`calculate_historical_ndvi_statistics`), and root composition (`build_historical_ndvi_analysis`).
+
+#### 💡 Rationale (Why Chosen)
+- **Zero-Latency Pure Mathematics:** Performing multi-year statistical calculations locally in Python eliminates unnecessary Earth Engine round trips and keeps mathematical business logic 100% testable via standard unit tests.
+- **Outlier & Division Robustness:** Using median as primary baseline prevents single-year anomalies from distorting reference vigor; explicit gating prevents division-by-near-zero instabilities.
+- **Complete Observational Lineage:** Preserving failed historical observations in `historical_observations` ensures downstream agent reasoning has full visibility into historical data availability.
+
+#### ⚖️ Trade-offs & Limitations
+- **Small-Sample Dispersion:** Population standard deviation over $N \in \{2, 3\}$ is a descriptive dispersion indicator for small samples, not an asymptotic Gaussian confidence interval.
+- **Optical Index Scope:** Spectral departures measure optical reflectance changes; agricultural diagnosis requires external multi-source fusion (Phase 4/5).
+
+#### 📊 Current Status & Verification
+- **Status:** 🟢 **IMPLEMENTED & TEST VERIFIED (Phase 2D Complete & Sealed)**
+- **Git Checkpoints:**
+  - Step 1 (Domain Contracts): `bdb8d69 — build: add Phase 2D baseline and anomaly domain contracts`
+  - Step 2 (Pure Math Engine): `ccafc6f — build: add Phase 2D baseline and anomaly calculations`
+  - Step 3 (Root Integration): `ebba070 — build: complete Phase 2D Step 3 integration`
+- **Verified Test Suite:**
+  - Step 3 Integration Tests: **18 passed** in [`tests/unit/test_satellite_historical_baseline_integration.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_historical_baseline_integration.py)
+  - Satellite Subsystem Suite: **700 passed** (0 failures)
+  - Full Unit Test Suite: **709 passed** (0 failures)

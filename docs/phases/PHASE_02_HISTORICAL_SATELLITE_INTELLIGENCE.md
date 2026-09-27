@@ -1,9 +1,12 @@
 # Phase 2 — Historical Satellite Intelligence
 
 > **Canonical Record of Phase 2 Architecture, Design Decisions, Historical Baselines, and Anomaly Mathematics.**  
-> *Status: 🟢 PHASE 2A, 2B & 2C COMPLETE & SEALED (Subphases 2A, 2B, 2C Design Approved; 2C Implementation / 2D Design Next)*<br>
+> *Status: 🟢 PHASE 2 (2A, 2B, 2C, 2D) COMPLETE & SEALED*<br>
 > *Base Sealed Checkpoint: `60f8d90 — docs: finalize Phase 1 Earth Engine foundation documentation`*<br>
-> *Next Step: Subphase 2C Implementation / Subphase 2D Multi-Year Baseline Computation Engine*
+> *Phase 2D Step 1 Checkpoint: `bdb8d69 — build: add Phase 2D baseline and anomaly domain contracts`*<br>
+> *Phase 2D Step 2 Checkpoint: `ccafc6f — build: add Phase 2D baseline and anomaly calculations`*<br>
+> *Phase 2D Step 3 Checkpoint: `ebba070 — build: complete Phase 2D Step 3 integration`*<br>
+> *Next Step: Phase 3 (Additional Agri & Environmental Data Sources / Weather & Soil Integration)*
 
 ---
 
@@ -237,104 +240,156 @@ Instead, Phase 2 exposes transparent empirical evidence:
 
 ---
 
-## 11. Proposed Typed Domain Output Contract (`DEC-014`)
+## 11. Final Typed Domain Output Contract (`DEC-014`, `DEC-017`)
 
 ```text
-EarthEngineResult
- └── data: HistoricalNdviAnalysis
-      ├── current: RegionalNdviAnalysis (Preserved Phase 1 Root Contract)
-      │    ├── observation: Sentinel2ImageMetadata
-      │    ├── quality: ObservationQualityEvidence
-      │    ├── freshness: ObservationFreshness
-      │    ├── region: AnalysisRegionMetadata
-      │    ├── statistics: NdviRegionalStatistics
-      │    └── pipeline_version: "1.0.0"
-      ├── baseline: HistoricalNdviBaseline
-      │    ├── median: float
-      │    ├── mean: float | None
-      │    ├── std_dev: float | None
-      │    ├── min: float | None
-      │    ├── max: float | None
-      │    └── valid_pixel_count: int | None
-      ├── temporal_matching: HistoricalTemporalWindow
-      │    ├── reference_doy: int
-      │    ├── window_days: int
-      │    ├── years_evaluated: list[int]
-      │    ├── start_doy: int
-      │    └── end_doy: int
-      ├── sufficiency: HistoricalSufficiencyEvidence
-      │    ├── historical_annual_observation_count: int
-      │    ├── distinct_years_count: int
-      │    ├── raw_qualifying_scenes_count: int
-      │    ├── is_sufficient: bool
-      │    └── sufficiency_notes: str | None
-      ├── anomaly: NdviAnomalyEvidence
-      │    ├── absolute_departure: float
-      │    ├── percentage_departure: float | None
-      │    ├── z_score: float | None
-      │    ├── spectral_departure_class: str
-      │    └── is_anomalous: bool
-      └── pipeline_version: str = "2.0.0"
+HistoricalNdviAnalysis (pipeline_version="2.0.0")
+ ├── current: RegionalNdviAnalysis | None (Authoritative Phase 1 Payload)
+ │    ├── observation: Sentinel2ImageMetadata
+ │    ├── quality: ObservationQualityEvidence
+ │    ├── freshness: ObservationFreshness
+ │    ├── region: AnalysisRegionMetadata
+ │    ├── statistics: NdviRegionalStatistics
+ │    └── pipeline_version: "1.0.0"
+ ├── historical_observations: list[AnnualHistoricalNdviObservation] (Phase 2C Evidence)
+ │    └── [AnnualHistoricalNdviObservation for Y-1, Y-2, Y-3]
+ │         ├── target_year: int
+ │         ├── temporal_window: HistoricalTemporalWindow
+ │         ├── available_usable_scenes_count: int
+ │         ├── selected_scenes_count: int
+ │         ├── selected_observations: list[HistoricalObservationSummary]
+ │         ├── statistics: NdviRegionalStatistics | None
+ │         ├── status: "success" | "no_data" | "error"
+ │         ├── composite_method: str
+ │         └── error: EarthEngineError | None
+ ├── baseline: HistoricalNdviBaseline | None (Present if status='success')
+ │    ├── median: float (Primary Baseline: median of represented annual regional means)
+ │    ├── mean: float (Descriptive arithmetic mean)
+ │    ├── standard_deviation: float (Population standard deviation, ddof=0)
+ │    ├── min: float (Minimum annual regional mean in historical horizon)
+ │    ├── max: float (Maximum annual regional mean in historical horizon)
+ │    ├── represented_years: list[int] (Sorted descending)
+ │    ├── annual_values: list[float]
+ │    └── annual_count: int (>= 2 required for a valid baseline)
+ ├── sufficiency: HistoricalSufficiencyEvidence (Always Evaluated)
+ │    ├── requested_years_count: int = 3
+ │    ├── represented_years_count: int
+ │    ├── minimum_required_years: int = 2
+ │    ├── is_sufficient: bool (represented_years_count >= minimum_required_years)
+ │    ├── represented_years: list[int]
+ │    ├── missing_years: list[int]
+ │    └── sufficiency_notes: str | None
+ ├── anomaly: NdviAnomalyEvidence | None (Present if status='success')
+ │    ├── current_mean: float
+ │    ├── baseline_median: float
+ │    ├── absolute_departure: float (current_mean - baseline_median)
+ │    ├── percentage_departure: float | None (gated: baseline_median >= 0.15)
+ │    ├── historical_mean: float
+ │    ├── historical_std_dev: float
+ │    ├── z_score: float | None (gated: N >= 2 and historical_std_dev >= 0.02)
+ │    ├── departure_band: SpectralDepartureBand
+ │    ├── percentage_unavailable_reason: str | None
+ │    └── z_score_unavailable_reason: str | None
+ ├── status: HistoricalAnalysisStatus ("success" | "insufficient_history" | "no_data" | "error")
+ ├── pipeline_version: str = "2.0.0"
+ └── error: EarthEngineError | None
 ```
 
 ---
 
-## 12. Phase 1 Compatibility Guarantee
+## 12. Three-Module Architecture & Separation of Concerns (`DEC-017`)
 
-- ✅ **Unaltered Phase 1 Models:** `RegionalNdviAnalysis`, `Sentinel2ImageMetadata`, `ObservationQualityEvidence`, `ObservationFreshness`, `AnalysisRegionMetadata`, `NdviRegionalStatistics`, and `EarthEngineResult` remain 100% backward-compatible.
-- ✅ **Unaltered Phase 1 Functions:** `create_analysis_region`, `calculate_ndvi`, `calculate_ndvi_statistics`, `get_sentinel2_collection`, `mask_observation_quality`, and `analyze_regional_ndvi` remain unmodified.
-- ✅ **Independent Pipeline:** Phase 2 introduces `analyze_historical_ndvi(...)` as a higher-order orchestrator composing Phase 1 outputs.
+Phase 2 enforces strict modular decoupling between remote satellite evidence acquisition, pure mathematics, and root domain composition:
+
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│ MODULE RESPONSIBILITY MATRIX                                                           │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ 1. app/satellite/historical.py (Phase 2C — Sealed)                                     │
+│    - Earth Engine satellite scene discovery, Cloud Score+ filtering, and recency rank. │
+│    - Server-side pixel-wise median NDVI compositing (ee.ImageCollection.median()).      │
+│    - Regional zonal statistical reductions per historical target year.                 │
+│    - Multi-year orchestration (analyze_historical_years).                              │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ 2. app/satellite/baseline.py (Phase 2D Pure Math — Sealed)                             │
+│    - Deterministic pure-Python statistical calculation engine.                         │
+│    - Valid annual observation extraction from historical observations.                 │
+│    - Baseline metrics (median, mean, population pstdev with ddof=0, min, max).         │
+│    - Empirical data sufficiency evaluation (N_annual >= 2, Y >= 2).                    │
+│    - Quantified mathematical departures: absolute Δ, gated relative %, gated z-score.  │
+│    - Empirical non-agronomic spectral departure band classification.                   │
+│    - ZERO Earth Engine imports, ZERO getInfo() calls, ZERO network I/O.                │
+├────────────────────────────────────────────────────────────────────────────────────────┤
+│ 3. app/satellite/historical_analysis.py (Phase 2D Root Composition — Sealed)           │
+│    - Root integration entry point: build_historical_ndvi_analysis(...)                 │
+│    - Normalizes Phase 1 current evidence (RegionalNdviAnalysis / EarthEngineResult).   │
+│    - Receives pre-materialized Phase 2C observations (list[AnnualHistoricalObs]).     │
+│    - Delegates all mathematical calculations to baseline.py.                           │
+│    - Enforces current-error precedence and constructs HistoricalNdviAnalysis.          │
+│    - ZERO Earth Engine imports, ZERO getInfo() calls, ZERO network I/O.                │
+└────────────────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 13. Phase 2 Subphase Roadmap
+## 13. Status Semantics & Hierarchical Priority
+
+The root operational status of `HistoricalNdviAnalysis` is resolved with absolute current-observation priority:
+
+| Result Status | Current State | Historical Observations State | `current` Payload | `baseline` | `anomaly` | `error` Lineage |
+|---|---|---|---|---|---|---|
+| **`"error"`** | Error occurred during current acquisition | Any (e.g. 3 successful years) | `None` | `None` | `None` | Preserves exact `EarthEngineError` |
+| **`"no_data"`** | Zero usable scenes in lookback window | Any (e.g. 3 successful years) | `None` | `None` | `None` | `None` |
+| **`"insufficient_history"`** | Valid current observation | Fewer than 2 valid historical years ($N < 2$) | `RegionalNdviAnalysis` | `None` | `None` | `None` |
+| **`"success"`** | Valid current observation | At least 2 valid historical years ($N \ge 2$) | `RegionalNdviAnalysis` | `HistoricalNdviBaseline` | `NdviAnomalyEvidence` | `None` |
+
+### Partial Historical Failure Resilience:
+If $\ge 2$ historical target years succeed while one target year experiences `no_data` or `error`:
+- The overall analysis status remains **`"success"`** because the empirical baseline is sufficiently supported ($N \ge 2$).
+- The failed target year is **strictly preserved** in `historical_observations` and recorded in `sufficiency.missing_years`.
+- Only successful observations with valid `statistics` contribute to `baseline.represented_years` and `baseline.annual_values`.
+
+---
+
+## 14. Empirical Spectral Departure Classification
+
+`NdviAnomalyEvidence.departure_band` categorizes absolute spectral departure ($\Delta\text{NDVI} = \text{current\_mean} - \text{baseline\_median}$):
+
+| Departure Range | Empirical Spectral Departure Band |
+|---|---|
+| $\Delta \ge +0.15$ | **Strong Positive Spectral Departure** |
+| $+0.05 \le \Delta < +0.15$ | **Moderate Positive Spectral Departure** |
+| $-0.05 < \Delta < +0.05$ | **Near-Baseline Spectral Alignment** |
+| $-0.15 < \Delta \le -0.05$ | **Moderate Negative Spectral Departure** |
+| $\Delta \le -0.15$ | **Strong Negative Spectral Departure** |
+
+> [!IMPORTANT]
+> **Strict Non-Agronomic Boundary:**  
+> These bands are **empirical optical departure classifications**. They do **NOT** represent crop health scores, disease diagnoses, drought stress ratings, or fertilizer prescriptions. Transforming spectral departures into agronomic advisories requires external agronomic context (weather, soil, crop calendars) and remains strictly deferred to Phase 4 and Phase 5.
+
+---
+
+## 15. Phase 2 Subphase Roadmap & Completion Record
 
 ```
 Phase 2: Historical Satellite Intelligence
-├── 2A: Architecture & Design Review (🟢 COMPLETE / APPROVED / DEC-012, DEC-013, DEC-014)
-├── 2B: Temporal Window & Seasonality Strategy (🟢 COMPLETE / APPROVED / DEC-015)
-├── 2C: Option C Historical Collection Pipeline (🟢 DESIGN APPROVED & SEALED / DEC-016 / 🟡 READY FOR IMPLEMENTATION)
-├── 2D: Multi-Year Baseline Computation Engine (🟡 PLANNED)
-├── 2E: Anomaly Mathematics & Departure Verification
-├── 2F: Data Sufficiency & Sparse History Handlers (DEC-014 Formalized)
-├── 2G: Typed Domain Contracts (Pydantic Models)
-├── 2H: Historical Pipeline Orchestration (analyze_historical_ndvi)
-├── 2I: Comprehensive Unit & Live Integration Testing
-├── 2J: Canonical Documentation Consolidation
-└── 2K: Final Verification & Git Checkpoint
+├── 2A: Architecture & Design Review (🟢 COMPLETE & SEALED / DEC-012, DEC-013, DEC-014)
+├── 2B: Temporal Window & Seasonality Strategy (🟢 COMPLETE & SEALED / DEC-015)
+├── 2C: Option C Historical Collection Pipeline (🟢 COMPLETE & SEALED / DEC-016 / ba1ec1c)
+└── 2D: Multi-Year Baseline & Anomaly Engine (🟢 COMPLETE & SEALED / DEC-017 / ebba070)
+     ├── Step 1 — Domain Contracts (🟢 bdb8d69)
+     ├── Step 2 — Pure Statistical Engine (🟢 ccafc6f)
+     └── Step 3 — Root Orchestration & Integration (🟢 ebba070)
 ```
 
 ---
 
-## 14. Architecture Decisions Summary
+## 16. Architecture Decisions Summary
 
 - **`DEC-012`:** 3-Year Rolling Historical Horizon with Day-of-Year Centered Temporal Matching ($\text{DOY} \pm 15\text{ days}$).
 - **`DEC-013`:** Option C Annual Matched-Window Regional Observations & Primary Baseline / Anomaly Metrics.
 - **`DEC-014`:** Layered Historical Analysis Contract with Explicit Annual Observation Units & Sufficiency Guardrails.
 - **`DEC-015`:** Calendar-Date-Anchored Seasonal Windowing & Cross-Calendar-Year Target-Year Ownership Invariant.
 - **`DEC-016`:** Historical Satellite Collection Pipeline & Annual Pixel-Median Compositing (Independent yearly processing, Phase 1 quality gate parity, temporal recency selection up to 3 usable scenes, pixel-wise median NDVI compositing, masked-pixel preservation).
+- **`DEC-017`:** Multi-Year Historical Baseline & Anomaly Calculation Engine (Pure-Python calculation engine in `baseline.py`, population standard deviation ddof=0, baseline median central tendency, metric gating rules, non-agronomic spectral departure bands, full evidence retention, and decoupled root composition in `historical_analysis.py`).
 
----
-
-## 15. Implementation Boundary & Non-Scope
-
-### In-Scope for Phase 2:
-- Multi-year Sentinel-2 querying across historical DOY windows ($Y-1, Y-2, Y-3$).
-- Option C annual matched-window regional reductions.
-- Historical baseline computation (median, mean, standard deviation).
-- Anomaly calculation (absolute departure, gated percentage departure, gated z-score).
-- Strongly typed Pydantic models (`HistoricalNdviAnalysis`) and comprehensive test suites.
-
-### Strictly Out-of-Scope (Deferred):
-- ❌ **No NDWI or Dynamic World** (Deferred to **Phase 3**).
-- ❌ **No Weather or Soil Data Fusion** (Deferred to **Phase 4**).
-- ❌ **No Gemini Agronomic Reasoning or Crop Health Diagnosis** (Deferred to **Phase 5**).
-- ❌ **No Live FastMCP Tool Registration** (Deferred to **Phase 6**).
-- ❌ **No Frontend Heatmaps or UI Charts** (Deferred to **Phase 9**).
-
----
-
-## 16. Open Technical Questions for Implementation
-
-1. **Earth Engine Server-Side Aggregation Construct:** Formalized in Phase 2C (`DEC-016`) adopting independent annual sub-pipelines (Approach 1) for the bounded 3-year MVP to maximize simplicity, fault isolation, and unit testability. Sealed in `docs/phases/PHASE_02C_HISTORICAL_COLLECTION_COMPOSITE.md`.
-2. **Leap Year & Temporal Window Alignment:** Formalized in Phase 2B (`DEC-015`) using pure Python calendar-date-anchored seasonal windowing and cross-year target-year ownership. Sealed in `docs/phases/PHASE_02B_TEMPORAL_WINDOW_SEASONALITY.md`.

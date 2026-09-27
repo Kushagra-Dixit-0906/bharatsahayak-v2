@@ -1,7 +1,7 @@
 # BharatSahayak V2 — Master Project Roadmap
 
 > **Master roadmap and progressive implementation plan for BharatSahayak V2.**  
-> *Last Updated: Phase 1B Local Environment & Verification*  
+> *Last Updated: Phase 2 Historical Satellite Intelligence Completion*  
 > *Baseline Branch: `bharatsahayak-v2` | Commit: `e0fcc29` | GCP Project ID: `bharatsahayak-v2`*
 
 ---
@@ -20,8 +20,8 @@
 
 ```mermaid
 graph TD
-    P0["Phase 0: Project Understanding & Documentation 🟢"] --> P1["Phase 1: Earth Engine Foundation 🟡"]
-    P1 --> P2["Phase 2: Satellite Intelligence (Sentinel-2 + NDVI) 🟡"]
+    P0["Phase 0: Project Understanding & Documentation 🟢"] --> P1["Phase 1: Earth Engine Foundation 🟢"]
+    P1 --> P2["Phase 2: Historical Satellite Intelligence 🟢"]
     P2 --> P3["Phase 3: Additional Agri & Environmental Data 🟡"]
     P3 --> P4["Phase 4: Multi-Source Data Fusion 🟡"]
     P4 --> P5["Phase 5: Gemini Agricultural Reasoning 🟡"]
@@ -71,7 +71,7 @@ graph TD
 ---
 
 ### Phase 2: Historical Satellite Intelligence (3-Year Baseline & Anomaly Detection)
-- **Status:** 🟡 **IN PROGRESS (Subphases 2A, 2B & 2C Design Sealed; 2C Implementation Pending / Ready)**
+- **Status:** 🟢 **COMPLETE & SEALED (Subphases 2A–2D Complete — `DEC-012`–`DEC-017` / `ebba070`)**
 - **Purpose:** Extend the satellite foundation from an instantaneous observation to seasonally normalized 3-year historical comparative baselines and empirical anomaly evidence.
 - **Sub-Roadmap:**
   - **2A — Architecture & Design Review (🟢 COMPLETE & APPROVED / `DEC-012`, `DEC-013`, `DEC-014`):**
@@ -87,30 +87,19 @@ graph TD
     - Formalized simple leap-year calendar correctness (clamping Feb 29 $\to$ Feb 28 in common historical years).
     - Preserved strict UTC calendar-date basis and Earth Engine boundary contract `[start, end + 1 day)`.
     - Documented canonical 18-case edge matrix in `docs/phases/PHASE_02B_TEMPORAL_WINDOW_SEASONALITY.md`.
-  - **2C — Option C Historical Collection Pipeline (🟢 DESIGN APPROVED & SEALED / `DEC-016` / 🟡 READY FOR IMPLEMENTATION):**
-    - Formalized independent annual sub-pipelines for $Y-1, Y-2, Y-3$ across Phase 2B 31-day windows $[S_h, E_h]$.
+  - **2C — Option C Historical Collection Pipeline (🟢 COMPLETE & SEALED / `DEC-016` — `ba1ec1c`):**
+    - Implemented independent annual sub-pipelines for $Y-1, Y-2, Y-3$ across Phase 2B 31-day windows $[S_h, E_h]$ in [`app/satellite/historical.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/historical.py).
     - Reused exact Phase 1 Cloud Score+ quality gates (`cs_cdf >= 0.60`, scene cloud $<20\%$, `min_usable_coverage >= 0.70`).
-    - Standardized on temporal recency selection among usable observations (sorting newest-first, selecting up to 3 usable scenes: 3+ $\to$ 3, 2 $\to$ 2, 1 $\to$ 1, 0 $\to$ `no_data`).
-    - Standardized on pixel-wise median NDVI compositing (`ee.ImageCollection.median()`) over per-image masked NDVI rasters before zonal reduction.
+    - Applied temporal recency selection among usable observations (sorting newest-first, selecting up to 3 usable scenes per historical year).
+    - Implemented per-scene NDVI calculation, pixel-wise median NDVI compositing (`ee.ImageCollection.median()`), and zonal statistical reduction (`calculate_ndvi_statistics`).
     - Preserved Earth Engine masked-pixel semantics (excluding masked pixels from reductions, never filling with artificial zeros).
-    - Documented canonical 19-case edge verification matrix in `docs/phases/PHASE_02C_HISTORICAL_COLLECTION_COMPOSITE.md`.
-  - **2D — Multi-Year Baseline Computation Engine (🟡 PLANNED):**
-    - Compute annual matched-window regional reductions and multi-year median/mean/std-dev baselines.
-  - **2E — NDVI Anomaly Mathematics & Departure Verification (🟡 PLANNED):**
-    - Calculate absolute departure, gated percentage departure, and gated z-score.
-  - **2F — Historical Data Sufficiency & Sparse History Handlers (🟡 PLANNED):**
-    - Enforce $N_{\text{annual}} \ge 2 \land Y \ge 2$ thresholding and `insufficient_history` state.
-  - **2G — Typed Domain Contracts (Pydantic Models) (🟡 PLANNED):**
-    - Implement `HistoricalNdviBaseline`, `HistoricalTemporalWindow`, `HistoricalSufficiencyEvidence`, `NdviAnomalyEvidence`, and `HistoricalNdviAnalysis`.
-  - **2H — Historical Pipeline Orchestration (`analyze_historical_ndvi`) (🟡 PLANNED):**
-    - Orchestrate end-to-end historical analysis pipeline within maximum 3-call materialization budget.
-  - **2I — Comprehensive Unit & Live Integration Testing (🟡 PLANNED):**
-    - Comprehensive unit test suite and live Earth Engine integration tests.
-  - **2J — Canonical Documentation Consolidation (🟡 PLANNED):**
-    - Finalize canonical Phase 2 record in `docs/phases/PHASE_02_HISTORICAL_SATELLITE_INTELLIGENCE.md`.
-  - **2K — Final Verification & Git Checkpoint (🟡 PLANNED):**
-    - Verify clean test suite and commit Phase 2 sealed checkpoint.
+  - **2D — Multi-Year Baseline & Anomaly Engine (🟢 COMPLETE & SEALED / `DEC-017` — `ebba070`):**
+    - **Step 1 — Domain Contracts (`bdb8d69`):** Implemented strongly typed Pydantic models in [`app/satellite/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/types.py): `HistoricalNdviBaseline`, `HistoricalSufficiencyEvidence`, `SpectralDepartureBand`, `NdviAnomalyEvidence`, `HistoricalAnalysisStatus`, and `HistoricalNdviAnalysis`.
+    - **Step 2 — Pure Statistical Engine (`ccafc6f`):** Implemented deterministic pure-Python statistical calculation engine in [`app/satellite/baseline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/baseline.py) with zero Earth Engine dependencies: valid annual observation extraction, historical baseline (median, mean, population std dev ddof=0, min, max), sufficiency evaluation ($N_{\text{annual}} \ge 2 \land Y \ge 2$), absolute departure ($\Delta\text{NDVI}$), gated relative percentage departure ($\text{baseline} \ge 0.15$), gated z-score ($N \ge 2, Y \ge 2, \sigma \ge 0.02$), and empirical non-agronomic spectral departure classification.
+    - **Step 3 — Root Integration & Composition (`ebba070`):** Implemented root domain composition function `build_historical_ndvi_analysis(...)` in [`app/satellite/historical_analysis.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/historical_analysis.py), joining Phase 1 current evidence with pre-materialized Phase 2C historical observations, enforcing current-error priority, and constructing `HistoricalNdviAnalysis` with `pipeline_version="2.0.0"`. Exported in [`app/satellite/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/satellite/__init__.py).
+    - **Verification:** 18 integration tests passed in [`tests/unit/test_satellite_historical_baseline_integration.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_satellite_historical_baseline_integration.py), 700 satellite subsystem tests passed, 709 full unit tests passed, 0 failures.
 - **Dependencies:** Phase 1 (`60f8d90`).
+- **Next Phase:** Phase 3 (Additional Agricultural & Environmental Data Sources).
 - **Future Upgrades (`🔴 IDEA`):** Multi-year time-series animation charts, adaptive 5-10 year climatological baselines, NDWI water anomalies, and Dynamic World LULC transitions.
 
 ---
