@@ -7,7 +7,16 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 3: Additional Agricultural & Environmental Data Sources (Subphase 3A Steps 1 & 2 Complete — 50 Subsystem Tests)
+### 🟡 In Progress — Phase 3: Additional Agricultural & Environmental Data Sources (Subphase 3A Step 3 Design Sealed — `DEC-019`)
+- **Phase 3A Step 3 — Earth Engine Collection Ingestion & Adapter Boundary Design (🟢 DESIGN SEALED / `DEC-019`):**
+  - Completed architecture and design specification for integrating Google Earth Engine ERA5-Land Daily Aggregated collection (`ECMWF/ERA5_LAND/DAILY_AGGR`).
+  - Formulated and locked `DEC-019`:
+    - 3-tier boundary architecture: Remote EE Materialization (`app/environment/era5.py`), Pure Unit Normalization & Parsing (`app/environment/pipeline.py`), Root Domain Composition (`analyze_era5_land`).
+    - Standardized on Option A (Region Mean Reduction over 100m parcel geometry at native $11132\text{ m}$ scale).
+    - Source-unit conversion boundary: $K \to ^\circ\text{C}$ ($K - 273.15$) and $m \to \text{mm}$ ($m \times 1000.0$) executed during raw record normalization; Step 2 engine remains completely decoupled.
+    - Dynamic publication latency measurement: derived from returned observations without static 3–7 day assumptions.
+    - Comprehensive test strategy separating pure offline unit tests from dedicated live Earth Engine integration tests.
+  - Confirmed zero application code implementation; implementation deferred to subsequent execution step.
 - **Phase 3A Step 2 — Pure Math & Window Aggregation Engine (🟢 COMPLETE — 19 Tests):**
   - Created pure mathematical window aggregation module [`app/environment/aggregation.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/aggregation.py) and public exports in [`app/environment/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/__init__.py).
   - Implemented `aggregate_window_statistics`:

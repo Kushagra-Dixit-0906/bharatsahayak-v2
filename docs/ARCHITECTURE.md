@@ -198,7 +198,7 @@ graph TD
 
 ---
 
-## 🌦️ Agricultural & Environmental Context Architecture (`🟡 PHASE 3 DESIGN SEALED / DEC-018`)
+## 🌦️ Agricultural & Environmental Context Architecture (`🟡 PHASE 3 IN PROGRESS / DEC-018, DEC-019`)
 
 Phase 3 introduces physical meteorological, hydrological, and land-cover context layers to explain the physical drivers behind satellite vegetation signals:
 

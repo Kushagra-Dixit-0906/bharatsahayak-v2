@@ -1533,6 +1533,78 @@ Prior to DEC-018:
 - **Operational Lag:** 3–7 day publication latency requires clear data lag communication; supplementary live forecasts will be integrated via live weather APIs in future phases.
 
 #### 📊 Current Status & Next Steps
-- **Status:** 🟢 **DESIGN SEALED & ARCHITECTURE APPROVED (Phase 3A Design Complete / Implementation Pending)**
-- **Next Step:** Phase 3A Step 1 — Implement typed domain contracts (`app/environment/types.py` or `app/satellite/types.py`) and pure calculation engine.
+- **Status:** 🟢 **IMPLEMENTED & VERIFIED (Steps 1 & 2 Complete — `413c7d2`, `e586c3f`)**
+- **Next Step:** Phase 3A Step 3 — Earth Engine Collection Adapter & Ingestion Boundary (`DEC-019`).
+
+---
+
+### DEC-019: Phase 3A Step 3 Architecture — ERA5-Land Earth Engine Ingestion, Spatial Extraction & Normalization Boundary
+
+- **Decision ID:** `DEC-019`
+- **Date / Context:** Phase 3A Step 3 Design Checkpoint (ERA5-Land Ingestion & Adapter Boundary)
+- **Status:** 🟢 **DESIGN SEALED & ARCHITECTURE APPROVED (Implementation Pending)**
+- **Decision:** Architect the ERA5-Land Earth Engine ingestion boundary using a strict 3-tier decoupling (Remote Earth Engine Materialization $\to$ Pure Unit Normalization $\to$ Root Domain Composition), select Region Mean Reduction over the 100m parcel buffer as the authoritative spatial extraction strategy, enforce dynamic publication lag derivation, and strictly separate offline unit testability from live Earth Engine integration tests.
+
+#### 🏛️ Problem Statement & Context
+- Phase 3A Step 1 established strongly typed domain models ([`app/environment/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/types.py)), and Step 2 established the pure mathematical window aggregation engine ([`app/environment/aggregation.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/aggregation.py)).
+- Step 3 must bridge raw Google Earth Engine collection assets (`ECMWF/ERA5_LAND/DAILY_AGGR`) with the normalized domain layer (`DailyEnvironmentalObservation` $\to$ `ERA5LandAnalysis`).
+- Key architectural challenges:
+  1. **Spatial Resolution Gap:** Bridging a 100m farmer parcel buffer with an ~11.1 km ($0.1^\circ$) reanalysis grid without falsely claiming field-scale precision or performing complex synthetic downscaling.
+  2. **Raw Unit Conversions:** Converting Kelvin to Celsius ($K - 273.15$) and meters to millimeters ($m \times 1000.0$) at the ingestion boundary without polluting downstream pure statistical engines with raw dataset knowledge.
+  3. **Data Availability & Latency:** Dynamically measuring actual reanalysis publication lag ($\text{requested\_end\_date} - \text{latest\_available\_date}$) rather than hardcoding static 3–7 day constants.
+  4. **Testability:** Ensuring that data parsing, unit conversions, and domain assembly are 100% testable offline without burning Earth Engine compute quota.
+
+#### 📜 Locked Architecture & Implementation Decisions
+
+1. **Three-Tier Architectural Decoupling:**
+   - **Tier 1 — Remote Earth Engine Materialization (`app/environment/era5.py`):**
+     - Sole layer importing `ee` and executing `.getInfo()`.
+     - Filters `ECMWF/ERA5_LAND/DAILY_AGGR` spatially (`create_analysis_region`) and temporally over a 90-day retrospective lookback $[E-89, E+1)$.
+     - Executes a single batch zonal reduction returning a list of daily raw band dictionaries.
+     - Translates Earth Engine exceptions into structured `EarthEngineError` objects.
+   - **Tier 2 — Pure Ingestion & Normalization (`app/environment/pipeline.py` / helper):**
+     - Pure Python function: `normalize_era5_observation(raw_record: dict) -> DailyEnvironmentalObservation | None`.
+     - Performs source-unit conversions: $T_{^\circ\text{C}} = T_K - 273.15$, $P_{\text{mm}} = P_m \times 1000.0$, $R_{\text{mm}} = R_m \times 1000.0$.
+     - Preserves topsoil water fraction $\text{SW}_{\text{m}^3/\text{m}^3}$ in $[0.0, 1.0]$.
+     - Rejects negative packing artifacts ($< 0.0$) and preserves missing variables as `None` ($\text{Missing} \ne 0.0\text{ mm}$).
+     - ZERO `ee` imports, ZERO network calls; 100% unit-testable offline.
+   - **Tier 3 — Root Domain Orchestration & Composition (`analyze_era5_land`):**
+     - Coordinates Tier 1 data retrieval and Tier 2 normalization into `list[DailyEnvironmentalObservation]`.
+     - Dynamically determines `latest_available_date` and calculates `data_lag_days = (requested_end_date - latest_available_date).days`.
+     - Invokes Step 2 `compute_environmental_window_suite` to generate 7-day, 30-day, and 90-day window statistics.
+     - Assembles and returns authoritative `ERA5LandAnalysis` contract (`pipeline_version="3.0.0"`).
+
+2. **Spatial Extraction Strategy — Region Mean Reduction (Option A Chosen):**
+   - **Strategy:** Reuses the existing `create_analysis_region(latitude, longitude, radius_m=100.0)` geometry contract from Phase 1. Performs `ee.ImageCollection.reduceRegion()` using `ee.Reducer.mean()` with nominal scale $11132\text{ m}$.
+   - **Technical Reduction Semantics:** 
+     - Evaluates the zonal spatial mean (`ee.Reducer.mean()`) of intersecting ERA5-Land raster grid cells at the native dataset scale ($11132\text{ m}$).
+     - In practice, because the 100m circular parcel buffer ($\approx 0.03\text{ km}^2$) is a small fraction of the $\approx 123\text{ km}^2$ ERA5-Land grid cell, the reduction deterministically samples the containing ERA5-Land grid cell (or the arithmetic mean of intersecting cell centers if the parcel geometry intersects raster cell boundaries at the nominal scale).
+     - Does not perform synthetic downscaling, sub-pixel area-weighting, or continuous spatial interpolation.
+   - **Scientific Boundary:** Explicitly documented as **coarse regional context** ($\approx 11.1\text{ km}$), **never** represented as parcel-scale microclimate.
+
+3. **Dynamic Publication Lag & Temporal Completeness:**
+   - Evaluates observations over the requested 90-day interval $[E-89, E]$.
+   - `latest_available_date` is extracted directly from the newest observation returned.
+   - `data_lag_days` is derived dynamically: `(requested_end_date - latest_available_date).days`.
+   - Missing calendar days are never fabricated; only distinct returned observation dates are populated.
+
+4. **Status & Error Propagation:**
+   - Standardizes on existing `EarthEngineStatus` (`success`, `no_data`, `error`).
+   - `status="success"`: Non-empty list of valid normalized observations.
+   - `status="no_data"`: Valid GEE execution but 0 observations in temporal range.
+   - `status="error"`: Earth Engine compute/network/auth failure, populated with `EarthEngineError`.
+
+5. **Testing Architecture:**
+   - **Pure Unit Tests:** Offline tests covering raw conversions, negative artifact rejection, missing field preservation, lag calculations, and mocked GEE response assembly.
+   - **Deterministic Fixture Tests:** Verification against `punjab_monsoon_90d.json`, `punjab_winter_dry_90d.json`, and `lagged_partial_90d.json`.
+   - **Live Integration Tests:** Confined to `tests/integration/test_era5_land_integration.py` against GCP project `bharatsahayak-v2`.
+
+#### 💡 Rationale (Why Chosen)
+- Preserves complete separation between Earth Engine I/O, domain normalization, and statistical calculation.
+- Ensures the entire data pipeline remains fully verifiable offline without consuming Earth Engine quota during development.
+- Adheres to the proven architecture of Phase 1 Sentinel-2 and Phase 2 Historical Baseline pipelines.
+
+#### 📊 Current Status & Next Steps
+- **Status:** 🟢 **DESIGN SEALED & ARCHITECTURE APPROVED (Phase 3A Step 3 Design Complete / Implementation Pending)**
+- **Next Step:** Implement Phase 3A Step 3 Earth Engine adapter, normalization engine, and live integration tests upon authorization.
 
