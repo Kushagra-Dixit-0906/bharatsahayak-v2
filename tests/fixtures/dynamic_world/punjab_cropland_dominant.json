@@ -1,0 +1,15 @@
+{
+  "observation_date": "2026-09-15",
+  "observation_id": "20260915T054641_20260915T055819_T43SBT",
+  "system:index": "20260915T054641_20260915T055819_T43SBT",
+  "system:time_start": 1789451201000,
+  "water": 0.002,
+  "trees": 0.08,
+  "grass": 0.01,
+  "flooded_vegetation": 0.005,
+  "crops": 0.82,
+  "shrub_and_scrub": 0.003,
+  "built": 0.05,
+  "bare": 0.03,
+  "snow_and_ice": 0.0
+}

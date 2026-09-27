@@ -219,21 +219,25 @@ graph TD
         QueryCHIRPS --> NormCHIRPS["CHIRPS Normalization & Validation\n(1:1 mm/day, Reject < 0.0)"]
         NormERA --> WinERA["ERA5 Window Aggregator\n(7d, 30d, 90d Envelopes)"]
         NormCHIRPS --> WinCHIRPS["CHIRPS Rainfall Window Aggregator\n(7d, 30d, 90d Total/Mean/Max)"]
+        NormDW --> DomDW["Dynamic World Dominant Class Derivation\n(Max Prob + Canonical Tie-Break)"]
     end
 
     subgraph DomainAssembly ["3. Root Domain Payload Composition (0 EE Calls)"]
         WinERA --> OutERA["ERA5LandAnalysis\n(pipeline_version='3.0.0')"]
         WinCHIRPS --> OutCHIRPS["CHIRPSRainfallAnalysis\n(pipeline_version='3.1.0')"]
+        DomDW --> OutDW["DynamicWorldAnalysis\n(pipeline_version='3.1.0')"]
     end
 ```
 
 ### Key Architectural Tenets for Phase 3:
-1. **Subsystem Independence:** ERA5-Land (Phase 3A) and CHIRPS (Phase 3B) are strictly independent subsystems with dedicated domain contracts (`ERA5LandAnalysis` vs `CHIRPSRainfallAnalysis`). Cross-source comparison and fusion are strictly deferred to Phase 4.
-2. **Separation of Measurement from Agronomic Interpretation:** Phase 3 produces pure physical observations (temperature in $^\circ\text{C}$, precipitation in $\text{mm}$, soil water in $\text{m}^3/\text{m}^3$, runoff in $\text{mm}$). Drought, heat stress, and irrigation classifications are strictly deferred to Phase 4 (Fusion) and Phase 5 (Reasoning).
+1. **Subsystem Independence:** ERA5-Land (Phase 3A), CHIRPS (Phase 3B), and Dynamic World (Phase 3C) are strictly independent subsystems with dedicated domain contracts (`ERA5LandAnalysis`, `CHIRPSRainfallAnalysis`, `DynamicWorldAnalysis`). Cross-source comparison and multi-sensor fusion are strictly deferred to Phase 4.
+2. **Separation of Measurement from Agronomic Interpretation:** Phase 3 produces pure physical observations (temperature in $^\circ\text{C}$, precipitation in $\text{mm}$, soil water in $\text{m}^3/\text{m}^3$, runoff in $\text{mm}$, land-cover class probabilities in $[0.0, 1.0]$). Crop variety identification, crop stress, disease diagnosis, drought indices, and irrigation classifications are strictly deferred to Phase 4 (Fusion) and Phase 5 (Reasoning).
 3. **Explicit Reanalysis & Satellite Data Lag:** Datasets exhibit publication latency. Domain contracts track `requested_end_date`, `latest_available_date`, and `data_lag_days` dynamically rather than hardcoding static constants or misrepresenting observations as real-time forecasts.
-4. **Coarse Regional Context Non-Claim:** Standardized at $\approx 11.1\text{ km}$ (ERA5-Land) and $\approx 5.566\text{ km}$ (CHIRPS), environmental outputs represent coarse regional context and are never claimed as field-scale (100m) parcel measurements. Zero synthetic downscaling, continuous interpolation, or unverified sub-pixel weighting claims are prohibited.
-5. **Missing Data & Artifact Invariants:** Missing precipitation is never converted to $0.0\text{ mm}$; negative values ($< 0.0$) from GEE data-packing artifacts are rejected as invalid (never silently clamped to 0.0).
-6. **Partial-Window Available-Observation Semantics:** For incomplete windows (`is_complete=False`), metric totals and averages represent observed totals/means over available non-null observations, NOT complete-window totals or zero-filled averages. Prohibits imputation or interpolation for missing dates.
+4. **Spatial Resolution Fidelity & Non-Claim Invariant:** Environmental outputs preserve native dataset resolution ($\approx 11.1\text{ km}$ ERA5-Land, $\approx 5.566\text{ km}$ CHIRPS, $10.0\text{ m}$ Dynamic World) and represent regional/local context. They are never claimed as cadastral boundary measurements. Synthetic downscaling, continuous spatial interpolation, and unverified sub-pixel weighting are prohibited.
+5. **Missing Data & Artifact Invariants:** Missing values are never converted to $0.0$; negative values ($< 0.0$) from GEE data-packing artifacts are rejected as invalid (never silently clamped to 0.0).
+6. **Single-Scene Land-Cover Selection:** Dynamic World selects the newest usable observation in the 30-day window $[E-29, E]$; zero temporal averaging or compositing is performed.
+7. **Partial-Window Available-Observation Semantics:** For incomplete windows (`is_complete=False`), metric totals and averages represent observed totals/means over available non-null observations, NOT complete-window totals or zero-filled averages. Prohibits imputation or interpolation for missing dates.
+
 
 
 

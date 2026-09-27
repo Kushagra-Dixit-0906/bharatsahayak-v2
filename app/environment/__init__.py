@@ -37,6 +37,24 @@ from app.environment.chirps_types import (
     DailyRainfallObservation,
     RainfallWindowStatistics,
 )
+from app.environment.dynamic_world import (
+    DEFAULT_LOOKBACK_DAYS as DYNAMIC_WORLD_DEFAULT_LOOKBACK_DAYS,
+    DYNAMIC_WORLD_DATASET,
+    DYNAMIC_WORLD_NOMINAL_SCALE_M,
+    DYNAMIC_WORLD_PROBABILITY_BANDS,
+    fetch_raw_dynamic_world_record,
+)
+from app.environment.dynamic_world_pipeline import (
+    analyze_dynamic_world_land_cover,
+    derive_dominant_land_cover,
+    normalize_raw_dynamic_world_record,
+)
+from app.environment.dynamic_world_types import (
+    CANONICAL_CLASS_PRECEDENCE,
+    DynamicWorldAnalysis,
+    DynamicWorldClassProbabilities,
+    DynamicWorldLandCoverClass,
+)
 from app.environment.era5 import (
     fetch_raw_era5_land_timeseries,
 )
@@ -73,6 +91,20 @@ __all__ = [
     "compute_rainfall_window_suite",
     "fetch_raw_chirps_rainfall_timeseries",
     "normalize_raw_chirps_record",
+    # Phase 3C: Dynamic World Land-Cover Context
+    "CANONICAL_CLASS_PRECEDENCE",
+    "DYNAMIC_WORLD_DATASET",
+    "DYNAMIC_WORLD_DEFAULT_LOOKBACK_DAYS",
+    "DYNAMIC_WORLD_NOMINAL_SCALE_M",
+    "DYNAMIC_WORLD_PROBABILITY_BANDS",
+    "DynamicWorldAnalysis",
+    "DynamicWorldClassProbabilities",
+    "DynamicWorldLandCoverClass",
+    "analyze_dynamic_world_land_cover",
+    "derive_dominant_land_cover",
+    "fetch_raw_dynamic_world_record",
+    "normalize_raw_dynamic_world_record",
 ]
+
 
 

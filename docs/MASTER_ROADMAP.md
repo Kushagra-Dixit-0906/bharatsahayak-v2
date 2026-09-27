@@ -125,12 +125,17 @@ graph TD
     - Option A unweighted zonal mean spatial reduction over 100m parcel buffer at native $5566\text{ m}$ nominal scale in [`app/environment/chirps.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/chirps.py) (coarse regional context boundary, no synthetic downscaling or continuous interpolation).
     - Normalization and root orchestration in [`app/environment/chirps_pipeline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/chirps_pipeline.py) (`normalize_raw_chirps_record`, `analyze_chirps_rainfall`).
     - Verification: 5 deterministic offline fixtures in `tests/fixtures/chirps/`, 49/49 CHIRPS unit tests passed, 838/838 full unit tests passed, 3 live EE integration tests passed.
-  - **3C — Dynamic World Land Use / Land Cover (🟡 PLANNED):**
-    - GOOGLE/DYNAMICWORLD/V1 (10m Sentinel-2 aligned LULC) for crop vs bare ground vs tree probability.
+  - **3C — Dynamic World Land-Cover Context (🟢 COMPLETE & VERIFIED — `DEC-021`):**
+    - Architecture and implementation complete (`DEC-021`): `GOOGLE/DYNAMICWORLD/V1` at native $10\text{ m}$ resolution (generated from Sentinel-2 Level-1C imagery).
+    - Preserves all 9 continuous class probability bands (`water`, `trees`, `grass`, `flooded_vegetation`, `crops`, `shrub_and_scrub`, `built`, `bare`, `snow_and_ice`) 1:1 without artificial rounding, scaling, or thresholds.
+    - Single locked temporal selection path: 30-day window $[E-29, E]$, newest usable observation selection, zero temporal averaging or compositing.
+    - Option A unweighted regional zonal mean (`ee.Reducer.mean()`) over 100m circular `AnalysisRegion` at native 10m scale; dominant class derived with deterministic tie-breaking.
+    - Dedicated contracts: `DynamicWorldClassProbabilities`, `DynamicWorldAnalysis` (`pipeline_version="3.1.0"`, retaining `observation_id` from `system:index`).
+    - Verification: 5 deterministic offline fixtures in `tests/fixtures/dynamic_world/`, 39/39 Dynamic World unit tests passed, 877/877 full repository unit tests passed, 3 live EE integration tests passed.
   - **3D — Environmental Provider Abstraction & Unified Context Contract (🟡 PLANNED):**
     - Unified multi-provider abstraction and end-to-end integration testing.
 - **Dependencies:** Phase 1 (`60f8d90`), Phase 2 (`583dbf8`).
-- **Next Subphase Implementation:** Phase 3C (Dynamic World Land Use / Land Cover).
+- **Next Subphase Implementation:** Phase 3D (Unified Context Contract) or Phase 4 (Multi-Source Data Fusion).
 
 - **Future Upgrades (`🔴 IDEA`):** SoilGrids / ICAR soil profiles, live forecast API feeds (IMD / Open-Meteo), live mandi prices via Agmarknet / e-NAM APIs.
 

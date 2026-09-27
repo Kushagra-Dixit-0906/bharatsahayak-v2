@@ -1726,5 +1726,57 @@ Prior to DEC-018:
 - **Status:** 🟢 **IMPLEMENTED & VERIFIED (Phase 3B Complete)**
 - **Next Step:** Phase 3C (Dynamic World Land Use / Land Cover) or Phase 4 (Evidence Fusion) upon authorization.
 
+---
+
+### DEC-021: Dynamic World Land-Cover Context Subsystem Architecture (Phase 3C)
+
+- **Date:** 2026-09-28
+- **Status:** 🟢 **IMPLEMENTED & VERIFIED (Phase 3C Complete)**
+- **Deciders:** Core Engineering Team, Agricultural Analytics Working Group
+- **Consulted:** Earth Engine Integration Team, Data Science & Modeling Team
+- **Informed:** Product Strategy, Multi-Agent Orchestration Team
+
+#### 🎯 Context & Problem Statement
+To enrich the environmental intelligence profile for the farmer's observation region alongside ERA5-Land (temperature, soil moisture, runoff, precipitation) and CHIRPS (precipitation), a structured, near-real-time **land-cover context** is needed. The subsystem must supply objective land-cover probability evidence over the existing $100\text{ m}$ circular `AnalysisRegion` without fabricating field classifications or performing ungrounded agronomic conclusions.
+
+#### ⚖️ Decision Drivers
+1. **Source Reliability & Scale:** `GOOGLE/DYNAMICWORLD/V1` provides near-real-time global LULC predictions generated from Sentinel-2 Level-1C imagery at native $10\text{ m}$ spatial resolution.
+2. **Continuous Probability Preservation:** Preserving all 9 continuous class probability bands (`water`, `trees`, `grass`, `flooded_vegetation`, `crops`, `shrub_and_scrub`, `built`, `bare`, `snow_and_ice`) maintains nuanced environmental context (e.g. mixed agroforestry vs intensive monoculture).
+3. **Single Unambiguous Temporal Path:** Exactly one temporal selection rule: retrieve the newest usable observation within a 30-day lookback window $[E-29, E]$. Zero temporal averaging, median, mode, or temporal compositing across multiple scenes.
+4. **Strict Architectural Isolation:** Three-tier decoupling ensuring Earth Engine dependencies are isolated strictly to Tier 1 (`dynamic_world.py`), while Tier 2 and Tier 3 execute pure Python logic.
+5. **Clear Scientific Boundaries:** Land-cover context only; strictly prohibits inferring specific crop varieties, crop health/stress, yield, phenology, soil moisture/fertility, irrigation, or agricultural recommendations.
+
+#### 🛠️ Architectural Decision & Invariants
+1. **Dataset Asset:** `GOOGLE/DYNAMICWORLD/V1` at native $10.0\text{ m}$ scale.
+2. **Spatial Extraction Strategy (Option A):** Unweighted zonal spatial mean (`ee.Reducer.mean()`) over the existing 100m circular `AnalysisRegion` at native $10\text{ m}$ scale. The `AnalysisRegion` covers $\approx 3.14\text{ ha}$; contributing pixel counts depend on raster grid alignment.
+3. **Temporal Window & Single Selection Strategy:**
+   - 30-calendar-day lookback $[E-29, E]$ via half-open EE query $[E-29, E+1)$.
+   - The Tier 1 Earth Engine adapter maps spatial zonal mean reduction (`ee.Reducer.mean()`, `scale=10.0`) over the 30-day collection, filters server-side for non-null probability data over the `AnalysisRegion` (`ee.Filter.notNull(["crops"])`), and selects the first feature (`.first()`) sorted by `system:time_start` descending.
+   - Usable observation: image exists in window and contains valid, non-null probability data over the `AnalysisRegion`.
+   - Prohibits temporal compositing, multi-scene averaging, or baseline pooling.
+4. **Probability & Dominant Class Semantics:**
+   - Probabilities preserved $1:1$ without rounding, clipping, scaling, or arbitrary thresholds.
+   - Dominant class is the class with highest regional mean probability.
+   - Exact mathematical ties resolved by canonical GEE index order (`water` > `trees` > `grass` > `flooded_vegetation` > `crops` > `shrub_and_scrub` > `built` > `bare` > `snow_and_ice`).
+5. **Domain Contracts & Provenance:**
+   - `DynamicWorldClassProbabilities` (9 float fields in $[0.0, 1.0]$).
+   - `DynamicWorldAnalysis` (region metadata, dates, `observation_id` from `system:index`, data lag, dominant class & prob, full probability distribution, dataset, status, error).
+6. **Status & Metadata Semantics:**
+   - `success`: Valid, usable Dynamic World observation exists within the 30-day window. Context metadata, observation metadata, derived latency, and probability metrics are fully populated.
+   - `no_data`: Earth Engine query succeeds, but 0 usable observations exist over the `AnalysisRegion`. Context metadata (`region`, `requested_end_date`, `dataset`, `spatial_resolution_m`, `status="no_data"`, `pipeline_version`) is preserved; observation-derived fields (`observation_date`, `observation_id`, `data_lag_days`, `class_probabilities`, `dominant_class`, `dominant_probability`) evaluate to `None`. `error=None`.
+   - `error`: Earth Engine exception occurs. Safely available context metadata is preserved; `error=EarthEngineError(...)`; observation fields evaluate to `None`.
+
+#### 💡 Rationale
+- Sentinel-2 L1C-derived Dynamic World probabilities provide objective, high-cadence land-cover evidence without manual labeling or static atlas dependencies.
+- Retaining `observation_id` ensures end-to-end satellite granule provenance consistent with Phase 1.
+- Zero temporal compositing guarantees transparent, auditable evidence anchored to a single distinct satellite overpass.
+
+#### 📊 Current Status & Next Steps
+- **Status:** 🟢 **IMPLEMENTED & VERIFIED (Phase 3C Complete)**
+- **Next Step:** Phase 3D (Unified Context Contract) or Phase 4 (Multi-Source Data Fusion) upon authorization.
+
+
+
+
 
 

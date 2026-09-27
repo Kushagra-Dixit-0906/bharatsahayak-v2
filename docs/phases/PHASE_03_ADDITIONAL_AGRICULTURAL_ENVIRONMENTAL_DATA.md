@@ -502,15 +502,217 @@ Dedicated integration test suite in `tests/integration/test_chirps_integration.p
   - Step 2: Pure mathematical window aggregation engine (`app/environment/aggregation.py`).
   - Step 3: Earth Engine collection adapter (`app/environment/era5.py`), normalization & pipeline (`app/environment/pipeline.py`), Option A spatial reduction, and live integration tests.
   - Verification: 80 environmental subsystem tests passed, 789 full unit tests passed, 3 live EE integration tests passed.
-- **Phase 3B — CHIRPS Regional Rainfall Backup Subsystem (🟢 COMPLETE & VERIFIED — DEC-020):**
-  - Architecture and domain design complete (DEC-020).
-  - Dataset: `UCSB-CHC/CHIRPS/V3/DAILY_SAT` (~5.566 km resolution, IMERG Late V07 daily partitioning).
+- **Phase 3B — CHIRPS Regional Rainfall Backup Subsystem (🟢 COMPLETE & VERIFIED — `DEC-020` — Commit `f70dada`):**
+  - Architecture and implementation complete: `UCSB-CHC/CHIRPS/V3/DAILY_SAT` (~5.566 km resolution).
   - Ingestion: Zero-conversion native $\text{mm/day}$ floating-point preservation without artificial rounding.
   - Domain contracts: Dedicated `DailyRainfallObservation`, `RainfallWindowStatistics`, `CHIRPSRainfallAnalysis` (`app/environment/chirps_types.py`).
   - Earth Engine Adapter: Isolated in `app/environment/chirps.py` (`fetch_raw_chirps_rainfall_timeseries`) with Option A unweighted zonal mean reduction at 5566m scale.
   - Pure Aggregation & Normalization: `app/environment/chirps_aggregation.py` and `app/environment/chirps_pipeline.py`.
   - Verification: 49/49 CHIRPS unit tests passed, 838/838 full unit tests passed, 3 live EE integration tests passed.
-  - Next Step: Phase 3C (Dynamic World Land Use / Land Cover) upon user instruction.
+- **Phase 3C — Dynamic World Land-Cover Context (🟢 COMPLETE & VERIFIED — `DEC-021`):**
+  - Architecture and implementation complete: `GOOGLE/DYNAMICWORLD/V1` (10m native spatial resolution, generated from Sentinel-2 Level-1C imagery).
+  - Ingestion: Pure 1:1 probability preservation across all 9 classes (`water`, `trees`, `grass`, `flooded_vegetation`, `crops`, `shrub_and_scrub`, `built`, `bare`, `snow_and_ice`) without artificial rounding, scaling, or thresholds.
+  - Spatial Extraction: Option A unweighted regional zonal mean (`ee.Reducer.mean()`) over 100m circular `AnalysisRegion` at native 10m scale.
+  - Temporal Strategy: Single locked path over 30-day window $[E-29, E]$; selects newest usable observation (`collection.sort("system:time_start", False).first()`); zero temporal averaging or compositing.
+  - Dominant Class Derivation: Class with highest regional mean probability, with deterministic tie-breaking by canonical GEE index order.
+  - Verification: 39/39 Dynamic World unit tests passed, 877/877 full repository unit tests passed, 3 live EE integration tests passed.
+  - Next Step: Phase 3D (Unified Context Contract) or Phase 4 (Multi-Source Data Fusion) upon user instruction.
+
+---
+
+## 10. Phase 3C: Dynamic World Land-Cover Context Architecture (DEC-021)
+
+> [!NOTE]
+> **Status: 🟢 IMPLEMENTED & VERIFIED (DEC-021)**  
+> Complete implementation in `app/environment/dynamic_world_types.py`, `app/environment/dynamic_world.py`, and `app/environment/dynamic_world_pipeline.py`. Verified with 39 unit tests and 3 live Earth Engine integration tests.
+
+### 10.1 Goal & Scientific Boundary
+
+Phase 3C supplies structured **land-cover context** for the existing farmer `AnalysisRegion`.
+
+```
+Farmer Location (lat, lon)
+        ↓
+Existing 100m AnalysisRegion
+        ↓
+Dynamic World V1 (GOOGLE/DYNAMICWORLD/V1)
+        ↓
+30-Day Calendar Lookback Window: [requested_end_date - 29 days, requested_end_date + 1 day)
+        ↓
+Newest Usable Dynamic World Observation (collection.first())
+        ↓
+Regional Zonal Mean of 9 Probability Bands (ee.Reducer.mean(), scale=10.0m)
+        ↓
+9-Class Continuous Probability Distribution
+        ↓
+Highest Regional Probability + Canonical Deterministic Tie-Break
+        ↓
+Dominant Land-Cover Class
+        ↓
+DynamicWorldAnalysis Envelope
+```
+
+#### Strict Non-Agronomic Scope:
+Phase 3C provides **land-cover context only**. It strictly prohibits:
+- Inferring specific crop species or varieties (e.g., `crops` $\ne$ `wheat`, `rice`, or `maize`).
+- Inferring crop health, disease, stress, or vigor (deferred to Phase 4/5 with NDVI).
+- Estimating phenological stages, sowing dates, or crop calendars.
+- Estimating soil moisture, soil fertility, or irrigation status.
+- Generating agronomic advice, fertilizer schedules, or farmer recommendations.
+
+### 10.2 Dataset & Source Imagery Specification
+
+- **Earth Engine Asset ID:** `GOOGLE/DYNAMICWORLD/V1`
+- **Native Spatial Resolution:** $10.0\text{ meters}$ (inheriting Sentinel-2 MSI pixel grid).
+- **Source Imagery:** Dynamic World V1 predictions are generated from **Sentinel-2 Level-1C (L1C)** imagery. (Sentinel-2 L2A is not part of the source imagery for this architecture).
+- **Temporal Cadence:** Near-Real-Time (NRT) matching Sentinel-2 overpasses (~2-5 days revisit).
+
+### 10.3 Class Definitions & 9 Probability Bands
+
+Dynamic World produces 9 continuous class probability bands in $[0.0, 1.0]$:
+
+| Band Name | GEE Index | Physical Land-Cover Representation |
+| :--- | :---: | :--- |
+| `water` | 0 | Open surface water, rivers, canals, lakes, reservoirs |
+| `trees` | 1 | Tree canopy, agroforestry parcels, orchards, woodland patches |
+| `grass` | 2 | Natural grassland, pastures, rangeland, uncultivated turf |
+| `flooded_vegetation` | 3 | Inundated vegetation, marshland, flooded paddy, wetlands |
+| `crops` | 4 | Cultivated agricultural cropland, standing crops, seeded plots |
+| `shrub_and_scrub` | 5 | Dense or open shrubs, arid brush, woody scrub |
+| `built` | 6 | Human-made structures, roads, farm buildings, paved surfaces |
+| `bare` | 7 | Exposed soil, sand, dry riverbeds, bare earth |
+| `snow_and_ice` | 8 | Snow, ice cover, glacial surfaces |
+
+### 10.4 Spatial Extraction Semantics (Option A)
+
+- **Geometry Contract:** Reuses the foundational `AnalysisRegion` ($100\text{ m}$ radius circular buffer around farmer coordinates, covering $\approx 3.14\text{ hectares}$).
+- **Contributing Pixels Language:** The `AnalysisRegion` covers approximately $3.14\text{ hectares}$. The number of contributing $10\text{ m}$ Dynamic World pixels depends on the raster grid and geometry alignment.
+- **Extraction Mechanism:** Unweighted zonal spatial mean (`ee.Reducer.mean()`) evaluated at native dataset scale (`scale=10.0`) across the circular buffer geometry.
+- **Scientific Guardrails:**
+  - Preserves native $10\text{ m}$ regional context.
+  - Prohibits synthetic downscaling, continuous spatial interpolation, or unsupported sub-pixel weighting.
+  - Output is strictly interpreted as **regional land-cover context** around the farmer's location, not a cadastral field boundary classification.
+
+### 10.5 Temporal Strategy & Newest Usable Observation Selection Path
+
+- **Lookback Window:** $30\text{ calendar days}$ $[E-29, E]$.
+- **EE Half-Open Interval:** $[ \text{requested\_end\_date} - 29\text{ days}, \text{requested\_end\_date} + 1\text{ day} )$.
+- **Single Locked Selection Flow:**
+  ```
+  30-day Dynamic World collection
+          ↓
+  Determine which observations contain usable Dynamic World probability data over the AnalysisRegion
+          ↓
+  Exclude observations without usable regional probability data (EE server-side filter)
+          ↓
+  Sort usable observations by system:time_start descending
+          ↓
+  Select the newest usable observation (.first())
+          ↓
+  Extract the 9-band regional mean reduction for that single observation
+  ```
+- **Exact Earth Engine Usability Determination:**
+  - The Tier 1 Earth Engine adapter queries `GOOGLE/DYNAMICWORLD/V1` filtered by `geometry` and `[E-29, E+1)`, sorted by `system:time_start` descending.
+  - Maps `reduceRegion(reducer=ee.Reducer.mean(), geometry=geometry, scale=10.0)` across the collection, generating a FeatureCollection of candidate regional observations enriched with `observation_date` and `system:index`.
+  - Determines usability server-side: filters for features containing non-null probability data over the `AnalysisRegion` (`ee.Filter.notNull(["crops"])`).
+  - Selects `.first()` from the filtered usable collection.
+  - Strictly NO temporal averaging, median, mode, or temporal compositing across multiple observations.
+- **Definition of Usable Observation:**
+  - A Dynamic World image exists within the requested 30-day temporal window $[E-29, E]$.
+  - The image contains usable Dynamic World probability data over the existing `AnalysisRegion`.
+  - Does NOT invent cloud thresholds, does NOT invoke Cloud Score+, and does NOT duplicate Phase 1 optical quality filtering.
+
+### 10.6 Probability Semantics & Dominant Class Derivation
+
+1. **Zero-Rounding Preservation:**
+   - Raw regional mean probabilities from Earth Engine are preserved $1:1$ as floating-point numbers without scaling, clipping, or artificial rounding.
+   - All 9 probabilities reside in $[0.0, 1.0]$.
+2. **Dominant Class Rule:**
+   - $\text{dominant\_class} = \arg\max_{c \in \text{Classes}} P(c)$.
+   - $\text{dominant\_probability} = \max_{c \in \text{Classes}} P(c)$.
+3. **Deterministic Tie-Breaking:**
+   - In the event of an exact tie, ties are resolved deterministically using canonical GEE index order: `water` (0) > `trees` (1) > `grass` (2) > `flooded_vegetation` (3) > `crops` (4) > `shrub_and_scrub` (5) > `built` (6) > `bare` (7) > `snow_and_ice` (8).
+
+### 10.7 Status & Metadata Semantics
+
+- **`status="success"`:** A valid, usable Dynamic World observation exists within the 30-day window. All request/context metadata, observation metadata (`observation_date`, `observation_id`), derived latency (`data_lag_days`), and probability metrics (`class_probabilities`, `dominant_class`, `dominant_probability`) are fully populated. `error=None`.
+- **`status="no_data"`:** Earth Engine query succeeds, but 0 usable observations exist within the 30-day window over the `AnalysisRegion`.
+  - **Preserved Context Metadata:** `region`, `requested_end_date`, `dataset="GOOGLE/DYNAMICWORLD/V1"`, `spatial_resolution_m=10.0`, `status="no_data"`, `pipeline_version="3.1.0"`, `error=None`.
+  - **Observation-Derived Fields set to `None`:** `observation_date=None`, `observation_id=None`, `data_lag_days=None`, `class_probabilities=None`, `dominant_class=None`, `dominant_probability=None`.
+- **`status="error"`:** Earth Engine compute, authorization, parameter, or network exception occurs.
+  - **Preserved Context Metadata:** `region`, `requested_end_date`, `dataset`, `spatial_resolution_m`, `status="error"`, `pipeline_version`.
+  - **Structured Error:** `error=EarthEngineError(...)`. Observation fields evaluate to `None`.
+
+### 10.8 Domain Contracts (`app/environment/dynamic_world_types.py`)
+
+```mermaid
+classDiagram
+    class DynamicWorldAnalysis {
+        +AnalysisRegionMetadata region
+        +date requested_end_date
+        +date observation_date
+        +str observation_id
+        +int data_lag_days
+        +DynamicWorldLandCoverClass dominant_class
+        +float dominant_probability
+        +DynamicWorldClassProbabilities class_probabilities
+        +str dataset
+        +float spatial_resolution_m
+        +EarthEngineStatus status
+        +str pipeline_version
+        +EarthEngineError error
+    }
+    class DynamicWorldClassProbabilities {
+        +float water
+        +float trees
+        +float grass
+        +float flooded_vegetation
+        +float crops
+        +float shrub_and_scrub
+        +float built
+        +float bare
+        +float snow_and_ice
+    }
+    class AnalysisRegionMetadata {
+        +float latitude
+        +float longitude
+        +float radius_m
+    }
+    class EarthEngineError {
+        +str type
+        +str message
+    }
+
+    DynamicWorldAnalysis --> AnalysisRegionMetadata
+    DynamicWorldAnalysis --> DynamicWorldClassProbabilities : class_probabilities
+    DynamicWorldAnalysis --> EarthEngineError
+```
+
+- **`observation_id` Retained:** Preserved directly from `system:index` of the selected Earth Engine Dynamic World image for precise satellite provenance.
+
+### 10.9 Three-Tier Architecture & Isolation
+
+```
+Tier 1: GEE Data Adapter (app/environment/dynamic_world.py)
+   ├── Only file importing ee and calling .getInfo()
+   ├── Queries ImageCollection('GOOGLE/DYNAMICWORLD/V1')
+   ├── Filters date [requested_end_date - 29, requested_end_date + 1)
+   ├── Reduces collection over geometry and filters server-side for non-null probability data
+   ├── Sorts by system:time_start descending and selects newest usable observation (.first())
+   └── Returns standard EarthEngineResult
+
+Tier 2: Pure Normalization & Dominant Derivation (app/environment/dynamic_world_pipeline.py)
+   ├── normalize_raw_dynamic_world_record(): raw dict -> (date, id, DynamicWorldClassProbabilities)
+   ├── derive_dominant_land_cover(): DynamicWorldClassProbabilities -> (class, prob)
+   └── Strictly zero ee imports, zero network calls
+
+Tier 3: Root Orchestration Pipeline (app/environment/dynamic_world_pipeline.py)
+   ├── analyze_dynamic_world_land_cover(): Coordinates Tier 1 and Tier 2
+   ├── Computes dynamic publication data lag: (requested_end_date - observation_date).days
+   ├── Preserves context metadata on no_data and error states
+   └── Constructs immutable DynamicWorldAnalysis domain envelope
+```
+
 
 
 

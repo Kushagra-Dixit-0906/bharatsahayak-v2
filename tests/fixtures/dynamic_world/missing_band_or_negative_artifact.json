@@ -1,0 +1,14 @@
+{
+  "observation_date": "2026-09-08",
+  "observation_id": "20260908T054641_20260908T055819_T43SBT",
+  "system:index": "20260908T054641_20260908T055819_T43SBT",
+  "system:time_start": 1788846401000,
+  "water": 0.05,
+  "trees": -0.1,
+  "grass": 0.2,
+  "flooded_vegetation": 0.0,
+  "crops": 0.7,
+  "shrub_and_scrub": 0.0,
+  "built": 0.1,
+  "bare": 0.05
+}

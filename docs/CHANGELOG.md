@@ -7,7 +7,27 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 3: Additional Agricultural & Environmental Data Sources (Subphase 3A & 3B Complete & Verified — `DEC-018`, `DEC-019`, `DEC-020`)
+### 🟡 In Progress — Phase 3: Additional Agricultural & Environmental Data Sources (Subphases 3A, 3B & 3C Complete & Verified — `DEC-018`, `DEC-019`, `DEC-020`, `DEC-021`)
+- **Phase 3C — Dynamic World Land-Cover Context Implementation (🟢 COMPLETE & VERIFIED — `DEC-021` — 39 Unit Tests + 3 Live Integration Tests):**
+  - Implemented strongly typed domain models in [`app/environment/dynamic_world_types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/dynamic_world_types.py):
+    - `DynamicWorldLandCoverClass`: Literal representing 9 canonical classes (`water`, `trees`, `grass`, `flooded_vegetation`, `crops`, `shrub_and_scrub`, `built`, `bare`, `snow_and_ice`).
+    - `DynamicWorldClassProbabilities`: Frozen, extra-forbid Pydantic model for 9 continuous float probabilities in $[0.0, 1.0]$.
+    - `DynamicWorldAnalysis`: Root domain payload (`pipeline_version="3.1.0"`, dataset `GOOGLE/DYNAMICWORLD/V1`, spatial resolution $10.0\text{ m}$), integrating `AnalysisRegionMetadata`, dynamic publication lag tracking (`observation_date`, `data_lag_days`), satellite granule lineage (`observation_id` from `system:index`), and universal status semantics (`success`, `no_data`, `error`).
+  - Created Earth Engine Dynamic World adapter module [`app/environment/dynamic_world.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/dynamic_world.py):
+    - Queries `GOOGLE/DYNAMICWORLD/V1` collection over parcel circular buffer (`create_analysis_region`) across 30-day window $[E-29, E+1)$.
+    - Selects 9 probability bands, applies unweighted zonal mean spatial reduction (`ee.Reducer.mean()`) at native 10m scale, filters server-side for usable non-null regional probability data, and selects the newest usable observation (`.first()`).
+    - Zero temporal averaging, median, mode, or temporal compositing across multiple observations.
+    - Captures server-side errors into structured `EarthEngineError` result envelopes without leaking exceptions.
+  - Created pure normalization and root orchestration module [`app/environment/dynamic_world_pipeline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/dynamic_world_pipeline.py):
+    - `normalize_raw_dynamic_world_record`: 1:1 probability preservation without rounding, scaling, clipping, or arbitrary thresholds.
+    - `derive_dominant_land_cover`: Argmax calculation with deterministic canonical GEE index order tie-breaking (`water` > `trees` > `grass` > `flooded_vegetation` > `crops` > `shrub_and_scrub` > `built` > `bare` > `snow_and_ice`).
+    - `analyze_dynamic_world_land_cover`: Orchestrates spatial validation, Tier 1 retrieval, Tier 2 normalization, dynamic publication data lag computation, and root payload composition.
+  - Updated public API exports in [`app/environment/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/__init__.py).
+  - Created 5 deterministic offline JSON fixtures in `tests/fixtures/dynamic_world/` and loader in `tests/fixtures/dynamic_world_fixtures.py`.
+  - Created offline unit test suites in `tests/unit/test_dynamic_world_types.py` and `tests/unit/test_dynamic_world_pipeline.py` (39 unit tests passing; 877 full repository unit tests passing).
+  - Created live Earth Engine integration test suite in `tests/integration/test_dynamic_world_integration.py` (3 live tests passing against `bharatsahayak-v2`).
+
+
 - **Phase 3B — CHIRPS Regional Rainfall Backup Subsystem Implementation (🟢 COMPLETE & VERIFIED — `DEC-020` — 49 Unit Tests + 3 Live Integration Tests):**
   - Implemented strongly typed domain models in [`app/environment/chirps_types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/chirps_types.py):
     - `DailyRainfallObservation`: Physical daily precipitation observation with native mm/day unit, valid zero ($0.0\text{ mm}$), missing preservation (`None`), and negative artifact rejection.
