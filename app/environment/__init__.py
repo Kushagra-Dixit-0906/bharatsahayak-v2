@@ -13,6 +13,10 @@
 # limitations under the License.
 """Environmental data sources module for BharatSahayak (Phase 3)."""
 
+from app.environment.aggregation import (
+    aggregate_window_statistics,
+    compute_environmental_window_suite,
+)
 from app.environment.types import (
     DailyEnvironmentalObservation,
     EnvironmentalWindowStatistics,
@@ -23,4 +27,6 @@ __all__ = [
     "DailyEnvironmentalObservation",
     "EnvironmentalWindowStatistics",
     "ERA5LandAnalysis",
+    "aggregate_window_statistics",
+    "compute_environmental_window_suite",
 ]

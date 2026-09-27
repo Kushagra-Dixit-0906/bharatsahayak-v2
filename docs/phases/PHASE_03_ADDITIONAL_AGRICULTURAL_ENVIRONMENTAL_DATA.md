@@ -1,10 +1,10 @@
 # Phase 3 — Additional Agricultural & Environmental Data Sources
 
 > **Canonical Record of Phase 3 Architecture, Environmental Data Sources, ERA5-Land Reanalysis, CHIRPS Precipitation, and Dynamic World Land Cover.**  
-> *Status: 🟡 PHASE 3 IN PROGRESS (Subphase 3A Step 1 Domain Contracts & Offline Fixtures Complete — 31 Tests Passing; Step 2 Math & Step 3 Adapter Pending)*<br>
+> *Status: 🟡 PHASE 3 IN PROGRESS (Subphase 3A Step 1 Contracts & Step 2 Pure Math Aggregation Engine Complete — 50 Subsystem Tests Passing; Step 3 Adapter Pending)*<br>
 > *Base Sealed Checkpoint: `583dbf8 — docs: seal Phase 2 historical satellite intelligence`*<br>
 > *Current Subphase: Phase 3A (ERA5-Land Daily Reanalysis Environmental Context)*<br>
-> *Next Subphase Implementation: Phase 3A Step 2 (Pure Math & Window Aggregation Engine)*
+> *Next Subphase Implementation: Phase 3A Step 3 (Earth Engine Collection Adapter & Integration)*
 
 ---
 
@@ -51,7 +51,7 @@ While satellite NDVI provides direct radiometric evidence of vegetative vigor, *
 
 ```
 Phase 3: Additional Agricultural & Environmental Data Sources
-├── 3A: ERA5-Land Daily Reanalysis Environmental Context (🟡 IN PROGRESS / Step 1 Complete — 31 Tests / Steps 2 & 3 Pending)
+├── 3A: ERA5-Land Daily Reanalysis Environmental Context (🟡 IN PROGRESS / Steps 1 & 2 Complete — 50 Tests / Step 3 Pending)
 │    ├── 4 Core Variables (2m Temp, Total Precipitation, 0-7cm Soil Water, Runoff)
 │    ├── 3 Analysis Windows (Recent 7-Day, 30-Day, 90-Day Observation Envelopes)
 │    ├── Data Lag & Reanalysis Latency Tracking (requested vs latest available date)
@@ -270,7 +270,14 @@ To guarantee rapid, deterministic unit testing without hitting Earth Engine netw
   - Reused `AnalysisRegionMetadata`, `EarthEngineStatus`, and `EarthEngineError` without duplicate status enums.
   - Deterministic offline fixtures in `tests/fixtures/era5_land/` (`punjab_monsoon_90d.json`, `punjab_winter_dry_90d.json`, `lagged_partial_90d.json`, `negative_artifact_edge_case.json`, `no_data_empty.json`) and typed loader in `tests/fixtures/era5_fixtures.py`.
   - Comprehensive contract test suite in [`tests/unit/test_environment_types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_environment_types.py) (31 tests passed).
-- **Step 2 — Pure Math & Window Aggregation Engine (🟡 NEXT STEP / PENDING):**
-  - Implement deterministic unit conversions ($K \to ^\circ\text{C}$, $m \to \text{mm}$), negative artifact rejection, and 7/30/90-day window aggregators in pure Python with zero Earth Engine dependencies.
-- **Step 3 — Earth Engine Adapter & Integration (🟡 PENDING):**
-  - Implement Earth Engine collection querying (`ECMWF/ERA5_LAND/DAILY_AGGR`), live integration tests, and public module exports.
+- **Step 2 — Pure Math & Window Aggregation Engine (🟢 COMPLETE — 19 Tests Passing):**
+  - Implemented pure mathematical window aggregation engine in [`app/environment/aggregation.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/aggregation.py) with zero Earth Engine dependencies: `aggregate_window_statistics` and `compute_environmental_window_suite`.
+  - Inclusive calendar window spans $[E - N + 1, E]$ for 7-day, 30-day, and 90-day observation envelopes.
+  - Temporal availability and completeness invariants: `days_available` counts distinct observation dates in window; `is_complete == (days_available == days_requested)`.
+  - Metric-level missingness handling: metrics calculate over available non-null values; zero vs None distinction strictly preserved ($\text{Missing} \ne 0.0\text{ mm}$).
+  - Duplicate date detection: input sequences with duplicate `observation_date` values explicitly raise `ValueError`.
+  - Incomplete windows calculated from available observations without discarding data; empty windows return `None` metrics.
+  - Order-invariant processing: input order does not affect computed statistics.
+  - Comprehensive aggregation test suite in [`tests/unit/test_environment_aggregation.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_environment_aggregation.py) (19 tests passed; 50 environmental tests total).
+- **Step 3 — Earth Engine Adapter & Integration (🟡 NEXT STEP / PENDING):**
+  - Implement Earth Engine collection querying (`ECMWF/ERA5_LAND/DAILY_AGGR`), source-unit conversions ($K \to ^\circ\text{C}$, $m \to \text{mm}$) at the ingestion boundary, live integration tests, and public module exports.

@@ -7,7 +7,19 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 3: Additional Agricultural & Environmental Data Sources (Subphase 3A Step 1 Complete — 31 Tests)
+### 🟡 In Progress — Phase 3: Additional Agricultural & Environmental Data Sources (Subphase 3A Steps 1 & 2 Complete — 50 Subsystem Tests)
+- **Phase 3A Step 2 — Pure Math & Window Aggregation Engine (🟢 COMPLETE — 19 Tests):**
+  - Created pure mathematical window aggregation module [`app/environment/aggregation.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/aggregation.py) and public exports in [`app/environment/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/__init__.py).
+  - Implemented `aggregate_window_statistics`:
+    - Computes inclusive temporal windows: $\text{window\_start} = \text{window\_end} - (\text{window\_days} - 1)$ for 7-day ($E-6$), 30-day ($E-29$), and 90-day ($E-89$) envelopes.
+    - Defensively validates input observations and rejects duplicate `observation_date` entries with `ValueError`.
+    - Computes metric-level statistics (temperature mean/min/max, precipitation sum, soil water mean, runoff sum) over available non-null values while preserving distinct calendar availability (`days_available`).
+    - Handles incomplete windows (computes from available observations) and empty windows (returns `days_available=0` with `None` metric values).
+    - Preserves zero vs None distinction: observed 0.0 mm rainfall produces 0.0 mm total, while unavailable data produces `None`.
+    - Guarantees order invariance: unordered or reversed inputs produce identical aggregation outputs.
+  - Implemented `compute_environmental_window_suite`:
+    - Standardized orchestrator generating the (recent 7d, recent 30d, recent 90d) tuple by delegating to `aggregate_window_statistics`.
+  - Added comprehensive unit test suite in [`tests/unit/test_environment_aggregation.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_environment_aggregation.py) with 19 tests passing (50 environmental tests passing total).
 - **Phase 3A Step 1 — Domain Contracts & Deterministic Offline Fixtures (🟢 COMPLETE — 31 Tests):**
   - Created dedicated environment domain contract module [`app/environment/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/types.py) and exports in [`app/environment/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/__init__.py).
   - Implemented domain models:
