@@ -198,7 +198,7 @@ graph TD
 
 ---
 
-## 🌦️ Agricultural & Environmental Context Architecture (`🟢 PHASE 3A & 3B COMPLETE & VERIFIED / DEC-018, DEC-019, DEC-020`)
+## 🌦️ Agricultural & Environmental Context Architecture (`🟢 PHASE 3 COMPLETE & FROZEN / DEC-018, DEC-019, DEC-020, DEC-021; Phase 3D Deferred`)
 
 Phase 3 introduces physical meteorological, hydrological, and land-cover context layers to explain the physical drivers behind satellite vegetation signals:
 
@@ -207,16 +207,19 @@ graph TD
     subgraph EarthEngineCatalog ["Google Earth Engine Catalog"]
         ERA["ECMWF/ERA5_LAND/DAILY_AGGR\n(Daily Reanalysis, ~11.1 km)"]
         CHIRPS["UCSB-CHC/CHIRPS/V3/DAILY_SAT\n(Satellite Precipitation, ~5.566 km)"]
+        DW["GOOGLE/DYNAMICWORLD/V1\n(Sentinel-2 L1C Derived LULC, 10m)"]
     end
 
     subgraph DataExtraction ["1. Remote Extraction Layer (ee.Reducer.mean)"]
         ERA --> QueryERA["90-Day Range Query [E-89, E+1)\n(scale=11132m)"]
         CHIRPS --> QueryCHIRPS["90-Day Range Query [E-89, E+1)\n(scale=5566m)"]
+        DW --> QueryDW["30-Day Range Query [E-29, E+1)\n(scale=10m, newest usable .first())"]
     end
 
     subgraph ValidationEngine ["2. Pure Math & Validation Engine (0 EE Calls)"]
         QueryERA --> NormERA["ERA5 Normalization & Validation\n(K -> °C, m -> mm, SW [0, 1])"]
         QueryCHIRPS --> NormCHIRPS["CHIRPS Normalization & Validation\n(1:1 mm/day, Reject < 0.0)"]
+        QueryDW --> NormDW["Dynamic World Normalization\n(1:1 Probabilities [0.0, 1.0])"]
         NormERA --> WinERA["ERA5 Window Aggregator\n(7d, 30d, 90d Envelopes)"]
         NormCHIRPS --> WinCHIRPS["CHIRPS Rainfall Window Aggregator\n(7d, 30d, 90d Total/Mean/Max)"]
         NormDW --> DomDW["Dynamic World Dominant Class Derivation\n(Max Prob + Canonical Tie-Break)"]
@@ -237,6 +240,13 @@ graph TD
 5. **Missing Data & Artifact Invariants:** Missing values are never converted to $0.0$; negative values ($< 0.0$) from GEE data-packing artifacts are rejected as invalid (never silently clamped to 0.0).
 6. **Single-Scene Land-Cover Selection:** Dynamic World selects the newest usable observation in the 30-day window $[E-29, E]$; zero temporal averaging or compositing is performed.
 7. **Partial-Window Available-Observation Semantics:** For incomplete windows (`is_complete=False`), metric totals and averages represent observed totals/means over available non-null observations, NOT complete-window totals or zero-filled averages. Prohibits imputation or interpolation for missing dates.
+8. **Data Sufficiency Over Dataset Accumulation:** *"Data sufficiency takes priority over dataset accumulation."* The environmental data foundation is frozen for the first prototype with 5 complementary evidence streams:
+   - **Sentinel-2 NDVI:** Current vegetative vigor and condition.
+   - **Historical NDVI Baseline / Anomaly:** Deviation from 3-year historical seasonal conditions.
+   - **ERA5-Land Reanalysis:** Ambient temperature, topsoil volumetric water fraction, and runoff.
+   - **CHIRPS Precipitation:** Satellite-partitioned daily rainfall distribution.
+   - **Dynamic World Land Cover:** 9-class probabilistic land-cover context.
+   Phase 3D (e.g. MODIS MOD16A2 evapotranspiration candidate) is deferred. The project now transitions from expanding environmental data collection to multi-source evidence fusion (Phase 4) and agricultural reasoning (Phase 5).
 
 
 

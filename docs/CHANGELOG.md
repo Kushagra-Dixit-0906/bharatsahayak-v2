@@ -7,7 +7,13 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟡 In Progress — Phase 3: Additional Agricultural & Environmental Data Sources (Subphases 3A, 3B & 3C Complete & Verified — `DEC-018`, `DEC-019`, `DEC-020`, `DEC-021`)
+### 🟢 Complete & Frozen — Phase 3: Additional Agricultural & Environmental Data Sources (Subphases 3A, 3B & 3C Complete & Verified — `DEC-018`, `DEC-019`, `DEC-020`, `DEC-021`; Phase 3D Deferred)
+- **Phase 3 Scope Freeze & Phase 3D Deferral (🔴 DEFERRED):**
+  - Formally froze the environmental data foundation for the initial prototype across 5 complementary evidence streams (Sentinel-2 NDVI, historical NDVI anomaly, ERA5-Land reanalysis, CHIRPS precipitation, Dynamic World land cover).
+  - Established architectural principle: *"Data sufficiency takes priority over dataset accumulation."*
+  - Formally deferred Phase 3D ("Additional Environmental Signal", candidate MODIS MOD16A2 evapotranspiration / land-atmosphere water flux) as future backlog to avoid unnecessary complexity, test surface expansion, and failure modes in the absence of a demonstrated reasoning gap.
+  - Advanced project trajectory toward Phase 4 (Multi-Source Data Fusion) and Phase 5 (Gemini Agricultural Reasoning).
+
 - **Phase 3C — Dynamic World Land-Cover Context Implementation (🟢 COMPLETE & VERIFIED — `DEC-021` — 39 Unit Tests + 3 Live Integration Tests):**
   - Implemented strongly typed domain models in [`app/environment/dynamic_world_types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/dynamic_world_types.py):
     - `DynamicWorldLandCoverClass`: Literal representing 9 canonical classes (`water`, `trees`, `grass`, `flooded_vegetation`, `crops`, `shrub_and_scrub`, `built`, `bare`, `snow_and_ice`).

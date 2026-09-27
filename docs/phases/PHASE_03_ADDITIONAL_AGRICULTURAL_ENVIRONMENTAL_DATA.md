@@ -1,10 +1,10 @@
 # Phase 3 — Additional Agricultural & Environmental Data Sources
 
 > **Canonical Record of Phase 3 Architecture, Environmental Data Sources, ERA5-Land Reanalysis, CHIRPS Precipitation, and Dynamic World Land Cover.**  
-> *Status: 🟡 PHASE 3 IN PROGRESS (Phase 3A Complete & Sealed — Commit 74fd372; Phase 3B Complete & Verified — DEC-020)*<br>
+> *Status: 🟢 PHASE 3 COMPLETE & FROZEN (Phase 3A, 3B, 3C Complete & Verified — DEC-018, DEC-019, DEC-020, DEC-021; Phase 3D Deferred)*<br>
 > *Base Sealed Checkpoint: `583dbf8 — docs: seal Phase 2 historical satellite intelligence`*<br>
-> *Current Subphase: Phase 3B (CHIRPS Regional Rainfall Backup Subsystem) — 🟢 IMPLEMENTED & VERIFIED*<br>
-> *Next Subphase: Phase 3C (Dynamic World Real-Time Land Use / Land Cover)*
+> *Current State: Environmental Foundation Complete & Frozen (5 Complementary Evidence Streams)*<br>
+> *Next Phase: Phase 4 (Multi-Source Data Fusion)*
 
 ---
 
@@ -24,13 +24,13 @@ While satellite NDVI provides direct radiometric evidence of vegetative vigor, *
 │    - Current regional NDVI + 3-year historical baseline comparison.                     │
 │    - Physical evidence: "How is vegetation reflecting compared to previous seasons?"    │
 ├─────────────────────────────────────────────────────────────────────────────────────────┤
-│ 2. ENVIRONMENTAL & METEOROLOGICAL CONTEXT (Phase 3 — CURRENT PHASE)                     │
+│ 2. ENVIRONMENTAL & METEOROLOGICAL CONTEXT (Phase 3 — COMPLETE & FROZEN)                 │
 │    - Phase 3A: ERA5-Land Daily Reanalysis (Temperature, Precipitation, Soil Moisture)   │
 │    - Phase 3B: CHIRPS Regional Rainfall Backup Subsystem (Rainfall Distribution)        │
-│    - Phase 3C: Dynamic World Real-Time Land Use / Land Cover (Crop / Soil / Trees)      │
+│    - Phase 3C: Dynamic World Real-Time Land Cover Context (9-Class Probability)         │
 │    - Physical evidence: "What environmental conditions were observed over recent days?" │
 ├─────────────────────────────────────────────────────────────────────────────────────────┤
-│ 3. MULTI-SOURCE EVIDENCE FUSION (Phase 4 — FUTURE)                                      │
+│ 3. MULTI-SOURCE EVIDENCE FUSION (Phase 4 — NEXT PHASE)                                  │
 │    - Correlates NDVI anomalies with environmental context (moisture deficit vs drought).│
 │    - Synthesizes normalized FarmContext payload for agent consumption.                  │
 ├─────────────────────────────────────────────────────────────────────────────────────────┤
@@ -41,7 +41,7 @@ While satellite NDVI provides direct radiometric evidence of vegetative vigor, *
 
 > [!IMPORTANT]
 > **The Core Conceptual Boundary of Phase 3:**
-> - **Phase 3A & 3B:** *"What physical environmental and rainfall conditions were observed over recent windows?"* (Empirical physical measurements: temperature, cumulative precipitation, topsoil moisture fraction, runoff).
+> - **Phase 3A, 3B, 3C:** *"What physical environmental and rainfall conditions were observed over recent windows?"* (Empirical physical measurements: temperature, cumulative precipitation, topsoil moisture fraction, runoff, land-cover class probabilities).
 > - **Phase 4:** *"How does that environmental evidence correlate with the satellite NDVI anomaly?"* (Multi-source data fusion and cross-source rainfall validation).
 > - **Phase 5:** *"What does this mean for the farmer and what actions should they take?"* (Gemini 2.5 Flash agricultural reasoning and localized advisory).
 
@@ -65,11 +65,14 @@ Phase 3: Additional Agricultural & Environmental Data Sources
 │    ├── 3 Analysis Windows (Recent 7-Day, 30-Day, 90-Day Rainfall Envelopes)
 │    ├── Dynamic Publication Lag Tracking (requested vs latest available date)
 │    └── Coarse Regional Context Boundary (Option A unweighted zonal mean at 5566m nominal scale)
-├── 3C: Dynamic World Land Use / Land Cover (🟡 PLANNED)
-│    ├── GOOGLE/DYNAMICWORLD/V1 (10m Sentinel-2 aligned LULC)
-│    └── Probabilistic Land Cover (Crops, Bare Ground, Trees, Built-up)
-└── 3D: Environmental Provider Abstraction & Unified Context Contract (🟡 PLANNED)
-     └── Pluggable Provider Architecture & Integration Testing
+├── 3C: Dynamic World Land-Cover Context (🟢 COMPLETE & VERIFIED — DEC-021)
+│    ├── GOOGLE/DYNAMICWORLD/V1 (10m Sentinel-2 L1C Derived LULC)
+│    ├── 9-Class Continuous Probability Bands (1:1 float preservation)
+│    ├── 30-Day Window with Newest Usable Observation Selection (.first())
+│    ├── Option A Unweighted Zonal Mean Reduction (scale=10.0m)
+│    └── Dominant Class Derivation with Canonical Index Order Tie-Breaking
+└── 3D: Additional Environmental Signal (🔴 DEFERRED — Future Candidate: MODIS MOD16A2 ET)
+     └── Deferred under principle: "Data sufficiency takes priority over dataset accumulation"
 ```
 
 ---
@@ -516,7 +519,7 @@ Dedicated integration test suite in `tests/integration/test_chirps_integration.p
   - Temporal Strategy: Single locked path over 30-day window $[E-29, E]$; selects newest usable observation (`collection.sort("system:time_start", False).first()`); zero temporal averaging or compositing.
   - Dominant Class Derivation: Class with highest regional mean probability, with deterministic tie-breaking by canonical GEE index order.
   - Verification: 39/39 Dynamic World unit tests passed, 877/877 full repository unit tests passed, 3 live EE integration tests passed.
-  - Next Step: Phase 3D (Unified Context Contract) or Phase 4 (Multi-Source Data Fusion) upon user instruction.
+  - Next Phase: Phase 4 (Multi-Source Data Fusion) — correlating environmental evidence with NDVI anomalies and synthesizing normalized FarmContext.
 
 ---
 
@@ -712,6 +715,42 @@ Tier 3: Root Orchestration Pipeline (app/environment/dynamic_world_pipeline.py)
    ├── Preserves context metadata on no_data and error states
    └── Constructs immutable DynamicWorldAnalysis domain envelope
 ```
+
+---
+
+## 11. Phase 3 Environmental Foundation Freeze & Phase 3D Scope Deferral
+
+### 11.1 Architectural Principle: Data Sufficiency Over Dataset Accumulation
+
+> [!IMPORTANT]
+> **Core Principle:** *"Data sufficiency takes priority over dataset accumulation."*  
+> The environmental data foundation is now complete and frozen for the first BharatSahayak prototype. Rather than accumulating additional datasets, the project prioritizes synthesizing and interpreting existing physical evidence for agricultural intelligence.
+
+### 11.2 The Five Complementary Environmental Evidence Streams
+
+The completed foundation delivers five structurally independent and complementary observational signals:
+
+1. **Current Vegetation Vigor (Sentinel-2 NDVI — Phase 1):**
+   - Direct radiometric greenness and canopy density at $10\text{ m}$ spatial resolution.
+2. **Historical Seasonal Anomaly (Multi-Year NDVI Baseline — Phase 2):**
+   - Deviation from 3-year rolling historical baseline ($Y-1, Y-2, Y-3$, DOY $\pm 15\text{ days}$) to identify lags or flourishing crops.
+3. **Thermal & Subsurface Reanalysis (ERA5-Land — Phase 3A):**
+   - 2m air temperature, topsoil volumetric water fraction ($0\text{–}7\text{ cm}$), and surface runoff across 7d/30d/90d envelopes.
+4. **Precipitation Distribution (CHIRPS — Phase 3B):**
+   - Satellite-partitioned daily rainfall distribution ($5.566\text{ km}$ resolution) across 7d/30d/90d envelopes.
+5. **Land-Cover Context (Dynamic World — Phase 3C):**
+   - 9-class continuous probability distribution ($10\text{ m}$ resolution) identifying agricultural vs non-crop land-cover regimes.
+
+### 11.3 Phase 3D Scope Deferral
+
+- **Status:** 🔴 **DEFERRED / FUTURE BACKLOG**
+- **Candidate Evaluated:** MODIS MOD16A2 Global Evapotranspiration / Land-Atmosphere Water Flux ($500\text{ m}$, 8-day composites).
+- **Scope Decision:**
+  - The current 5-stream evidence base is sufficient for smallholder advisory in the initial prototype.
+  - Adding further remote sensing datasets at this stage increases Earth Engine compute graph complexity, test surface area, remote dependency failure modes, and maintenance overhead without a demonstrated agricultural reasoning gap.
+  - Candidate MODIS MOD16A2 will be re-evaluated post-MVP only if multi-source data fusion (Phase 4) or Gemini domain reasoning (Phase 5) demonstrates a concrete explanatory deficiency regarding crop moisture stress.
+- **Next Phase:** **Phase 4 — Multi-Source Data Fusion** (correlating environmental metrics with vegetation anomalies to synthesize normalized `FarmContext` payloads).
+
 
 
 

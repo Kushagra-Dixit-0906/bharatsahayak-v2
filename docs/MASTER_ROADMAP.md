@@ -22,7 +22,7 @@
 graph TD
     P0["Phase 0: Project Understanding & Documentation 🟢"] --> P1["Phase 1: Earth Engine Foundation 🟢"]
     P1 --> P2["Phase 2: Historical Satellite Intelligence 🟢"]
-    P2 --> P3["Phase 3: Additional Agri & Environmental Data 🟡"]
+    P2 --> P3["Phase 3: Additional Agri & Environmental Data 🟢"]
     P3 --> P4["Phase 4: Multi-Source Data Fusion 🟡"]
     P4 --> P5["Phase 5: Gemini Agricultural Reasoning 🟡"]
     P5 --> P6["Phase 6: MCP & Agent Integration 🟡"]
@@ -105,8 +105,9 @@ graph TD
 ---
 
 ### Phase 3: Additional Agricultural & Environmental Data Sources
-- **Status:** 🟡 **IN PROGRESS (Subphase 3A Complete & Sealed — `74fd372`; Subphase 3B Design Sealed — `DEC-020`)**
+- **Status:** 🟢 **COMPLETE & FROZEN (Subphases 3A, 3B, 3C Complete & Verified — `DEC-018`–`DEC-021`; Subphase 3D Deferred)**
 - **Purpose:** Provide physical grounded evidence of the meteorological, hydrological, and land-cover regime surrounding the farmer's parcel to explain the environmental drivers behind satellite vegetation signals.
+- **Core Architectural Principle:** *"Data sufficiency takes priority over dataset accumulation."* The environmental data foundation is now complete and frozen for the first prototype across 5 complementary evidence streams.
 - **Sub-Roadmap:**
   - **3A — ERA5-Land Daily Reanalysis Environmental Context (🟢 COMPLETE & SEALED — DEC-018 / DEC-019):**
     - **Step 1 — Domain Contracts & Deterministic Fixtures (🟢 COMPLETE — 31 Tests):** Strongly typed domain models (`DailyEnvironmentalObservation`, `EnvironmentalWindowStatistics`, `ERA5LandAnalysis` in [`app/environment/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/environment/types.py)), 5 deterministic offline fixtures in `tests/fixtures/era5_land/`, typed loader in `tests/fixtures/era5_fixtures.py`, and comprehensive contract tests in [`tests/unit/test_environment_types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/tests/unit/test_environment_types.py).
@@ -132,10 +133,12 @@ graph TD
     - Option A unweighted regional zonal mean (`ee.Reducer.mean()`) over 100m circular `AnalysisRegion` at native 10m scale; dominant class derived with deterministic tie-breaking.
     - Dedicated contracts: `DynamicWorldClassProbabilities`, `DynamicWorldAnalysis` (`pipeline_version="3.1.0"`, retaining `observation_id` from `system:index`).
     - Verification: 5 deterministic offline fixtures in `tests/fixtures/dynamic_world/`, 39/39 Dynamic World unit tests passed, 877/877 full repository unit tests passed, 3 live EE integration tests passed.
-  - **3D — Environmental Provider Abstraction & Unified Context Contract (🟡 PLANNED):**
-    - Unified multi-provider abstraction and end-to-end integration testing.
+  - **3D — Additional Environmental Signal (🔴 DEFERRED):**
+    - **Status:** DEFERRED / FUTURE WORK.
+    - **Reason:** Environmental evidence foundation is sufficient for the first prototype across 5 complementary streams (Sentinel-2 NDVI, historical NDVI anomaly, ERA5-Land reanalysis, CHIRPS rainfall, and Dynamic World land cover). Adding further datasets without a demonstrated reasoning gap would increase complexity and test/failure surface needlessly.
+    - **Future Candidate:** MODIS MOD16A2 evapotranspiration / land-atmosphere water-flux context (`MODIS/061/MOD16A2`).
 - **Dependencies:** Phase 1 (`60f8d90`), Phase 2 (`583dbf8`).
-- **Next Subphase Implementation:** Phase 3D (Unified Context Contract) or Phase 4 (Multi-Source Data Fusion).
+- **Next Phase:** Phase 4 (Multi-Source Data Fusion).
 
 - **Future Upgrades (`🔴 IDEA`):** SoilGrids / ICAR soil profiles, live forecast API feeds (IMD / Open-Meteo), live mandi prices via Agmarknet / e-NAM APIs.
 
