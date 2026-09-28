@@ -1,6 +1,6 @@
 # BharatSahayak V2 — System Architecture & Design
 
-> **Current architectural baseline, operational mechanics, guardrails, and planned evolution.**  
+> **Current architectural baseline, operational mechanics, guardrails, and planned evolution.**
 > *Baseline Branch: `bharatsahayak-v2` | Commit: `e0fcc29`*
 
 ---
@@ -134,7 +134,7 @@ The `load_farmer_profile` node parses incoming queries to maintain session state
   4. `calculate_farming_profitability(crop, acreage, expected_yield_per_acre)`
 - ⚠️ **CURRENT LIMITATION & UPGRADE AREA:**
   > [!IMPORTANT]
-  > The current MCP server returns **static, rule-based catalog responses and hardcoded conditional lookups** for selected Indian states (Punjab, Karnataka) and crops (wheat, rice, cotton).  
+  > The current MCP server returns **static, rule-based catalog responses and hardcoded conditional lookups** for selected Indian states (Punjab, Karnataka) and crops (wheat, rice, cotton).
   > It does **NOT** yet connect to live meteorological APIs, dynamic satellite feeds, or live government database endpoints. Connecting live data sources is a major milestone of upcoming phases.
 
 ### 7. Telemetry & Observability (`🟢 CURRENT / IMPLEMENTED`)
@@ -267,7 +267,7 @@ graph TD
         P3["3. analyze_era5_land(...)"]
         P4["4. analyze_chirps_rainfall(...)"]
         P5["5. analyze_dynamic_world_land_cover(...)"]
-        
+
         Geo & RefDate --> P1
         P1 -. Pre-computed Current NDVI .-> P2
         Geo & RefDate --> P3
@@ -302,41 +302,51 @@ graph TD
 
 ---
 
-## 🧠 Agricultural Evidence Interpretation & Reasoning Architecture (`🟡 PHASE 5 PROPOSED / DEC-023`)
+## 🧠 Agricultural Evidence Interpretation & Reasoning Architecture (`🟢 PHASE 5B VERIFIED / 🟡 PHASE 5C APPROVED DESIGN`)
 
-Phase 5 introduces a deterministic agricultural evidence interpretation layer that translates physical multi-source observations (`AgriculturalEnvironmentalEvidence`) into an auditable, conservative, and structured `AgriculturalAssessment`:
+Phase 5 establishes a two-layer architecture for transforming multi-source environmental evidence into safe, farmer-friendly explanations:
+1. **Phase 5B (Deterministic Interpretation — `🟢 IMPLEMENTED & VERIFIED / DEC-023`):** Pure-Python deterministic engine that evaluates stress patterns, resolves conflicts, and produces immutable `AgriculturalAssessment` payloads.
+2. **Phase 5C (Gemini Explanation Layer — `🟡 APPROVED DESIGN / PENDING IMPLEMENTATION / DEC-024`):** Bounded natural language layer that generates rural-friendly, multilingual explanations from structured deterministic assessments with constrained advisory and deterministic fallback.
 
 ```mermaid
 graph TD
-    subgraph EvidenceIn ["Phase 4: Physical Evidence Ingestion"]
+    subgraph EvidenceIn ["Phase 4: Physical Evidence Ingestion (🟢 IMPLEMENTED)"]
         Ev["AgriculturalEnvironmentalEvidence\n(NDVI + ERA5 + CHIRPS + Dynamic World)"]
     end
 
-    subgraph Tier1Reasoning ["Phase 5 Tier 1: Pure Assessment Engine (app/assessment/reasoning.py - 0 EE, 0 LLM)"]
+    subgraph Tier1Reasoning ["Phase 5B: Pure Deterministic Reasoning (🟢 IMPLEMENTED - 0 EE, 0 LLM)"]
         Ev --> Patterns["Pattern Activation Rules\n(water_stress, heat_stress, rainfall_deficit, waterlogging)"]
-        Ev --> Conflict["Conflict Resolution Engine\n(e.g. Low Rain + Normal NDVI -> Irrigation Buffer)"]
-        Ev --> Suff["Sufficiency & Latency Evaluator\n(Structural Completeness, Max Lag)"]
+        Ev --> Conflict["Conflict Resolution Engine\n(e.g. Low Rain + Normal NDVI -> Observable Divergence)"]
+        Ev --> Suff["Sufficiency & Latency Evaluator\n(Pattern-Specific Sufficiency, Max Lag)"]
         Patterns & Conflict & Suff --> BuildAssess["Build AgriculturalAssessment\n(Immutable, extra='forbid')"]
     end
 
-    subgraph AssessmentPayload ["Structured Assessment Output (app/assessment/types.py)"]
+    subgraph AssessmentPayload ["Deterministic Assessment Output (app/assessment/types.py)"]
         BuildAssess --> OutAssess["AgriculturalAssessment\n(overall_condition, identified_patterns, limitations)"]
     end
 
-    subgraph GeminiCommunicator ["Phase 5B/6: Conversational Interface"]
-        OutAssess --> Gemini["Gemini 2.5 Flash\n(Multilingual Explanation & Farmer Guidance)"]
+    subgraph Phase5CExplanation ["Phase 5C: Gemini Explanation Layer (🟡 APPROVED DESIGN / DEC-024)"]
+        OutAssess & FarmerCtx["VerifiedFarmerContext\n(crop, stage, irrigation, language)"] --> GAC["GeminiAssessmentContext\n(Option B: Minimal Auditable Boundary)"]
+        GAC --> GeminiCall["Gemini 2.5 Flash\n(System Rules + Structured Prompt)"]
+        GeminiCall --> Validation["3-Stage Safety Validation\n(Schema + Banned Keywords + Invariants)"]
+        Validation -- Validated --> Resp["FarmerAgriculturalResponse\n(Multilingual Explanation + Constrained Steps)"]
+        Validation -- Failed / Timeout --> Fallback["Deterministic Offline Fallback Engine"]
+        Fallback --> Resp
     end
 ```
 
 ### Key Architectural Tenets for Phase 5:
-1. **Deterministic-First Interpretation Axiom:** *"Phase 4 assembles evidence. Phase 5 interprets evidence. Gemini later explains the interpretation to the farmer."* Core diagnostic reasoning is rule-based and deterministic (0 LLM calls in core assessment).
-2. **Observation vs Interpretation Separation:** Strict boundary between raw/aggregated physical measurements (Phase 4) and derived agricultural interpretations (Phase 5), with 100% provenance back to source data.
-3. **Multiple Corroborating Evidence Convergence:** Treat multi-sensor observations as corroborating physical evidence rather than assuming unproven statistical independence.
-4. **Observable Divergence Over Causal Speculation:** Divergent signals (e.g. low rainfall with normal NDVI) are described as observable divergences rather than asserting unverified causal mechanisms (e.g. tube-well irrigation or pest outbreaks).
-5. **Pattern-Specific Sufficiency:** Sufficiency is evaluated per-pattern based on required physical streams, avoiding arbitrary global source-count thresholds.
-6. **Epistemic Conservatism:** Zero uncalibrated universal thresholds. Categorical evidence support (`high_support`, `moderate_support`, `limited_support`, `conflicted_support`) replaces synthetic pseudo-confidence scores. No uncalibrated crop disease diagnoses, official drought declarations, or precise yield forecasts.
-7. **Constrained LLM Communicator:** Gemini is constrained to explain and communicate structured assessment facts rather than independently inventing environmental observations.
-8. **Decoupled Camera Workflow:** The optional visual crop-photo/disease-diagnosis workflow remains completely independent of the spatial environmental assessment pipeline.
+1. **The Core Tripartite Separation:** *"Phase 4 assembles evidence. Phase 5B interprets evidence. Phase 5C explains the interpretation."* LLMs never analyze raw Earth Observation data or override deterministic assessments.
+2. **Deterministic Interpretation First (Phase 5B — Verified):** All diagnostic patterns (`water_stress_consistent_pattern`, `heat_stress_consistent_pattern`, `rainfall_deficit_consistent_pattern`, `excess_moisture_waterlogging_consistent_pattern`, `combined_environmental_stress_pattern`, `vegetation_stress_pattern`, `near_baseline_stable_condition`, `favorable_growth_condition`, `conflicting_environmental_signals`, `insufficient_evidence_condition`) and the 8-value `OverallEnvironmentalCondition` summary badge are derived purely in deterministic Python.
+3. **Option B Purpose-Built Boundary (Phase 5C — Approved Design):** Gemini consumes `GeminiAssessmentContext`, cleanly separating deterministic assessment data, whitelisted personalization context, and presentation preferences.
+4. **Personalization vs Evidence Axiom:** Farmer context (`crop`, `crop_stage`, `irrigation_available`) is personalization context, not environmental evidence. Gemini must not treat farmer input as physical evidence of crop condition.
+5. **Context Freshness Lifecycle:** Context is explicitly tagged as `verified`, `stale`, or `unknown`. Stale context requires conditional framing and cannot trigger stage-specific actions.
+6. **Epistemic Invariance & Multilingual Localization:** Assessments are language-independent. Translation into Hindi and regional languages preserves exact uncertainty and conflict reporting without inflating claims.
+7. **Constrained Recommendation Allowlist:** MVP recommendations are strictly restricted to low-risk field visual inspection, manual topsoil moisture probing, ongoing monitoring, and information gathering. Prohibits chemical pesticide/fungicide advice, exact fertilizer dosages, and yield forecasts. Empty recommendation lists (`[]`) are fully valid.
+8. **Three-Stage Mechanical Safety Pipeline:** LLM responses are validated via Pydantic schemas, banned-keyword regex scanners (blocking chemical units and names), and agronomic boundary checks.
+9. **Deterministic Fallback Guarantee:** Deterministic offline template fallback engine generates valid explanations across all 8 Phase 5B overall environmental conditions if Gemini fails or times out.
+10. **Prompt-Injection Defense:** Strict 5-tier structural prompt hierarchy treats all user strings inside passive XML data tags as data literals.
+11. **Decoupled Camera Workflow:** Visual crop-photo disease diagnosis remains a decoupled, optional tool path, completely independent of the spatial environmental assessment pipeline.
 
 
 

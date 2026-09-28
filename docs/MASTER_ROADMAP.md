@@ -1,7 +1,7 @@
 # BharatSahayak V2 — Master Project Roadmap
 
-> **Master roadmap and progressive implementation plan for BharatSahayak V2.**  
-> *Last Updated: Phase 3A ERA5-Land Environmental Context Design Sealed*  
+> **Master roadmap and progressive implementation plan for BharatSahayak V2.**
+> *Last Updated: Phase 3A ERA5-Land Environmental Context Design Sealed*
 > *Baseline Branch: `bharatsahayak-v2` | Commit: `e0fcc29` | GCP Project ID: `bharatsahayak-v2`*
 
 ---
@@ -168,10 +168,10 @@ graph TD
 ---
 
 ### Phase 5: Agricultural Evidence Interpretation & Gemini Reasoning
-- **Status:** 🟡 **APPROVED DESIGN / PENDING IMPLEMENTATION (`DEC-023`)**
-- **Purpose:** Translate multi-source physical evidence (`AgriculturalEnvironmentalEvidence`) into structured, deterministic agricultural interpretations (`AgriculturalAssessment`), which Gemini 2.5 Flash explains to the farmer in empathetic, multilingual rural language.
+- **Status:** 🟢 **5A/5B IMPLEMENTED & VERIFIED (`b71cfc3`) / 🟡 5C APPROVED DESIGN (`DEC-024`)**
+- **Purpose:** Translate multi-source physical evidence (`AgriculturalEnvironmentalEvidence`) into structured, deterministic agricultural interpretations (`AgriculturalAssessment`), which Gemini 2.5 Flash explains to the farmer in empathetic, multilingual rural language with constrained, safe next steps.
 - **Sub-Roadmap:**
-  - **5A — Deterministic Agricultural Evidence Interpretation Design (🟢 APPROVED / `DEC-023`):**
+  - **5A — Deterministic Agricultural Evidence Interpretation Design (🟢 COMPLETE & APPROVED / `DEC-023`):**
     - Architectural boundary: Evidence Assembly (Phase 4) $\to$ Deterministic Interpretation (Phase 5) $\to$ Natural-Language Explanation (Gemini).
     - Delineation of observed evidence vs derived interpretations with 100% provenance traceability.
     - Multi-source stress pattern taxonomy (`water_stress_consistent_pattern`, `rainfall_deficit_consistent_pattern`, `heat_stress_consistent_pattern`, `excess_moisture_waterlogging_consistent_pattern`, `combined_environmental_stress_pattern`, `near_baseline_stable_condition`, `favorable_growth_condition`, `conflicting_environmental_signals`, `insufficient_evidence_condition`).
@@ -181,15 +181,21 @@ graph TD
     - Proposed domain contracts: `AgriculturalAssessment`, `EnvironmentalStressPattern`, `SupportingEvidenceItem`.
     - Strict non-agronomic boundaries: no crop disease diagnosis, no drought declarations, no exact yield predictions, no uncalibrated chemical prescriptions.
     - Camera/crop-photo workflow explicitly preserved as a decoupled, optional separate path.
-  - **5B — Deterministic Assessment Engine Implementation & Offline Verification (🟡 PLANNED):**
+  - **5B — Deterministic Assessment Engine Implementation & Offline Verification (🟢 COMPLETE & VERIFIED — `b71cfc3`):**
     - Implementation of `app/assessment/types.py`, `app/assessment/reasoning.py`, `app/assessment/pipeline.py`, and `app/assessment/__init__.py`.
     - Pure offline Tier 1 reasoning engine (0 EE calls, 0 network I/O, 0 LLM calls).
-    - Deterministic offline test suite across 15+ stress and divergence scenarios.
-  - **5C — Gemini 2.5 Flash Grounding & Multilingual Explanation (🟡 PLANNED):**
-    - System instruction refactoring to consume `AgriculturalAssessment` JSON.
-    - Multilingual farmer-friendly explanation (English, Hindi, Punjabi) grounded strictly in verified assessment facts.
-- **Dependencies:** Phase 4 (`a046422`).
-- **Next Phase:** Phase 6 (MCP Server & Live Tool Integration).
+    - Deterministic offline test suite across 27 canonical scenarios in `tests/unit/test_assessment_reasoning.py`, `tests/unit/test_assessment_pipeline.py`, `tests/unit/test_assessment_types.py`.
+    - Verification: 41 Phase 5 unit tests passed, 960 full repository unit tests passed (0 regressions).
+  - **5C — Gemini Explanation Layer & Constrained Advisory Architecture (🟡 APPROVED DESIGN / `DEC-024`):**
+    - Purpose-built input boundary `GeminiAssessmentContext` (Option B) isolating assessment data, whitelisted `VerifiedFarmerContext`, and presentation requests.
+    - Context freshness lifecycle (`verified`, `stale`, `unknown`) preventing stale profiles from becoming ungrounded current facts.
+    - Multilingual semantic invariance preserving uncertainty, conflict reporting, and data gaps across English, Hindi, and regional languages.
+    - Structured output contract `FarmerAgriculturalResponse` with mechanical 3-stage safety validation (Pydantic schema, banned-keyword regex scanner, agronomic boundary checks).
+    - Constrained advisory allowlist: field inspection, manual soil probing, ongoing monitoring, information gathering (prohibiting chemical/pesticide advice, fertilizer dosages, exact irrigation amounts, yield forecasts). `recommended_next_steps = []` is valid.
+    - Deterministic offline fallback engine providing complete responses for all 8 Phase 5B overall environmental conditions (`stable`, `vegetation_stress`, `moisture_stress_consistent`, `heat_stress_consistent`, `combined_stress_consistent`, `favorable`, `mixed`, `insufficient_evidence`).
+    - Structural prompt-injection defense isolating user data in passive XML tags.
+- **Dependencies:** Phase 4 (`a046422`), Phase 5B (`b71cfc3`).
+- **Next Phase:** Phase 5C Implementation Pass / Phase 6 (MCP Server & Agent Integration).
 - **Future Upgrades (`🔴 IDEA`):** Multimodal convergence between Phase 5 environmental moisture context and leaf photograph disease symptoms.
 
 ---

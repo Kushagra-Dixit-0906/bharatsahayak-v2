@@ -1878,16 +1878,66 @@ Phase 4 successfully unified multi-source satellite and environmental data into 
 - Explicit conflict handling prevents erroneous drought alarms in irrigated zones and flags observable divergences when vegetation declines despite adequate rain.
 
 #### 📊 Implementation Roadmap
-- `DEC-023` approved. Ready for Phase 5B implementation pass.
+- **Implementation Status:** 🟢 **IMPLEMENTED & VERIFIED (`b71cfc3`)**
+- **Artifacts:**
+  - `app/assessment/types.py` (Domain models, `OverallEnvironmentalCondition`, `EnvironmentalStressPattern`, `AssessmentSufficiency`, `AgriculturalAssessment`)
+  - `app/assessment/reasoning.py` (Pure offline Tier 1 interpretation engine with zero Earth Engine imports)
+  - `app/assessment/pipeline.py` (Tier 2 root orchestrator coordinating Phase 4 evidence and Tier 1 interpretation)
+  - `app/assessment/__init__.py` (Package exports)
+  - `tests/fixtures/assessment_fixtures.py` (Synthetic test fixtures)
+  - `tests/unit/test_assessment_types.py`, `tests/unit/test_assessment_reasoning.py`, `tests/unit/test_assessment_pipeline.py` (41 unit tests passed)
+- **Full Repository Suite:** 960 unit tests passed (0 regressions).
 
+---
 
+### DEC-024: Gemini Explanation Layer Boundary & Constrained Advisory Architecture (Phase 5C)
 
+- **Date:** 2026-09-28
+- **Status:** 🟢 **APPROVED / PENDING IMPLEMENTATION**
+- **Deciders:** Core Engineering Team, Agricultural Analytics Working Group, Safety & Multi-Agent Architecture Team
+- **Consulted:** Rural Extension Advisors, Agronomic Data Working Group
+- **Informed:** Product Strategy
 
+#### 🎯 Context & Problem Statement
+Phase 5B established a pure, deterministic evidence interpretation engine producing immutable `AgriculturalAssessment` payloads. However, raw JSON and technical terminology (e.g. standard deviation departures, volumetric water fractions, 10m land cover probabilities) cannot be delivered directly to Indian smallholder farmers. Phase 5C introduces the Gemini explanation layer to translate deterministic interpretations into rural-friendly, multilingual explanations with constrained, safe advisory. Without strict architectural guardrails, LLMs risk hallucinating crop diseases, calculating uncalibrated chemical dosages, overriding data gaps, or falling victim to prompt injection via user profile strings. Phase 5C must define a rock-solid, auditable, and safe boundary between deterministic assessments and the LLM.
 
+#### ⚖️ Decision Drivers
+1. **Core Tripartite Separation:**
+   - *Phase 4 assembles evidence.*
+   - *Phase 5B interprets evidence.*
+   - *Phase 5C explains the interpretation and produces constrained next steps.*
+2. **Option B Purpose-Built Input Contract:** Use a dedicated, minimal `GeminiAssessmentContext` rather than sending full raw domain graphs or unvetted farmer profiles.
+3. **Personalization vs Environmental Evidence Distinction:** Farmer context (`crop`, `crop_stage`, `irrigation_available`) is *personalization context*, NOT *environmental evidence*. Gemini is strictly prohibited from treating farmer-reported crops as physical proof of vegetative health or stress.
+4. **Context Freshness Lifecycle:** Explicitly distinguish `verified`, `stale`, and `unknown` farmer context states. Stale context must never silently become authoritative ground truth.
+5. **Epistemic Invariance Across Languages:** Translation into Hindi or regional Indian languages must preserve the exact calibrated uncertainty, conflict transparency, and data gaps of Phase 5B without inflating claims.
+6. **Constrained Recommendation Boundary:** Recommendations in MVP are strictly limited to low-risk field inspection, manual soil moisture probing, ongoing monitoring, and information gathering. Prohibit chemical pesticide/fungicide advice, exact fertilizer dosages, precise irrigation depths, or yield forecasts. An empty recommendation list (`recommended_next_steps = []`) is fully valid.
+7. **Three-Stage Mechanical Safety Pipeline:** LLM outputs must pass Pydantic schema validation, a banned-content regex scanner, and agronomic boundary checks before delivery.
+8. **Deterministic Fallback Guarantee:** If Gemini fails, times out, or produces invalid/unsafe output, a pure-Python fallback engine generates a compliant response directly from `AgriculturalAssessment` across all 8 Phase 5B overall environmental conditions.
+9. **Prompt-Injection Defense:** Structured 5-tier prompt hierarchy isolates farmer strings inside passive XML data tags treated strictly as literals.
+10. **Zero PII Leakage:** Strict whitelist omits names, phone numbers, Aadhaar numbers, and financial details.
 
+#### 🛠️ Architectural Decision & Invariants
+1. **Input Domain Model (`app/assessment/gemini_types.py` - Proposed):**
+   - `GeminiAssessmentContext`: Encapsulates `overall_condition`, `assessment_status`, `reference_date`, `identified_patterns: list[ContextPatternSummary]`, `conflicting_signals: list[str]`, `limitations: list[str]`, `is_sufficient: bool`, `missing_evidence_sources`, `partial_evidence_sources`, `maximum_data_lag_days`, `farmer_context: VerifiedFarmerContext`, and `presentation: PresentationPreferences`.
+   - `ContextPatternSummary`: `pattern_type: EnvironmentalStressPatternType`, `evidence_support: EvidenceSupportLevel`, `technical_summary: str` (deterministic internal diagnostic summary), `supporting_evidence: list[SupportingEvidenceItem]` (structured physical observations for primary grounding).
+   - `VerifiedFarmerContext`: Restricted whitelist (`crop`, `crop_stage`, `irrigation_available`, `preferred_language`, `context_status: Literal["verified", "stale", "unknown"]`).
+   - All models are immutable (`frozen=True`, `extra="forbid"`).
+2. **Output Domain Model (`app/assessment/gemini_types.py` - Proposed):**
+   - `FarmerAgriculturalResponse`: Contains `language`, `headline`, `summary`, `observations: list[str]`, `interpretation: str`, `recommended_next_steps: list[RecommendedNextStep]`, `limitations: list[str]`, and `is_fallback: bool`.
+   - `RecommendedNextStep`: `action_type: Literal["field_visual_inspection", "soil_moisture_manual_check", "ongoing_monitoring", "missing_information_gathering"]`, `description: str`, `urgency: Literal["routine", "advisory"]`.
+3. **Mechanical Safety Pipeline:**
+   - Stage 1: Pydantic Schema Validation.
+   - Stage 2: Banned Regex Scanner (blocking units `kg/acre`, `ppm`, chemicals `urea`, `DAP`, `glyphosate`, etc., and absolute claims).
+   - Stage 3: Agronomic Invariant Checks (verifying `insufficient_evidence` does not claim positive health).
+4. **Deterministic Fallback Engine:**
+   - `generate_deterministic_fallback_explanation(context)`: deterministic offline pure-Python fallback generator providing compliant templates across all 8 Phase 5B conditions (`stable`, `vegetation_stress`, `moisture_stress_consistent`, `heat_stress_consistent`, `combined_stress_consistent`, `favorable`, `mixed`, `insufficient_evidence`) in English and Hindi.
+5. **Structural Immutability:**
+   - Root API response `AgriculturalAssessmentExplanationResponse` returns both untouched `AgriculturalAssessment` (authoritative) and `FarmerAgriculturalResponse`.
 
+#### 💡 Rationale
+- Decoupling deterministic reasoning (5B) from natural language generation (5C) guarantees that hallucinations cannot alter agricultural ground truth.
+- Option B minimizes token footprint, eliminates prompt injection vectors, and enforces strict data minimization principles.
+- Mechanical regex scanning and deterministic fallback provide defense-in-depth against model drift or transient cloud outages.
 
-
-
-
-
+#### 📊 Implementation Roadmap
+- `DEC-024` approved. Ready for Phase 5C implementation pass.
