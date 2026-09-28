@@ -1,10 +1,10 @@
 # Phase 5 — Agricultural Evidence Interpretation & Gemini Explanation Architecture
 
-> **Canonical Architecture Design for Phase 5: Deterministic Evidence Interpretation (5B) & Grounded Gemini Explanation Layer (5C).**
-> *Phase 5B Status: 🟢 IMPLEMENTED & VERIFIED (`b71cfc3` — 960/960 repository tests passing)*<br>
-> *Phase 5C Status: 🟢 APPROVED DESIGN / PENDING IMPLEMENTATION (`DEC-024`)*<br>
-> *Base Implementation Checkpoint: `b71cfc3 — feat(assessment): implement phase 5b deterministic evidence interpretation`*<br>
-> *Scope: Architecture, Contracts, Guardrails & Fallback Design Only (No Application Code, No Live Gemini API Integration)*
+> **Canonical Architecture Design & Implementation for Phase 5: Deterministic Evidence Interpretation (5B) & Grounded Gemini Explanation Layer (5C).**
+> *Phase 5B Status: 🟢 COMPLETE, VERIFIED & FROZEN (`b71cfc3` — 960/960 repository tests passing)*<br>
+> *Phase 5C Status: 🟢 COMPLETE, VERIFIED & SEALED (`DEC-024`, `DEC-025` / `b05fc54` — 1,028 repository tests passing)*<br>
+> *Base Implementation Checkpoint: `b05fc54 — feat(assessment): integrate phase 5c assessment explanation pipeline`*<br>
+> *Scope: Implemented Deterministic Interpretation (5B), Gemini Context Boundary (5C Step 1), Controlled Prompt Builder (5C Step 2), Isolated Explanation Service (5C Step 3), and Unified Assessment + Explanation Pipeline (5C Step 4). No Live Gemini API Calls in Pytest Suite; Agent / MCP Integration Deferred to Phase 6.*
 
 ---
 
@@ -42,9 +42,12 @@ AgriculturalEnvironmentalEvidence (Phase 4)
        (Structured, Objective Context)
                       │
                       ▼
-          Phase 5B/6 (Future Milestone)
-       Gemini 2.5 Flash Conversational Layer
-   (Natural-Language Explanation & Rural Advice)
+          Phase 5C: Gemini Explanation Layer
+        Gemini 2.5 Flash / Deterministic Fallback
+     (Natural-Language Explanation & Constrained Advisory)
+                      │
+                      ▼
+   AgriculturalAssessmentExplanationResponse
 ```
 
 > [!IMPORTANT]
@@ -538,10 +541,10 @@ The Phase 5 test suite will be 100% offline, deterministic, and comprehensive:
 
 # PART II: PHASE 5C — GEMINI EXPLANATION LAYER DESIGN (`DEC-024`)
 
-> **Canonical Architecture Design for Phase 5C: Grounded Gemini Explanation, Constrained Advisory & Deterministic Fallback.**
-> *Status: 🟢 APPROVED DESIGN / PENDING IMPLEMENTATION (`DEC-024`)*<br>
-> *Base Implementation Checkpoint: `b71cfc3 — feat(assessment): implement phase 5b deterministic evidence interpretation`*<br>
-> *Scope: Architecture, Contracts, Guardrails & Fallback Design Only (No Application Code, No Live Gemini API Integration)*
+> **Canonical Architecture Design & Verification for Phase 5C: Grounded Gemini Explanation, Constrained Advisory & Deterministic Fallback.**
+> *Status: 🟢 COMPLETE, VERIFIED & SEALED (`DEC-024`, `DEC-025` / `b05fc54`)*<br>
+> *Base Implementation Checkpoint: `b05fc54 — feat(assessment): integrate phase 5c assessment explanation pipeline`*<br>
+> *Scope: Implemented Context Boundary, Controlled Prompt, Isolated Service, Deterministic Fallback, and Unified Pipeline (No Live Gemini API Calls in Unit Tests; Agent / MCP Integration Scheduled for Phase 6)*
 
 ---
 
@@ -951,11 +954,15 @@ Phase 5C does not replace or mutate Phase 5B. The downstream API envelope contai
 ```python
 class AgriculturalAssessmentExplanationResponse(BaseModel):
     """Complete API response envelope containing both deterministic truth and conversational explanation."""
-    assessment: AgriculturalAssessment            # Untouched Phase 5B deterministic ground truth
-    explanation: FarmerAgriculturalResponse      # Phase 5C Gemini or Fallback explanation
-    context_used: GeminiAssessmentContext        # Exact context passed into the explanation layer
-    execution_time_ms: float
-    model_version: str
+    assessment: AgriculturalAssessment = Field(
+        description="Untouched Phase 5B deterministic ground truth assessment"
+    )
+    explanation: FarmerAgriculturalResponse = Field(
+        description="Phase 5C Gemini or deterministic fallback explanation"
+    )
+    context_used: GeminiAssessmentContext = Field(
+        description="Exact structured context passed into the explanation layer"
+    )
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 ```
@@ -1055,16 +1062,17 @@ Deterministic fallback behavior is explicitly defined for all 8 Phase 5B `Overal
 
 ---
 
-## 29. Testing & Evaluation Strategy (Future Phase 5C Implementation)
+## 29. Testing & Verification Summary (Implemented Phase 5C)
 
 ### 29.1 Automated Offline Unit Test Suite
-1. **Context Serializer Tests:** Verify that `GeminiAssessmentContext` strips PII, forbids extra fields, and handles `stale`/`unknown` states cleanly.
-2. **Schema Validation Tests:** Validate valid and malformed JSON payloads against `FarmerAgriculturalResponse`.
-3. **Safety Regex Scanner Tests:** Test that hundreds of chemical names, dosage formats, and disease terms trigger Stage 2 rejections.
-4. **Deterministic Fallback Suite:** Verify that fallback generation for all 8 Phase 5B overall environmental conditions produces valid Pydantic responses in both English and Hindi.
-5. **Prompt Injection Tests:** Inject adversarial strings into `farmer_context` fields and verify that mocked LLM prompt templates isolate them inside passive XML tags.
+1. **Context Serializer Tests (`test_assessment_gemini_types.py`):** Verified that `GeminiAssessmentContext` strips PII, forbids extra fields, and handles `verified`/`stale`/`unknown` states cleanly.
+2. **Controlled Prompt Builder Tests (`test_assessment_gemini_prompt.py`):** Verified structural XML tag isolation, prompt injection defense, epistemic invariant preservation, and language parameter routing (27 context/prompt tests total).
+3. **Isolated Gemini Service & Fallback Tests (`test_assessment_gemini_service.py`):** Tested fake client invocation, Pydantic schema validation, Stage 2 banned chemical/dosage regex scanner, and deterministic fallback generation across all 8 Phase 5B overall environmental conditions in English and Hindi (27 service tests).
+4. **Unified Pipeline Integration Tests (`test_assessment_pipeline.py`):** Tested `evaluate_and_explain_agricultural_assessment()` and `fetch_agricultural_assessment_explanation()`, error assessment bypass, deterministic fallback with status preservation, and end-to-end payload composition (14 integration tests).
+5. **Phase 5B Regression Suite:** 41 deterministic assessment tests verified unchanged.
+6. **Full Repository Unit Suite:** 1,028 tests passed, 0 failures, 0 regressions. Zero live Gemini API calls executed during automated testing.
 
-### 29.2 LLM Evaluation Metrics (Eval Dataset)
+### 29.2 LLM Evaluation Metrics (Eval Dataset Targets for Phase 8)
 - **Factual Faithfulness (Target: 100%):** Zero hallucinated numbers; all cited metrics match `SupportingEvidenceItem`.
 - **Recommendation Safety (Target: 100%):** Zero chemical dosages, zero pesticide prescriptions, zero yield predictions.
 - **Uncertainty & Conflict Preservation (Target: 100%):** Divergences and data gaps are never omitted or resolved by guessing.
@@ -1141,4 +1149,4 @@ The following capabilities are **strictly out-of-scope** for Phase 5C:
 ---
 
 > [!NOTE]
-> *Phase 5C design is APPROVED (`DEC-024`). No application code has been implemented, no tests have been modified, and all Phase 1–5B code remains frozen.*
+> *Phase 5C implementation is COMPLETE and SEALED (`DEC-024`, `DEC-025` / `b05fc54`). All Phase 1–5B code remains frozen. Orchestrator (`app/agent.py`) and MCP server integration are scheduled for Phase 6.*

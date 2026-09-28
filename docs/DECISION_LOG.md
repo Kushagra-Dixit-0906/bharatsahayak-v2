@@ -1940,4 +1940,48 @@ Phase 5B established a pure, deterministic evidence interpretation engine produc
 - Mechanical regex scanning and deterministic fallback provide defense-in-depth against model drift or transient cloud outages.
 
 #### 📊 Implementation Roadmap
-- `DEC-024` approved. Ready for Phase 5C implementation pass.
+- `DEC-024` approved. Implementation completed and sealed in `DEC-025`.
+
+---
+
+### DEC-025: Unified Agricultural Assessment & Gemini Explanation Pipeline Architecture (Phase 5C Implementation & Sealing)
+
+- **Date:** 2026-09-28
+- **Status:** 🟢 **IMPLEMENTED & SEALED**
+- **Deciders:** Core Engineering Team, Agricultural Analytics Working Group, Safety & Multi-Agent Architecture Team
+- **Consulted:** Rural Extension Advisors, Agronomic Data Working Group
+- **Informed:** Product Strategy, Multi-Agent Orchestration Team
+
+#### 🎯 Context & Problem Statement
+With the approval of the Phase 5C explanation layer architecture (`DEC-024`), the system required a sealed, end-to-end implementation executing across four distinct steps:
+1. Context Boundary: functional projection from authoritative deterministic `AgriculturalAssessment` into `GeminiAssessmentContext`.
+2. Controlled Prompt Builder: structural 5-tier XML isolation isolating user inputs from system instructions.
+3. Isolated Explanation Service: client-decoupled generation (`GeminiModelClient`), Pydantic schema validation, Stage 2 banned chemical/dosage regex scanning, and deterministic offline fallback.
+4. Unified Pipeline: top-level orchestration integrating Phase 5B and Phase 5C into `AgriculturalAssessmentExplanationResponse`.
+
+The architecture must enforce non-negotiable safety, epistemic conservatism, and failure semantics before subsequent MCP/agent integration in Phase 6.
+
+#### ⚖️ Decision Drivers & Invariants
+1. **Authoritative Interpretation Authority:** Phase 5B remains the sole authoritative deterministic interpretation layer. Gemini is strictly an explanation and multilingual localization layer. Gemini cannot override or alter Phase 5B determinations.
+2. **Structured Purpose-Built Boundary:** Gemini receives `GeminiAssessmentContext` containing structured `SupportingEvidenceItem` observations, not raw domain graphs or full user profiles.
+3. **Farmer Context Isolation:** Farmer context (`crop`, `crop_stage`, `irrigation_available`, `preferred_language`, `context_status`) is personalization context only, never environmental evidence. Zero PII is passed into Gemini context.
+4. **Structured Validated Output:** Gemini must produce strictly typed `FarmerAgriculturalResponse` payloads adhering to the authorized recommendation allowlist (`field_visual_inspection`, `soil_moisture_manual_check`, `ongoing_monitoring`, `missing_information_gathering`). Chemical prescriptions, fertilizer dosages, quantitative irrigation depths, and yield predictions are strictly prohibited.
+5. **Deterministic Fallback Guarantee:** Offline template fallback engine supports all 8 Phase 5B `OverallEnvironmentalCondition` values in English and Hindi. When fallback is triggered on a valid assessment (`success`, `partial`, `insufficient_evidence`), original assessment status is strictly preserved.
+6. **Error Assessment Bypass Semantics:** If `assessment.status == "error"`, Gemini is bypassed completely to produce a deterministic error response, and `assessment.status` remains `"error"`. Infrastructure errors are never transformed into agricultural conclusions.
+7. **Unified Domain Envelope:** `AgriculturalAssessmentExplanationResponse` returns `assessment` (untouched Phase 5B ground truth), `explanation` (`FarmerAgriculturalResponse`), and `context_used` (`GeminiAssessmentContext`). Core contract excludes execution metrics or model version metadata.
+8. **Offline Testability:** All test suites run 100% offline using `FakeGeminiClient` fixtures and deterministic fallback. Zero live Gemini API calls occur in automated unit tests.
+
+#### 🛠️ Implemented Architecture & Artifacts
+1. **`app/assessment/gemini_types.py` (`74c9f49`):** Input/output models, `VerifiedFarmerContext`, `GeminiAssessmentContext`, `FarmerAgriculturalResponse`, `AgriculturalAssessmentExplanationResponse`, and functional projection `assessment_to_gemini_context()`.
+2. **`app/assessment/gemini_prompt.py` (`dc1fd39`):** `build_gemini_prompt()` with 5-tier structural XML isolation (`<assessment_data>`, `<farmer_context>`), epistemic invariants, and prohibited output rules.
+3. **`app/assessment/gemini_service.py` (`39a7617`):** `GeminiModelClient` interface, `DefaultGeminiClient` (`gemini-2.5-flash`), `explain_agricultural_assessment()`, 3-stage validation (Pydantic schema, banned keyword regex scanning, invariant checks), and deterministic fallback generator `generate_deterministic_fallback_explanation()`.
+4. **`app/assessment/pipeline.py` (`b05fc54`):** `evaluate_and_explain_agricultural_assessment()`, `fetch_agricultural_assessment_explanation()`, and deterministic error handler `_generate_error_farmer_response()`.
+5. **`app/assessment/__init__.py` (`b05fc54`):** Public package exports.
+
+#### 📊 Verification & Test Summary
+- **Step 1 & 2 (Context & Prompt):** 27 unit tests (`test_assessment_gemini_types.py`, `test_assessment_gemini_prompt.py`).
+- **Step 3 (Explanation Service & Fallback):** 27 unit tests (`test_assessment_gemini_service.py`).
+- **Step 4 (Unified Pipeline):** 14 integration tests (`test_assessment_pipeline.py`).
+- **Phase 5B Regression:** 41 assessment tests verified unchanged.
+- **Repository Total:** 1,028 unit tests passing, 0 failures, 0 regressions.
+- **Scope Boundary:** Orchestrator (`app/agent.py`) and FastMCP (`app/mcp_server.py`) integration are scheduled for Phase 6.

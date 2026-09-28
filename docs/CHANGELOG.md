@@ -7,7 +7,32 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
-### 🟢 Complete & Verified — Phase 5: Deterministic Agricultural Evidence Interpretation (`DEC-023` — 40 Unit Tests)
+### 🟢 Complete & Sealed — Phase 5C: Grounded Gemini Explanation Layer & Unified Assessment Pipeline (`DEC-024`, `DEC-025` — 68 Unit/Integration Tests)
+- **Step 1 — Gemini Context Boundary ([`app/assessment/gemini_types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/assessment/gemini_types.py), `74c9f49`):**
+  - Implemented `GeminiAssessmentContext` root context model, `ContextPatternSummary`, `VerifiedFarmerContext`, and `PresentationPreferences`.
+  - Implemented pure projection function `assessment_to_gemini_context()` mapping authoritative Phase 5B `AgriculturalAssessment` into minimal, immutable context.
+  - Enforced strict PII exclusion and personal-context boundaries (`crop`, `crop_stage`, `irrigation_available`, `preferred_language`, `context_status`). Farmer context serves strictly as personalization, never as environmental evidence.
+- **Step 2 — Controlled Gemini Prompt Builder ([`app/assessment/gemini_prompt.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/assessment/gemini_prompt.py), `dc1fd39`):**
+  - Implemented `build_gemini_prompt()` utilizing a strict 5-tier structural hierarchy: System Role & Safety $\to$ Output Schema $\to$ `<assessment_data>` $\to$ `<farmer_context>` $\to$ Task Instructions.
+  - Enforced prompt-injection defense isolating user data in passive XML tags, epistemic invariants (no uncalibrated thresholds, no disease diagnosis, no drought declarations), and explicit prohibited output classes (chemicals, dosages, yield numbers).
+- **Step 3 — Isolated Gemini Explanation Service ([`app/assessment/gemini_service.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/assessment/gemini_service.py), `39a7617`):**
+  - Implemented `GeminiModelClient` abstraction and `DefaultGeminiClient` utilizing `gemini-2.5-flash` via project configuration.
+  - Implemented structured JSON generation with 3-stage validation: Stage 1 Pydantic schema validation (`FarmerAgriculturalResponse`), Stage 2 defense-in-depth banned-content regex scanner (blocking chemical units and active ingredients), and Stage 3 agronomic invariant checks.
+  - Implemented deterministic offline fallback engine (`generate_deterministic_fallback_explanation`) providing complete, compliant responses for all 8 Phase 5B overall environmental conditions in English and Hindi.
+- **Step 4 — Unified Assessment & Explanation Pipeline ([`app/assessment/pipeline.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/assessment/pipeline.py), `b05fc54`):**
+  - Implemented `AgriculturalAssessmentExplanationResponse` domain envelope containing `assessment`, `explanation`, and `context_used`.
+  - Implemented `evaluate_and_explain_agricultural_assessment()` and `fetch_agricultural_assessment_explanation()`.
+  - Implemented error assessment Gemini bypass: assessments with `status == "error"` bypass Gemini completely to produce a deterministic error response while preserving `assessment.status == "error"`.
+  - Implemented fallback status preservation: on valid assessments (`success`, `partial`, `insufficient_evidence`), original assessment status is preserved if Gemini fallback is triggered.
+- **Public Package Exports & Decoupling ([`app/assessment/__init__.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/assessment/__init__.py)):**
+  - Exported all Phase 5C contracts and functions (`AgriculturalAssessmentExplanationResponse`, `FarmerAgriculturalResponse`, `GeminiAssessmentContext`, `VerifiedFarmerContext`, `PresentationPreferences`, `assessment_to_gemini_context`, `evaluate_and_explain_agricultural_assessment`, `fetch_agricultural_assessment_explanation`).
+- **Testing & Verification:**
+  - Created 27 context and prompt unit tests in `tests/unit/test_assessment_gemini_types.py` and `tests/unit/test_assessment_gemini_prompt.py`.
+  - Created 27 explanation service and fallback unit tests in `tests/unit/test_assessment_gemini_service.py` (with fake client fixtures and regex scanning).
+  - Created 14 unified pipeline integration tests in `tests/unit/test_assessment_pipeline.py`.
+  - Verified 41 Phase 5B regression tests. Full repository unit suite: 1,028 passed, 0 failures, 0 regressions. 100% offline test execution with zero live Gemini API calls.
+
+### 🟢 Complete & Verified — Phase 5B: Deterministic Agricultural Evidence Interpretation (`DEC-023` — 41 Unit Tests)
 - **Domain Models & Assessment Contracts ([`app/assessment/types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/assessment/types.py)):**
   - Implemented `AgriculturalAssessment` root domain envelope (`pipeline_version="5.0.0"`) with direct composition of the authoritative Phase 4 `AgriculturalEnvironmentalEvidence` envelope.
   - Implemented `SupportingEvidenceItem` domain model capturing multi-source physical observation provenance (`source: vegetation | reanalysis | rainfall | land_cover`, `metric_name`, `observed_value`, `reference_context`).

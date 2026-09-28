@@ -1,7 +1,7 @@
 # BharatSahayak V2 — System Architecture & Design
 
 > **Current architectural baseline, operational mechanics, guardrails, and planned evolution.**
-> *Baseline Branch: `bharatsahayak-v2` | Commit: `e0fcc29`*
+> *Baseline Branch: `bharatsahayak-v2` | Commit: `b05fc54`*
 
 ---
 
@@ -302,11 +302,11 @@ graph TD
 
 ---
 
-## 🧠 Agricultural Evidence Interpretation & Reasoning Architecture (`🟢 PHASE 5B VERIFIED / 🟡 PHASE 5C APPROVED DESIGN`)
+## 🧠 Agricultural Evidence Interpretation & Reasoning Architecture (`🟢 PHASE 5 COMPLETE & SEALED / DEC-023, DEC-024, DEC-025`)
 
 Phase 5 establishes a two-layer architecture for transforming multi-source environmental evidence into safe, farmer-friendly explanations:
 1. **Phase 5B (Deterministic Interpretation — `🟢 IMPLEMENTED & VERIFIED / DEC-023`):** Pure-Python deterministic engine that evaluates stress patterns, resolves conflicts, and produces immutable `AgriculturalAssessment` payloads.
-2. **Phase 5C (Gemini Explanation Layer — `🟡 APPROVED DESIGN / PENDING IMPLEMENTATION / DEC-024`):** Bounded natural language layer that generates rural-friendly, multilingual explanations from structured deterministic assessments with constrained advisory and deterministic fallback.
+2. **Phase 5C (Gemini Explanation Layer & Unified Pipeline — `🟢 IMPLEMENTED & SEALED / DEC-024, DEC-025`):** Grounded natural language layer that projects deterministic assessments into structured context, prompts Gemini 2.5 Flash with strict epistemic invariants, validates structured output with defense-in-depth banned regex scanning, provides deterministic offline fallback across all 8 conditions in English and Hindi, and exposes unified pipeline endpoints.
 
 ```mermaid
 graph TD
@@ -325,28 +325,35 @@ graph TD
         BuildAssess --> OutAssess["AgriculturalAssessment\n(overall_condition, identified_patterns, limitations)"]
     end
 
-    subgraph Phase5CExplanation ["Phase 5C: Gemini Explanation Layer (🟡 APPROVED DESIGN / DEC-024)"]
+    subgraph Phase5CExplanation ["Phase 5C: Gemini Explanation Layer (🟢 IMPLEMENTED)"]
         OutAssess & FarmerCtx["VerifiedFarmerContext\n(crop, stage, irrigation, language)"] --> GAC["GeminiAssessmentContext\n(Option B: Minimal Auditable Boundary)"]
-        GAC --> GeminiCall["Gemini 2.5 Flash\n(System Rules + Structured Prompt)"]
+        GAC --> Prompt["Controlled Prompt Builder\n(5-Tier XML Hierarchy)"]
+        Prompt --> GeminiCall["Gemini 2.5 Flash\n(System Rules + Structured Prompt)"]
         GeminiCall --> Validation["3-Stage Safety Validation\n(Schema + Banned Keywords + Invariants)"]
         Validation -- Validated --> Resp["FarmerAgriculturalResponse\n(Multilingual Explanation + Constrained Steps)"]
         Validation -- Failed / Timeout --> Fallback["Deterministic Offline Fallback Engine"]
         Fallback --> Resp
     end
+
+    subgraph UnifiedResponse ["Unified API Pipeline (app/assessment/pipeline.py)"]
+        OutAssess & Resp & GAC --> UnifiedOut["AgriculturalAssessmentExplanationResponse\n(assessment, explanation, context_used)"]
+    end
 ```
 
 ### Key Architectural Tenets for Phase 5:
 1. **The Core Tripartite Separation:** *"Phase 4 assembles evidence. Phase 5B interprets evidence. Phase 5C explains the interpretation."* LLMs never analyze raw Earth Observation data or override deterministic assessments.
-2. **Deterministic Interpretation First (Phase 5B — Verified):** All diagnostic patterns (`water_stress_consistent_pattern`, `heat_stress_consistent_pattern`, `rainfall_deficit_consistent_pattern`, `excess_moisture_waterlogging_consistent_pattern`, `combined_environmental_stress_pattern`, `vegetation_stress_pattern`, `near_baseline_stable_condition`, `favorable_growth_condition`, `conflicting_environmental_signals`, `insufficient_evidence_condition`) and the 8-value `OverallEnvironmentalCondition` summary badge are derived purely in deterministic Python.
-3. **Option B Purpose-Built Boundary (Phase 5C — Approved Design):** Gemini consumes `GeminiAssessmentContext`, cleanly separating deterministic assessment data, whitelisted personalization context, and presentation preferences.
-4. **Personalization vs Evidence Axiom:** Farmer context (`crop`, `crop_stage`, `irrigation_available`) is personalization context, not environmental evidence. Gemini must not treat farmer input as physical evidence of crop condition.
+2. **Deterministic Interpretation First (Phase 5B — Complete & Verified):** All diagnostic patterns (`water_stress_consistent_pattern`, `heat_stress_consistent_pattern`, `rainfall_deficit_consistent_pattern`, `excess_moisture_waterlogging_consistent_pattern`, `combined_environmental_stress_pattern`, `vegetation_stress_pattern`, `near_baseline_stable_condition`, `favorable_growth_condition`, `conflicting_environmental_signals`, `insufficient_evidence_condition`) and the 8-value `OverallEnvironmentalCondition` summary badge are derived purely in deterministic Python.
+3. **Option B Purpose-Built Context Boundary (Phase 5C — Complete & Sealed):** Gemini consumes `GeminiAssessmentContext`, cleanly separating deterministic assessment data, whitelisted personalization context, and presentation preferences.
+4. **Personalization vs Evidence Axiom:** Farmer context (`crop`, `crop_stage`, `irrigation_available`, `preferred_language`, `context_status`) is personalization context, not environmental evidence. Gemini must not treat farmer input as physical evidence of crop condition. Zero PII is passed into the Gemini context.
 5. **Context Freshness Lifecycle:** Context is explicitly tagged as `verified`, `stale`, or `unknown`. Stale context requires conditional framing and cannot trigger stage-specific actions.
-6. **Epistemic Invariance & Multilingual Localization:** Assessments are language-independent. Translation into Hindi and regional languages preserves exact uncertainty and conflict reporting without inflating claims.
-7. **Constrained Recommendation Allowlist:** MVP recommendations are strictly restricted to low-risk field visual inspection, manual topsoil moisture probing, ongoing monitoring, and information gathering. Prohibits chemical pesticide/fungicide advice, exact fertilizer dosages, and yield forecasts. Empty recommendation lists (`[]`) are fully valid.
-8. **Three-Stage Mechanical Safety Pipeline:** LLM responses are validated via Pydantic schemas, banned-keyword regex scanners (blocking chemical units and names), and agronomic boundary checks.
-9. **Deterministic Fallback Guarantee:** Deterministic offline template fallback engine generates valid explanations across all 8 Phase 5B overall environmental conditions if Gemini fails or times out.
-10. **Prompt-Injection Defense:** Strict 5-tier structural prompt hierarchy treats all user strings inside passive XML data tags as data literals.
-11. **Decoupled Camera Workflow:** Visual crop-photo disease diagnosis remains a decoupled, optional tool path, completely independent of the spatial environmental assessment pipeline.
+6. **Epistemic Invariance & Multilingual Localization:** Environmental reasoning is language-independent. Translation into Hindi and regional languages preserves exact uncertainty, conflict reporting, and data gaps without inflating claims. Deterministic fallback currently supports English and Hindi templates.
+7. **Constrained Recommendation Allowlist:** Recommendations are strictly restricted to low-risk field visual inspection, manual topsoil moisture probing, ongoing monitoring, and information gathering. Prohibits chemical pesticide/fungicide advice, exact fertilizer dosages, quantitative irrigation depths, and yield forecasts. Empty recommendation lists (`[]`) are fully valid.
+8. **Three-Stage Mechanical Safety Pipeline:** LLM responses are validated via Pydantic schemas, defense-in-depth banned-keyword regex scanners (blocking chemical units, names, and absolute claims), and agronomic boundary checks.
+9. **Deterministic Fallback & Status Preservation:** Deterministic offline template fallback engine generates valid explanations across all 8 Phase 5B overall environmental conditions if Gemini fails or times out. Original assessment status is preserved on fallback.
+10. **Error Assessment Bypass Semantics:** If `assessment.status == "error"`, Gemini is bypassed entirely to produce a deterministic error response, preserving `assessment.status == "error"` without converting infrastructure errors into agricultural conclusions.
+11. **Prompt-Injection Defense:** Strict 5-tier structural prompt hierarchy treats all user strings inside passive XML data tags (`<assessment_data>`, `<farmer_context>`) as passive literals.
+12. **Decoupled Camera Workflow:** Visual crop-photo disease diagnosis remains a decoupled, optional tool path, completely independent of the spatial environmental assessment pipeline.
+13. **Orchestrator & MCP Integration Boundary:** The central orchestrator (`app/agent.py`) and FastMCP server (`app/mcp_server.py`) are **NOT yet integrated** with the Phase 5C pipeline. Connecting the unified pipeline to live agent tools is scheduled for Phase 6.
 
 
 

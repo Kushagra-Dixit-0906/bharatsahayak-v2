@@ -1,8 +1,8 @@
 # BharatSahayak V2 — Master Project Roadmap
 
 > **Master roadmap and progressive implementation plan for BharatSahayak V2.**
-> *Last Updated: Phase 3A ERA5-Land Environmental Context Design Sealed*
-> *Baseline Branch: `bharatsahayak-v2` | Commit: `e0fcc29` | GCP Project ID: `bharatsahayak-v2`*
+> *Last Updated: Phase 5C Gemini Explanation Pipeline Complete & Sealed*
+> *Baseline Branch: `bharatsahayak-v2` | Commit: `b05fc54` | GCP Project ID: `bharatsahayak-v2`*
 
 ---
 
@@ -24,7 +24,7 @@ graph TD
     P1 --> P2["Phase 2: Historical Satellite Intelligence 🟢"]
     P2 --> P3["Phase 3: Additional Agri & Environmental Data 🟢"]
     P3 --> P4["Phase 4: Multi-Source Data Fusion 🟢"]
-    P4 --> P5["Phase 5: Gemini Agricultural Reasoning 🟡"]
+    P4 --> P5["Phase 5: Agricultural Evidence Interpretation & Gemini Reasoning 🟢"]
     P5 --> P6["Phase 6: MCP & Agent Integration 🟡"]
     P6 --> P7["Phase 7: End-to-End Farmer Workflow 🟡"]
     P7 --> P8["Phase 8: Testing, Reliability & Security 🟡"]
@@ -168,7 +168,7 @@ graph TD
 ---
 
 ### Phase 5: Agricultural Evidence Interpretation & Gemini Reasoning
-- **Status:** 🟢 **5A/5B IMPLEMENTED & VERIFIED (`b71cfc3`) / 🟡 5C APPROVED DESIGN (`DEC-024`)**
+- **Status:** 🟢 **COMPLETE & SEALED (Subphases 5A, 5B & 5C Complete & Verified — `DEC-023`, `DEC-024`, `DEC-025` / `b05fc54`)**
 - **Purpose:** Translate multi-source physical evidence (`AgriculturalEnvironmentalEvidence`) into structured, deterministic agricultural interpretations (`AgriculturalAssessment`), which Gemini 2.5 Flash explains to the farmer in empathetic, multilingual rural language with constrained, safe next steps.
 - **Sub-Roadmap:**
   - **5A — Deterministic Agricultural Evidence Interpretation Design (🟢 COMPLETE & APPROVED / `DEC-023`):**
@@ -186,16 +186,14 @@ graph TD
     - Pure offline Tier 1 reasoning engine (0 EE calls, 0 network I/O, 0 LLM calls).
     - Deterministic offline test suite across 27 canonical scenarios in `tests/unit/test_assessment_reasoning.py`, `tests/unit/test_assessment_pipeline.py`, `tests/unit/test_assessment_types.py`.
     - Verification: 41 Phase 5 unit tests passed, 960 full repository unit tests passed (0 regressions).
-  - **5C — Gemini Explanation Layer & Constrained Advisory Architecture (🟡 APPROVED DESIGN / `DEC-024`):**
-    - Purpose-built input boundary `GeminiAssessmentContext` (Option B) isolating assessment data, whitelisted `VerifiedFarmerContext`, and presentation requests.
-    - Context freshness lifecycle (`verified`, `stale`, `unknown`) preventing stale profiles from becoming ungrounded current facts.
-    - Multilingual semantic invariance preserving uncertainty, conflict reporting, and data gaps across English, Hindi, and regional languages.
-    - Structured output contract `FarmerAgriculturalResponse` with mechanical 3-stage safety validation (Pydantic schema, banned-keyword regex scanner, agronomic boundary checks).
-    - Constrained advisory allowlist: field inspection, manual soil probing, ongoing monitoring, information gathering (prohibiting chemical/pesticide advice, fertilizer dosages, exact irrigation amounts, yield forecasts). `recommended_next_steps = []` is valid.
-    - Deterministic offline fallback engine providing complete responses for all 8 Phase 5B overall environmental conditions (`stable`, `vegetation_stress`, `moisture_stress_consistent`, `heat_stress_consistent`, `combined_stress_consistent`, `favorable`, `mixed`, `insufficient_evidence`).
-    - Structural prompt-injection defense isolating user data in passive XML tags.
+  - **5C — Gemini Explanation Layer & Unified Assessment Pipeline (🟢 COMPLETE & SEALED — `DEC-024`, `DEC-025` / `b05fc54`):**
+    - **Step 1 — Gemini Context Boundary (`74c9f49`):** Implemented `GeminiAssessmentContext`, `ContextPatternSummary`, `VerifiedFarmerContext`, `PresentationPreferences`, and functional projection `assessment_to_gemini_context()`. Whitelisted personalization context (`crop`, `crop_stage`, `irrigation_available`, `preferred_language`, `context_status`), zero PII leakage, and immutable contracts.
+    - **Step 2 — Controlled Gemini Prompt Builder (`dc1fd39`):** Implemented `build_gemini_prompt()` with strict 5-tier structural hierarchy, passive XML data blocks (`<assessment_data>`, `<farmer_context>`), prompt injection defense, epistemic constraints, and explicit prohibited output classes.
+    - **Step 3 — Isolated Gemini Explanation Service (`39a7617`):** Implemented `GeminiModelClient` interface, `DefaultGeminiClient` (`gemini-2.5-flash`), structured JSON response parsing, Pydantic schema validation, Stage 2 banned chemical/dosage regex scanner, Stage 3 agronomic invariant checks, and deterministic offline fallback engine (`generate_deterministic_fallback_explanation`) supporting all 8 conditions in English and Hindi.
+    - **Step 4 — Unified Assessment & Explanation Pipeline (`b05fc54`):** Implemented `AgriculturalAssessmentExplanationResponse` (containing `assessment`, `explanation`, `context_used`), `evaluate_and_explain_agricultural_assessment()`, and `fetch_agricultural_assessment_explanation()`. Configured automatic Gemini bypass on `status == "error"` generating deterministic error responses, fallback status preservation on valid assessments, farmer-context propagation, and public exports in `app/assessment/__init__.py`.
+    - **Verification:** 27 context/prompt unit tests, 27 service unit tests, 14 unified pipeline integration tests, 41 Phase 5B regression tests; 1,028 full repository unit tests passed (0 failures). Zero live Gemini API calls in automated test suite.
 - **Dependencies:** Phase 4 (`a046422`), Phase 5B (`b71cfc3`).
-- **Next Phase:** Phase 5C Implementation Pass / Phase 6 (MCP Server & Agent Integration).
+- **Next Phase:** Phase 6 (MCP Server & Agent Integration).
 - **Future Upgrades (`🔴 IDEA`):** Multimodal convergence between Phase 5 environmental moisture context and leaf photograph disease symptoms.
 
 ---
