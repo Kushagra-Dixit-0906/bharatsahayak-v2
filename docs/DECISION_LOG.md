@@ -1835,6 +1835,54 @@ With the completion of Phases 1, 2, 3A, 3B, and 3C, the system possesses five in
   - `tests/integration/test_fusion_integration.py` (Live Earth Engine integration test passed)
 - **Full Repository Suite:** 919 unit tests passed (0 regressions).
 
+---
+
+### DEC-023: Deterministic Agricultural Evidence Interpretation Architecture (Phase 5)
+
+- **Date:** 2026-09-28
+- **Status:** 🟢 **APPROVED / PENDING IMPLEMENTATION**
+- **Deciders:** Core Engineering Team, Agricultural Analytics Working Group
+- **Consulted:** Agronomic Advisors, Multi-Agent Orchestration Team
+- **Informed:** Product Strategy
+
+#### 🎯 Context & Problem Statement
+Phase 4 successfully unified multi-source satellite and environmental data into an immutable, traceable domain envelope (`AgriculturalEnvironmentalEvidence`). However, raw observational measurements (NDVI values, temperature ranges, rainfall millimeters, volumetric soil water fractions) cannot be directly injected into unstructured LLM prompts without risking hallucinated agronomic diagnoses, ungrounded yield loss claims, or inappropriate fertilizer prescriptions. Phase 5 must introduce a deterministic evidence interpretation layer that translates physical observations into a structured, scientifically conservative `AgriculturalAssessment`.
+
+#### ⚖️ Decision Drivers
+1. **Foundational Axiom:** *"Phase 4 assembles evidence. Phase 5 interprets evidence. Gemini later explains the interpretation to the farmer."*
+2. **Observation vs Interpretation Separation:** Strict boundary between raw/aggregated physical measurements and derived agricultural interpretations, with 100% provenance back to source data.
+3. **Deterministic-First Reasoning:** Interpretations are computed via deterministic, rule-based logic in pure Python without calling Earth Engine or LLM APIs during core assessment.
+4. **Epistemic Conservatism & Zero Uncalibrated Thresholds:** Prohibit definitive crop disease diagnoses, official drought declarations, precise yield forecasts, uncalibrated chemical input prescriptions, or arbitrary universal numerical thresholds. Use evidence-grounded phrasing ("consistent with moisture stress", "supported by available evidence", "insufficient evidence").
+5. **Multiple Corroborating Evidence Convergence:** Treat multiple data streams as corroborating physical evidence rather than assuming unproven statistical independence.
+6. **Observable Divergence Over Causal Speculation:** When signals diverge (e.g. low rainfall with normal NDVI), describe observable divergence without asserting unverified causal mechanisms (such as tube-well irrigation, canal access, pest outbreaks, or nutrient deficiencies).
+7. **Pattern-Specific Sufficiency:** Evaluate data completeness per-pattern rather than applying an arbitrary global threshold (e.g. `is_sufficient = True` if $\ge 3$ sources). If required evidence for a specific pattern is missing, do not detect the pattern and report insufficient evidence for that pattern.
+8. **Decoupled Workflows:** The visual crop-photo/disease-diagnosis workflow remains an optional, decoupled path triggered only upon farmer photo upload, completely independent of the spatial environmental assessment pipeline.
+
+#### 🛠️ Architectural Decision & Invariants
+1. **Domain Contracts (`app/assessment/types.py` - Proposed):**
+   - `AgriculturalAssessment`: Composes `AgriculturalEnvironmentalEvidence` directly, adding `overall_condition: OverallEnvironmentalCondition`, `identified_patterns: list[EnvironmentalStressPattern]`, `sufficiency: AssessmentSufficiency`, `conflicting_signals: list[str]`, `limitations: list[str]`, `pipeline_version="5.0.0"`, and `error`.
+   - `OverallEnvironmentalCondition`: Standardized 8-value summary literal (`stable`, `vegetation_stress`, `moisture_stress_consistent`, `heat_stress_consistent`, `combined_stress_consistent`, `favorable`, `mixed`, `insufficient_evidence`) derived from identified patterns as a high-level UI/agent badge without replacing the authoritative `identified_patterns` list.
+   - `EnvironmentalStressPattern`: Encapsulates pattern type, evidence support level (`high_support`, `moderate_support`, `limited_support`, `conflicted_support`), optional `severity: str | None = None` (marked as future work requiring agronomic calibration), descriptive interpretation, and traceable `supporting_evidence: list[SupportingEvidenceItem]`.
+   - `AssessmentSufficiency`: Documents `is_sufficient` as *"True when the available core evidence is sufficient to produce the overall assessment without requiring unavailable critical evidence."*
+   - Models are frozen and immutable (`frozen=True`, `extra="forbid"`).
+2. **Pattern Taxonomy:**
+   - Evaluates: `water_stress_consistent_pattern`, `rainfall_deficit_consistent_pattern`, `heat_stress_consistent_pattern`, `excess_moisture_waterlogging_consistent_pattern`, `combined_environmental_stress_pattern`, `vegetation_stress_pattern`, `near_baseline_stable_condition`, `favorable_growth_condition`, `conflicting_environmental_signals`, `insufficient_evidence_condition`.
+3. **Two-Tier Engine Structure:**
+   - **Tier 1 (`app/assessment/reasoning.py`):** Pure Python reasoning function `interpret_agricultural_evidence(...)` executing offline with zero Earth Engine imports, zero network I/O, and zero LLM calls.
+   - **Tier 2 (`app/assessment/pipeline.py`):** Root orchestrator `fetch_agricultural_assessment(...)` coordinating Phase 4 evidence retrieval and Tier 1 interpretation with isolated exception handling.
+4. **LLM Boundary:**
+   - Phase 5 produces structured assessment data. Gemini 2.5 Flash is constrained to explain and communicate structured evidence and assessments rather than independently inventing environmental observations.
+
+#### 💡 Rationale
+- Pure deterministic reasoning bounds LLM behavior, enables instantaneous offline testing across dozens of synthetic stress scenarios, and provides full auditability required for farmer-facing safety.
+- Explicit conflict handling prevents erroneous drought alarms in irrigated zones and flags observable divergences when vegetation declines despite adequate rain.
+
+#### 📊 Implementation Roadmap
+- `DEC-023` approved. Ready for Phase 5B implementation pass.
+
+
+
+
 
 
 

@@ -300,6 +300,46 @@ graph TD
    - `error`: Zero usable evidence with at least one `error` status, or top-level pipeline failure.
 5. **Preservation of Native Resolution & Latency Semantics:** Native resolutions (10m Sentinel-2, 10m Dynamic World, 5.566km CHIRPS, 11.1km ERA5-Land), observation dates, and dataset-specific publication lags are strictly preserved without synthetic spatial downscaling or timestamp fabrication.
 
+---
+
+## 🧠 Agricultural Evidence Interpretation & Reasoning Architecture (`🟡 PHASE 5 PROPOSED / DEC-023`)
+
+Phase 5 introduces a deterministic agricultural evidence interpretation layer that translates physical multi-source observations (`AgriculturalEnvironmentalEvidence`) into an auditable, conservative, and structured `AgriculturalAssessment`:
+
+```mermaid
+graph TD
+    subgraph EvidenceIn ["Phase 4: Physical Evidence Ingestion"]
+        Ev["AgriculturalEnvironmentalEvidence\n(NDVI + ERA5 + CHIRPS + Dynamic World)"]
+    end
+
+    subgraph Tier1Reasoning ["Phase 5 Tier 1: Pure Assessment Engine (app/assessment/reasoning.py - 0 EE, 0 LLM)"]
+        Ev --> Patterns["Pattern Activation Rules\n(water_stress, heat_stress, rainfall_deficit, waterlogging)"]
+        Ev --> Conflict["Conflict Resolution Engine\n(e.g. Low Rain + Normal NDVI -> Irrigation Buffer)"]
+        Ev --> Suff["Sufficiency & Latency Evaluator\n(Structural Completeness, Max Lag)"]
+        Patterns & Conflict & Suff --> BuildAssess["Build AgriculturalAssessment\n(Immutable, extra='forbid')"]
+    end
+
+    subgraph AssessmentPayload ["Structured Assessment Output (app/assessment/types.py)"]
+        BuildAssess --> OutAssess["AgriculturalAssessment\n(overall_condition, identified_patterns, limitations)"]
+    end
+
+    subgraph GeminiCommunicator ["Phase 5B/6: Conversational Interface"]
+        OutAssess --> Gemini["Gemini 2.5 Flash\n(Multilingual Explanation & Farmer Guidance)"]
+    end
+```
+
+### Key Architectural Tenets for Phase 5:
+1. **Deterministic-First Interpretation Axiom:** *"Phase 4 assembles evidence. Phase 5 interprets evidence. Gemini later explains the interpretation to the farmer."* Core diagnostic reasoning is rule-based and deterministic (0 LLM calls in core assessment).
+2. **Observation vs Interpretation Separation:** Strict boundary between raw/aggregated physical measurements (Phase 4) and derived agricultural interpretations (Phase 5), with 100% provenance back to source data.
+3. **Multiple Corroborating Evidence Convergence:** Treat multi-sensor observations as corroborating physical evidence rather than assuming unproven statistical independence.
+4. **Observable Divergence Over Causal Speculation:** Divergent signals (e.g. low rainfall with normal NDVI) are described as observable divergences rather than asserting unverified causal mechanisms (e.g. tube-well irrigation or pest outbreaks).
+5. **Pattern-Specific Sufficiency:** Sufficiency is evaluated per-pattern based on required physical streams, avoiding arbitrary global source-count thresholds.
+6. **Epistemic Conservatism:** Zero uncalibrated universal thresholds. Categorical evidence support (`high_support`, `moderate_support`, `limited_support`, `conflicted_support`) replaces synthetic pseudo-confidence scores. No uncalibrated crop disease diagnoses, official drought declarations, or precise yield forecasts.
+7. **Constrained LLM Communicator:** Gemini is constrained to explain and communicate structured assessment facts rather than independently inventing environmental observations.
+8. **Decoupled Camera Workflow:** The optional visual crop-photo/disease-diagnosis workflow remains completely independent of the spatial environmental assessment pipeline.
+
+
+
 
 
 

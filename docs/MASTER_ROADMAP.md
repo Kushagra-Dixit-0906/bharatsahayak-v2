@@ -167,15 +167,30 @@ graph TD
 
 ---
 
-### Phase 5: Gemini Agricultural Reasoning Engine
-- **Status:** 🟡 **PLANNED**
-- **Purpose:** Enhance Gemini 2.5 Flash prompt engineering and domain reasoning to synthesize fused satellite data into clear, empathetic, and actionable farming advice.
-- **Major Work:**
-  - Refactor system instructions for specialized advisors (`farming_advisor`, `weather_advisor`, `crop_disease_advisor`, `gov_schemes_advisor`) to consume fused satellite/weather context.
-  - Instruct model on interpreting NDVI ranges in simple, jargon-free farmer language (English and Hindi).
-  - Enforce actionable next steps: irrigation adjustments, targeted fertilizer dosing, and pest scouting.
-- **Dependencies:** Phase 4.
-- **Future Upgrades (`🔴 IDEA`):** Regenerative agriculture advisory modules, organic alternative recommendations, and climate-resilience scoring.
+### Phase 5: Agricultural Evidence Interpretation & Gemini Reasoning
+- **Status:** 🟡 **APPROVED DESIGN / PENDING IMPLEMENTATION (`DEC-023`)**
+- **Purpose:** Translate multi-source physical evidence (`AgriculturalEnvironmentalEvidence`) into structured, deterministic agricultural interpretations (`AgriculturalAssessment`), which Gemini 2.5 Flash explains to the farmer in empathetic, multilingual rural language.
+- **Sub-Roadmap:**
+  - **5A — Deterministic Agricultural Evidence Interpretation Design (🟢 APPROVED / `DEC-023`):**
+    - Architectural boundary: Evidence Assembly (Phase 4) $\to$ Deterministic Interpretation (Phase 5) $\to$ Natural-Language Explanation (Gemini).
+    - Delineation of observed evidence vs derived interpretations with 100% provenance traceability.
+    - Multi-source stress pattern taxonomy (`water_stress_consistent_pattern`, `rainfall_deficit_consistent_pattern`, `heat_stress_consistent_pattern`, `excess_moisture_waterlogging_consistent_pattern`, `combined_environmental_stress_pattern`, `near_baseline_stable_condition`, `favorable_growth_condition`, `conflicting_environmental_signals`, `insufficient_evidence_condition`).
+    - Standardized 8-value high-level summary literal: `OverallEnvironmentalCondition` (`stable`, `vegetation_stress`, `moisture_stress_consistent`, `heat_stress_consistent`, `combined_stress_consistent`, `favorable`, `mixed`, `insufficient_evidence`).
+    - Explicit conflict detection matrix (describing observable divergences without speculative causal attribution).
+    - Pattern-specific evidence sufficiency and categorical evidence support levels (`high_support`, `moderate_support`, `limited_support`, `conflicted_support`) without synthetic pseudo-confidence scores.
+    - Proposed domain contracts: `AgriculturalAssessment`, `EnvironmentalStressPattern`, `SupportingEvidenceItem`.
+    - Strict non-agronomic boundaries: no crop disease diagnosis, no drought declarations, no exact yield predictions, no uncalibrated chemical prescriptions.
+    - Camera/crop-photo workflow explicitly preserved as a decoupled, optional separate path.
+  - **5B — Deterministic Assessment Engine Implementation & Offline Verification (🟡 PLANNED):**
+    - Implementation of `app/assessment/types.py`, `app/assessment/reasoning.py`, `app/assessment/pipeline.py`, and `app/assessment/__init__.py`.
+    - Pure offline Tier 1 reasoning engine (0 EE calls, 0 network I/O, 0 LLM calls).
+    - Deterministic offline test suite across 15+ stress and divergence scenarios.
+  - **5C — Gemini 2.5 Flash Grounding & Multilingual Explanation (🟡 PLANNED):**
+    - System instruction refactoring to consume `AgriculturalAssessment` JSON.
+    - Multilingual farmer-friendly explanation (English, Hindi, Punjabi) grounded strictly in verified assessment facts.
+- **Dependencies:** Phase 4 (`a046422`).
+- **Next Phase:** Phase 6 (MCP Server & Live Tool Integration).
+- **Future Upgrades (`🔴 IDEA`):** Multimodal convergence between Phase 5 environmental moisture context and leaf photograph disease symptoms.
 
 ---
 
