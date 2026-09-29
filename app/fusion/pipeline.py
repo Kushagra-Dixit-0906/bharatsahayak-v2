@@ -149,30 +149,30 @@ def fetch_agricultural_environmental_evidence(
             lookback_days=ndvi_lookback_days,
         )
 
-        if current_res.status == "success" and isinstance(current_res.data, RegionalNdviAnalysis):
-            ee_region = create_analysis_region(
-                latitude=float(latitude),
-                longitude=float(longitude),
-                radius_m=float(radius_m),
-            )
-            hist_obs = analyze_historical_years(
-                region=ee_region,
-                reference_date=current_res.data,
-                history_years=history_years,
-                window_half_days=window_half_days,
-            )
-            vegetation = build_historical_ndvi_analysis(
-                current=current_res.data,
-                historical_observations=hist_obs,
-                requested_years_count=history_years,
-            )
-        else:
-            # Phase 1 failed or no data: propagate directly without executing historical queries
-            vegetation = build_historical_ndvi_analysis(
-                current=current_res,
-                historical_observations=[],
-                requested_years_count=history_years,
-            )
+        ee_region = create_analysis_region(
+            latitude=float(latitude),
+            longitude=float(longitude),
+            radius_m=float(radius_m),
+        )
+
+        ref_for_historical = (
+            current_res.data
+            if (current_res.status == "success" and isinstance(current_res.data, RegionalNdviAnalysis))
+            else resolved_ref_date
+        )
+
+        hist_obs = analyze_historical_years(
+            region=ee_region,
+            reference_date=ref_for_historical,
+            history_years=history_years,
+            window_half_days=window_half_days,
+        )
+
+        vegetation = build_historical_ndvi_analysis(
+            current=current_res,
+            historical_observations=hist_obs,
+            requested_years_count=history_years,
+        )
     except Exception as exc:
         missing_years = [resolved_ref_date.year - i for i in range(1, history_years + 1)]
         vegetation = HistoricalNdviAnalysis(

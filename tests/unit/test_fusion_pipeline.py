@@ -132,17 +132,19 @@ class TestFusionPipelineExecution:
     @patch("app.fusion.pipeline.analyze_chirps_rainfall")
     @patch("app.fusion.pipeline.analyze_era5_land")
     @patch("app.fusion.pipeline.analyze_historical_years")
+    @patch("app.fusion.pipeline.create_analysis_region")
     @patch("app.fusion.pipeline.analyze_regional_ndvi")
-    def test_orchestration_phase1_no_data_skips_historical_queries(
+    def test_orchestration_phase1_no_data_runs_historical_queries(
         self,
         mock_ndvi,
+        mock_region,
         mock_hist_years,
         mock_era5,
         mock_chirps,
         mock_dw,
     ):
-        """Verifies that when Phase 1 returns no_data, Phase 2 historical queries are skipped."""
-        _, _, rean, rain, lc = build_evidence_from_fixture("complete_success.json")
+        """Verifies that when Phase 1 returns no_data, Phase 2 historical queries still execute with resolved reference date."""
+        _, veg, rean, rain, lc = build_evidence_from_fixture("complete_success.json")
 
         mock_ndvi.return_value = EarthEngineResult(
             status="no_data",
@@ -150,6 +152,8 @@ class TestFusionPipelineExecution:
             image_count=0,
             data=None,
         )
+        mock_region.return_value = MagicMock()
+        mock_hist_years.return_value = veg.historical_observations
         mock_era5.return_value = rean
         mock_chirps.return_value = rain
         mock_dw.return_value = lc
@@ -163,8 +167,17 @@ class TestFusionPipelineExecution:
         assert evidence.status == "partial"
         assert evidence.sources_available_count == 3
         assert evidence.vegetation.status == "no_data"
-        # Historical queries must NOT be called
-        mock_hist_years.assert_not_called()
+        assert evidence.vegetation.current is None
+        assert evidence.vegetation.baseline is not None
+        assert evidence.vegetation.baseline.annual_count == 3
+        assert evidence.vegetation.anomaly is None
+        # Historical queries MUST be called with resolved reference date
+        mock_hist_years.assert_called_once_with(
+            region=mock_region.return_value,
+            reference_date=date(2026, 9, 20),
+            history_years=3,
+            window_half_days=15,
+        )
 
     @patch("app.fusion.pipeline.analyze_dynamic_world_land_cover")
     @patch("app.fusion.pipeline.analyze_chirps_rainfall")

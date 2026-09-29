@@ -366,9 +366,9 @@ def calculate_historical_ndvi_statistics(
 
     Status semantics:
     - If current_error is provided or current has error status:
-        status='error', baseline=None, anomaly=None, error=current_error.
+        status='error', baseline=computed if sufficient else None, anomaly=None, error=current_error.
     - If current is None or has no_data / no statistics:
-        status='no_data', baseline=None, anomaly=None.
+        status='no_data', baseline=computed if sufficient else None, anomaly=None.
     - If current is success but represented historical years < minimum_required_years:
         status='insufficient_history', baseline=None, anomaly=None.
     - If current is success and represented historical years >= minimum_required_years:
@@ -396,32 +396,30 @@ def calculate_historical_ndvi_statistics(
         minimum_required_years=minimum_required_years,
     )
 
+    baseline: HistoricalNdviBaseline | None = None
+    if sufficiency.is_sufficient:
+        represented_years, annual_values = extract_valid_annual_observations(historical_observations)
+        baseline = calculate_historical_baseline(
+            annual_values=annual_values,
+            represented_years=represented_years,
+        )
+
     # 1. Error state handling
     if current_error is not None:
-        return None, sufficiency, None, "error", current_error
+        return baseline, sufficiency, None, "error", current_error
 
     if current is None:
-        return None, sufficiency, None, "no_data", None
+        return baseline, sufficiency, None, "no_data", None
 
     # Check if current has statistics
     if current.statistics is None:
-        return None, sufficiency, None, "no_data", None
+        return baseline, sufficiency, None, "no_data", None
 
     # 2. Historical sufficiency gate
-    if not sufficiency.is_sufficient:
+    if not sufficiency.is_sufficient or baseline is None:
         return None, sufficiency, None, "insufficient_history", None
 
-    # 3. Baseline calculation
-    represented_years, annual_values = extract_valid_annual_observations(historical_observations)
-    baseline = calculate_historical_baseline(
-        annual_values=annual_values,
-        represented_years=represented_years,
-    )
-
-    if baseline is None:
-        return None, sufficiency, None, "insufficient_history", None
-
-    # 4. Anomaly calculation
+    # 3. Anomaly calculation
     anomaly = calculate_ndvi_anomaly_evidence(
         current_mean=current.statistics.mean,
         baseline=baseline,

@@ -563,7 +563,7 @@ class TestCalculateHistoricalNdviStatistics:
         assert anomaly is None
 
     def test_no_data_when_current_is_none(self) -> None:
-        """Returns no_data status when current observation is None."""
+        """Returns no_data status with calculated baseline and anomaly=None when current is None."""
         hist = [
             _make_sample_annual_obs(2025, mean=0.55),
             _make_sample_annual_obs(2024, mean=0.60),
@@ -574,11 +574,32 @@ class TestCalculateHistoricalNdviStatistics:
             historical_observations=hist,
         )
         assert status == "no_data"
+        assert err is None
+        assert sufficiency.is_sufficient is True
+        assert baseline is not None
+        assert baseline.annual_count == 3
+        assert baseline.median == pytest.approx(0.55)
+        assert anomaly is None
+
+    def test_no_data_when_current_is_none_and_insufficient_history(self) -> None:
+        """Returns no_data status with baseline=None and anomaly=None when current is None and history is insufficient."""
+        hist = [
+            _make_sample_annual_obs(2025, mean=0.55),
+            _make_sample_annual_obs(2024, status="no_data"),
+            _make_sample_annual_obs(2023, status="no_data"),
+        ]
+        baseline, sufficiency, anomaly, status, err = calculate_historical_ndvi_statistics(
+            current=None,
+            historical_observations=hist,
+        )
+        assert status == "no_data"
+        assert err is None
+        assert sufficiency.is_sufficient is False
         assert baseline is None
         assert anomaly is None
 
     def test_error_when_current_error_is_provided(self) -> None:
-        """Returns error status and preserves EarthEngineError when error occurred."""
+        """Returns error status with calculated baseline, anomaly=None, and preserves EarthEngineError."""
         current_err = EarthEngineError(
             type="EE_COMPUTATION_TIMEOUT",
             message="Reduction computation timed out on Earth Engine backend.",
@@ -595,5 +616,6 @@ class TestCalculateHistoricalNdviStatistics:
         )
         assert status == "error"
         assert err == current_err
-        assert baseline is None
+        assert baseline is not None
+        assert baseline.annual_count == 3
         assert anomaly is None

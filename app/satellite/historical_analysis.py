@@ -24,7 +24,7 @@ Architectural Guarantees:
 - Pure deterministic Python with zero Earth Engine, network I/O, getInfo(), or asynchronous dependencies.
 - Complete evidence preservation: all requested historical target years (success, no_data, error) are retained.
 - Current-year exclusion: only historical_observations contribute to baseline derivations.
-- Absolute current failure precedence: errors/no_data in current observation take priority over historical availability.
+- Decoupled historical baseline: historical baseline derivation is computed independently of current observation availability.
 - Zero mutation of input arguments.
 """
 

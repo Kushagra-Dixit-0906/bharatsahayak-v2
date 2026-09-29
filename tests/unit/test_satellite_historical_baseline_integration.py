@@ -288,7 +288,7 @@ class TestSatelliteHistoricalBaselineIntegration:
         assert result.historical_observations[1].error == err
 
     def test_current_no_data_propagates_no_data_status(self) -> None:
-        """TC-7: Current is None/no_data -> status='no_data', baseline=None, anomaly=None, history preserved."""
+        """TC-7: Current is None/no_data -> status='no_data', baseline computed if sufficient, anomaly=None."""
         history = [
             _make_sample_annual_obs(2025, mean=0.58),
             _make_sample_annual_obs(2024, mean=0.55),
@@ -299,14 +299,16 @@ class TestSatelliteHistoricalBaselineIntegration:
 
         assert result.status == "no_data"
         assert result.current is None
-        assert result.baseline is None
+        assert result.baseline is not None
+        assert result.baseline.annual_count == 3
+        assert result.baseline.median == 0.55
         assert result.anomaly is None
         assert result.error is None
         assert len(result.historical_observations) == 3
         assert result.sufficiency.is_sufficient is True
 
     def test_current_error_propagates_error_status_and_payload(self) -> None:
-        """TC-8: Current has error -> status='error', baseline=None, anomaly=None, exact error preserved."""
+        """TC-8: Current has error -> status='error', baseline computed if sufficient, anomaly=None, exact error preserved."""
         curr_err = EarthEngineError(type="MetadataExtractionError", message="Cloud Score+ unavailable")
         history = [
             _make_sample_annual_obs(2025, mean=0.58),
@@ -322,7 +324,8 @@ class TestSatelliteHistoricalBaselineIntegration:
 
         assert result.status == "error"
         assert result.current is None
-        assert result.baseline is None
+        assert result.baseline is not None
+        assert result.baseline.annual_count == 3
         assert result.anomaly is None
         assert result.error == curr_err
         assert len(result.historical_observations) == 3
@@ -345,6 +348,8 @@ class TestSatelliteHistoricalBaselineIntegration:
         res_success = build_historical_ndvi_analysis(current=ee_success, historical_observations=history)
         assert res_success.status == "success"
         assert res_success.current == current_analysis
+        assert res_success.baseline is not None
+        assert res_success.anomaly is not None
 
         # 9b: EarthEngineResult status='no_data'
         ee_nodata = EarthEngineResult(
@@ -356,6 +361,8 @@ class TestSatelliteHistoricalBaselineIntegration:
         res_nodata = build_historical_ndvi_analysis(current=ee_nodata, historical_observations=history)
         assert res_nodata.status == "no_data"
         assert res_nodata.current is None
+        assert res_nodata.baseline is not None
+        assert res_nodata.anomaly is None
 
         # 9c: EarthEngineResult status='error'
         ee_err_obj = EarthEngineError(type="EEException", message="Remote compute failed")
@@ -369,6 +376,8 @@ class TestSatelliteHistoricalBaselineIntegration:
         res_err = build_historical_ndvi_analysis(current=ee_err, historical_observations=history)
         assert res_err.status == "error"
         assert res_err.current is None
+        assert res_err.baseline is not None
+        assert res_err.anomaly is None
         assert res_err.error == ee_err_obj
 
     def test_input_immutability(self) -> None:
