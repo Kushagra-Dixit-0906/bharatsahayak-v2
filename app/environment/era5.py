@@ -52,6 +52,9 @@ ERA5_LAND_BANDS: list[str] = [
 # Nominal spatial resolution in meters (~0.1° at the equator, ~11132 m)
 ERA5_LAND_NOMINAL_SCALE_M: float = 11132.0
 
+# Sampling scale in meters for regional reduction over parcel geometry (1000.0m)
+ERA5_LAND_REDUCTION_SCALE_M: float = 1000.0
+
 # Default retrospective lookback window in calendar days (DEC-018)
 DEFAULT_LOOKBACK_DAYS: int = 90
 
@@ -156,7 +159,7 @@ def fetch_raw_era5_land_timeseries(
             stats = img.reduceRegion(
                 reducer=ee.Reducer.mean(),
                 geometry=geometry,
-                scale=ERA5_LAND_NOMINAL_SCALE_M,
+                scale=ERA5_LAND_REDUCTION_SCALE_M,
                 maxPixels=1000000,
             )
             date_str = img.date().format("YYYY-MM-dd")

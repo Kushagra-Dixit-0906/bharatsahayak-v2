@@ -23,7 +23,7 @@ Establish an unshakeable ground-truth foundation for BharatSahayak V2 by:
 - **Baseline Commit (HEAD):** `e0fcc29`
 - **GCP Project ID:** `bharatsahayak-v2`
 - **Working Tree State:** Clean
-- **Frameworks & Models:** Google ADK 2.0, Gemini 2.5 Flash, FastMCP over stdio, Python 3.11–3.13 (`uv`).
+- **Frameworks & Models:** Google ADK 2.2.0, Gemini 2.5 Flash, FastMCP over stdio, Python 3.11–3.13 (`uv`).
 - **Earth Engine Context:** Earth Engine registration and API setup are already completed externally for project `bharatsahayak-v2`.
 
 ### Initial Inventory

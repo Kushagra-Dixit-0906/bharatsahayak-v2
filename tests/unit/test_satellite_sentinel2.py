@@ -38,10 +38,10 @@ from app.satellite.types import (
 
 
 def test_sentinel2_default_constants() -> None:
-    """Verifies that Sentinel-2 pipeline default constants match DEC-008 specifications."""
+    """Verifies that Sentinel-2 pipeline default constants match DEC-008 / DEC-010 specifications."""
     assert SENTINEL2_SR_HARMONIZED == "COPERNICUS/S2_SR_HARMONIZED"
     assert DEFAULT_LOOKBACK_DAYS == 30
-    assert DEFAULT_MAX_CLOUD_PERCENTAGE == 20.0
+    assert DEFAULT_MAX_CLOUD_PERCENTAGE == 60.0
 
 
 def test_parse_date_valid_formats() -> None:

@@ -222,3 +222,64 @@ class TestFusionPipelineExecution:
         assert "Remote network dropped connection" in evidence.reanalysis.error.message
         assert evidence.rainfall.status == "success"
         assert evidence.land_cover.status == "success"
+
+    @patch("app.fusion.pipeline.analyze_dynamic_world_land_cover")
+    @patch("app.fusion.pipeline.analyze_chirps_rainfall")
+    @patch("app.fusion.pipeline.analyze_era5_land")
+    @patch("app.fusion.pipeline.analyze_historical_years")
+    @patch("app.fusion.pipeline.create_analysis_region")
+    @patch("app.fusion.pipeline.analyze_regional_ndvi")
+    def test_orchestration_all_subsystems_receive_identical_resolved_reference_date(
+        self,
+        mock_ndvi,
+        mock_region,
+        mock_hist_years,
+        mock_era5,
+        mock_chirps,
+        mock_dw,
+    ):
+        """Requirement F: Verifies that all 5 sub-pipelines receive the exact same resolved reference date."""
+        _, veg, rean, rain, lc = build_evidence_from_fixture("complete_success.json")
+
+        mock_ndvi.return_value = EarthEngineResult(
+            status="success",
+            dataset="COPERNICUS/S2_SR_HARMONIZED",
+            image_count=1,
+            data=veg.current,
+        )
+        mock_region.return_value = MagicMock()
+        mock_hist_years.return_value = veg.historical_observations
+        mock_era5.return_value = rean
+        mock_chirps.return_value = rain
+        mock_dw.return_value = lc
+
+        target_date_str = "2026-09-18"
+        target_date_obj = date(2026, 9, 18)
+
+        evidence = fetch_agricultural_environmental_evidence(
+            latitude=30.9010,
+            longitude=75.8573,
+            reference_date=target_date_str,
+        )
+
+        assert evidence.reference_date == target_date_obj
+
+        # 1. Sentinel-2 Current receives end_date="2026-09-18"
+        mock_ndvi.assert_called_once()
+        _, ndvi_kwargs = mock_ndvi.call_args
+        assert ndvi_kwargs["end_date"] == target_date_str
+
+        # 2. ERA5-Land receives requested_end_date=date(2026, 9, 18)
+        mock_era5.assert_called_once()
+        _, era5_kwargs = mock_era5.call_args
+        assert era5_kwargs["requested_end_date"] == target_date_obj
+
+        # 3. CHIRPS rainfall receives requested_end_date=date(2026, 9, 18)
+        mock_chirps.assert_called_once()
+        _, chirps_kwargs = mock_chirps.call_args
+        assert chirps_kwargs["requested_end_date"] == target_date_obj
+
+        # 4. Dynamic World receives requested_end_date=date(2026, 9, 18)
+        mock_dw.assert_called_once()
+        _, dw_kwargs = mock_dw.call_args
+        assert dw_kwargs["requested_end_date"] == target_date_obj

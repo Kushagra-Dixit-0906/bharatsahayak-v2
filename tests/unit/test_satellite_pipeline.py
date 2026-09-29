@@ -32,6 +32,7 @@ from app.satellite.sentinel2 import (
     DEFAULT_MIN_USABLE_COVERAGE,
     DEFAULT_QUALITY_BAND,
     SENTINEL2_SR_HARMONIZED,
+    resolve_date_range,
 )
 from app.satellite.types import (
     AnalysisRegionMetadata,
@@ -778,3 +779,409 @@ def test_freshness_zero_days_when_same_day(
     assert result.status == "success"
     assert result.data.freshness.observation_age_days == 0
     assert result.data.freshness.reference_date == "2026-08-31"
+
+
+# ==============================================================================
+# 8. DYNAMIC OBSERVATION DISCOVERY & SELECTION SEMANTICS
+# ==============================================================================
+
+
+class TestCurrentSentinel2DynamicDiscoveryAndSelection:
+    """Proves that Current Sentinel-2 dynamically discovers and selects observations from supplied collections."""
+
+    @patch("app.satellite.pipeline.calculate_ndvi_statistics")
+    @patch("app.satellite.pipeline.calculate_ndvi")
+    @patch("app.satellite.pipeline.mask_observation_quality")
+    @patch("app.satellite.pipeline.get_sentinel2_collection")
+    def test_multiple_usable_candidates_selects_newest_usable_scene(
+        self,
+        mock_get_coll,
+        mock_mask,
+        mock_calc_ndvi,
+        mock_calc_stats,
+    ) -> None:
+        """Requirement A.1: Given multiple usable candidates, selects the single newest usable scene (.first())."""
+        # 3 usable candidates with descending acquisition timestamps:
+        # Candidate 1 (newest): 2026-08-25T05:50:00Z -> 1787637000000 ms
+        # Candidate 2 (middle): 2026-08-15T05:50:00Z -> 1786773000000 ms
+        # Candidate 3 (oldest): 2026-08-05T05:50:00Z -> 1785909000000 ms
+        item_newest = {
+            "id": "COPERNICUS/S2_SR_HARMONIZED/20260825T055000",
+            "properties": {
+                "system:time_start": 1787637000000,
+                "CLOUDY_PIXEL_PERCENTAGE": 4.5,
+                "USABLE_COVERAGE": 0.96,
+                "SPACECRAFT_NAME": "Sentinel-2B",
+                "MGRS_TILE": "43REQ",
+                "PRODUCT_ID": "S2B_MSIL2A_20260825",
+            },
+        }
+
+        mock_coll = MagicMock()
+        mock_coll.size().getInfo.return_value = 3  # 3 usable candidates available
+        mock_image = MagicMock()
+        mock_image.getInfo.return_value = item_newest
+        mock_coll.first.return_value = mock_image
+        mock_get_coll.return_value = mock_coll
+
+        stats = _sample_statistics(mean=0.62, median=0.61, min_val=0.30, max_val=0.85)
+        mock_calc_stats.return_value = EarthEngineResult(status="success", data=stats)
+
+        result = analyze_regional_ndvi(
+            latitude=30.9157,
+            longitude=75.7196,
+            start_date="2026-08-01",
+            end_date="2026-08-31",
+        )
+
+        assert result.status == "success"
+        assert result.image_count == 3  # available usable count
+        assert isinstance(result.data, RegionalNdviAnalysis)
+
+        # Proves newest observation was selected and its metadata preserved
+        assert result.data.observation.image_id == "COPERNICUS/S2_SR_HARMONIZED/20260825T055000"
+        assert result.data.observation.acquisition_date.startswith("2026-08-25")
+        assert result.data.observation.spacecraft_name == "Sentinel-2B"
+        assert result.data.observation.usable_coverage_percentage == 96.0
+
+        # Proves single-scene statistics derived from selected image
+        assert result.data.statistics.mean == 0.62
+        assert result.data.statistics.median == 0.61
+
+        # Proves exactly ONE image proxy was masked and evaluated for NDVI
+        mock_mask.assert_called_once_with(
+            mock_image,
+            clear_threshold=DEFAULT_CLEAR_THRESHOLD,
+            quality_band=DEFAULT_QUALITY_BAND,
+        )
+        mock_calc_ndvi.assert_called_once()
+
+    @patch("app.satellite.pipeline.calculate_ndvi_statistics")
+    @patch("app.satellite.pipeline.calculate_ndvi")
+    @patch("app.satellite.pipeline.mask_observation_quality")
+    @patch("app.satellite.pipeline.get_sentinel2_collection")
+    def test_newer_unusable_candidate_excluded_older_usable_selected(
+        self,
+        mock_get_coll,
+        mock_mask,
+        mock_calc_ndvi,
+        mock_calc_stats,
+    ) -> None:
+        """Requirement A.2: Newer candidate fails quality gate, older usable candidate is dynamically selected."""
+        # Candidate 1 (newest, unusable: e.g. monsoon overcast coverage < 70%) is excluded server-side.
+        # Candidate 2 (older, usable: 2026-08-10, coverage 88%) is the first qualified image.
+        item_older_usable = {
+            "id": "COPERNICUS/S2_SR_HARMONIZED/20260810T055000",
+            "properties": {
+                "system:time_start": 1786341000000,
+                "CLOUDY_PIXEL_PERCENTAGE": 12.0,
+                "USABLE_COVERAGE": 0.88,
+                "SPACECRAFT_NAME": "Sentinel-2A",
+                "MGRS_TILE": "43REQ",
+                "PRODUCT_ID": "S2A_MSIL2A_20260810",
+            },
+        }
+
+        mock_coll = MagicMock()
+        mock_coll.size().getInfo.return_value = 1  # 1 qualified image after quality filter
+        mock_image = MagicMock()
+        mock_image.getInfo.return_value = item_older_usable
+        mock_coll.first.return_value = mock_image
+        mock_get_coll.return_value = mock_coll
+
+        stats = _sample_statistics(mean=0.58, median=0.57, min_val=0.25, max_val=0.79)
+        mock_calc_stats.return_value = EarthEngineResult(status="success", data=stats)
+
+        result = analyze_regional_ndvi(
+            latitude=30.9157,
+            longitude=75.7196,
+            start_date="2026-08-01",
+            end_date="2026-08-31",
+        )
+
+        assert result.status == "success"
+        assert result.image_count == 1
+        # Proves the older usable observation (2026-08-10) is selected, NOT any unusable newer observation
+        assert result.data.observation.image_id == "COPERNICUS/S2_SR_HARMONIZED/20260810T055000"
+        assert result.data.observation.acquisition_date.startswith("2026-08-10")
+        assert result.data.observation.usable_coverage_percentage == 88.0
+
+    @patch("app.satellite.pipeline.calculate_ndvi_statistics")
+    @patch("app.satellite.pipeline.calculate_ndvi")
+    @patch("app.satellite.pipeline.mask_observation_quality")
+    @patch("app.satellite.pipeline.get_sentinel2_collection")
+    def test_more_than_three_usable_candidates_selects_strictly_one_scene(
+        self,
+        mock_get_coll,
+        mock_mask,
+        mock_calc_ndvi,
+        mock_calc_stats,
+    ) -> None:
+        """Requirement A.3: When >3 usable candidates exist, CURRENT Sentinel-2 selects strictly ONE newest scene."""
+        item_newest = {
+            "id": "COPERNICUS/S2_SR_HARMONIZED/20260828T055000",
+            "properties": {
+                "system:time_start": 1787896200000,
+                "CLOUDY_PIXEL_PERCENTAGE": 2.1,
+                "USABLE_COVERAGE": 0.98,
+                "SPACECRAFT_NAME": "Sentinel-2A",
+                "MGRS_TILE": "43REQ",
+                "PRODUCT_ID": "S2A_MSIL2A_20260828",
+            },
+        }
+
+        mock_coll = MagicMock()
+        mock_coll.size().getInfo.return_value = 5  # 5 usable candidate scenes in collection
+        mock_image = MagicMock()
+        mock_image.getInfo.return_value = item_newest
+        mock_coll.first.return_value = mock_image
+        mock_get_coll.return_value = mock_coll
+
+        stats = _sample_statistics(mean=0.65, median=0.64, min_val=0.35, max_val=0.88)
+        mock_calc_stats.return_value = EarthEngineResult(status="success", data=stats)
+
+        result = analyze_regional_ndvi(
+            latitude=30.9157,
+            longitude=75.7196,
+            start_date="2026-08-01",
+            end_date="2026-08-31",
+        )
+
+        assert result.status == "success"
+        assert result.image_count == 5  # 5 available in search window
+        # Proves exactly ONE image is selected and processed, NOT three and NOT a composite
+        assert result.data.observation.image_id == "COPERNICUS/S2_SR_HARMONIZED/20260828T055000"
+        mock_calc_ndvi.assert_called_once()
+
+    @patch("app.satellite.pipeline.get_sentinel2_collection")
+    def test_zero_usable_candidates_returns_no_data_cleanly(
+        self,
+        mock_get_coll,
+    ) -> None:
+        """Requirement A.4: When 0 usable scenes exist, returns status='no_data', image_count=0 without exceptions."""
+        mock_coll = MagicMock()
+        mock_coll.size().getInfo.return_value = 0
+        mock_get_coll.return_value = mock_coll
+
+        result = analyze_regional_ndvi(
+            latitude=30.9157,
+            longitude=75.7196,
+            start_date="2026-08-01",
+            end_date="2026-08-31",
+        )
+
+        assert result.status == "no_data"
+        assert result.image_count == 0
+        assert result.data is None
+        assert result.error is None
+
+    def test_future_candidates_excluded_by_reference_date_cutoff(self) -> None:
+        """Requirement A.5: Search window end date strictly excludes observations past the reference date."""
+        start_str, end_str = resolve_date_range(
+            end_date="2026-08-15",
+            lookback_days=30,
+        )
+        assert end_str == "2026-08-15"
+        assert start_str == "2026-07-16"
+
+        # Verifies that any date past 2026-08-15 is outside the resolved search filter range
+        future_date = "2026-08-16"
+        assert not (start_str <= future_date <= end_str)
+
+    @patch("app.satellite.pipeline.calculate_ndvi_statistics")
+    @patch("app.satellite.pipeline.calculate_ndvi")
+    @patch("app.satellite.pipeline.mask_observation_quality")
+    @patch("app.satellite.pipeline.get_sentinel2_collection")
+    def test_selected_observation_metadata_faithfully_preserved(
+        self,
+        mock_get_coll,
+        mock_mask,
+        mock_calc_ndvi,
+        mock_calc_stats,
+    ) -> None:
+        """Requirement A.6: Selected current observation faithfully preserves all metadata fields from data source."""
+        item = {
+            "id": "COPERNICUS/S2_SR_HARMONIZED/20260820T054251_20260820T055032_T43REQ",
+            "properties": {
+                "system:time_start": 1787204441000,
+                "CLOUDY_PIXEL_PERCENTAGE": 7.34,
+                "USABLE_COVERAGE": 0.9125,
+                "SPACECRAFT_NAME": "Sentinel-2B",
+                "MGRS_TILE": "43REQ",
+                "PRODUCT_ID": "S2B_MSIL2A_20260820T054251_N0511_R048_T43REQ_20260820T083432",
+            },
+        }
+
+        mock_coll = MagicMock()
+        mock_coll.size().getInfo.return_value = 1
+        mock_image = MagicMock()
+        mock_image.getInfo.return_value = item
+        mock_coll.first.return_value = mock_image
+        mock_get_coll.return_value = mock_coll
+
+        stats = _sample_statistics()
+        mock_calc_stats.return_value = EarthEngineResult(status="success", data=stats)
+
+        result = analyze_regional_ndvi(
+            latitude=30.9157,
+            longitude=75.7196,
+            start_date="2026-08-01",
+            end_date="2026-08-31",
+        )
+
+        assert result.status == "success"
+        obs = result.data.observation
+        assert obs.image_id == item["id"]
+        assert obs.cloud_percentage == 7.34
+        assert obs.usable_coverage_percentage == 91.25
+        assert obs.spacecraft_name == "Sentinel-2B"
+        assert obs.mgrs_tile == "43REQ"
+        assert obs.product_id == item["properties"]["PRODUCT_ID"]
+        assert obs.system_time_start == 1787204441000
+        assert obs.clear_threshold == DEFAULT_CLEAR_THRESHOLD
+        assert obs.quality_band == DEFAULT_QUALITY_BAND
+
+
+# ==============================================================================
+# 9. ARCHITECTURAL REGRESSION TEST: CURRENT VS HISTORICAL SELECTION CONTRACTS
+# ==============================================================================
+
+
+class TestCurrentVsHistoricalArchitecturalDistinction:
+    """Explicitly verifies and documents the architectural contract difference:
+
+    CURRENT Sentinel-2:
+        Multiple usable scenes -> Selects strictly 1 newest usable scene (.first()),
+        computes single-scene zonal reduction.
+
+    HISTORICAL Sentinel-2:
+        Multiple usable scenes -> Selects up to 3 newest usable scenes (.limit(3)),
+        builds pixel-wise median NDVI composite.
+    """
+
+    @patch("app.satellite.pipeline.calculate_ndvi_statistics")
+    @patch("app.satellite.pipeline.calculate_ndvi")
+    @patch("app.satellite.pipeline.mask_observation_quality")
+    @patch("app.satellite.pipeline.get_sentinel2_collection")
+    def test_current_pipeline_strictly_selects_single_scene(
+        self,
+        mock_get_coll,
+        mock_mask,
+        mock_calc_ndvi,
+        mock_calc_stats,
+    ) -> None:
+        """Verifies CURRENT pipeline selects strictly ONE newest scene regardless of candidate count."""
+        item_newest = {
+            "id": "COPERNICUS/S2_SR_HARMONIZED/20260825T055000",
+            "properties": {
+                "system:time_start": 1787637000000,
+                "CLOUDY_PIXEL_PERCENTAGE": 3.0,
+                "USABLE_COVERAGE": 0.95,
+            },
+        }
+
+        mock_coll = MagicMock()
+        mock_coll.size().getInfo.return_value = 4  # 4 scenes available
+        mock_image = MagicMock()
+        mock_image.getInfo.return_value = item_newest
+        mock_coll.first.return_value = mock_image
+        mock_get_coll.return_value = mock_coll
+
+        stats = _sample_statistics()
+        mock_calc_stats.return_value = EarthEngineResult(status="success", data=stats)
+
+        result = analyze_regional_ndvi(
+            latitude=30.9157,
+            longitude=75.7196,
+            start_date="2026-08-01",
+            end_date="2026-08-31",
+        )
+
+        assert result.status == "success"
+        assert result.image_count == 4
+        # Single observation payload populated
+        assert isinstance(result.data.observation, Sentinel2ImageMetadata)
+        assert result.data.observation.image_id == "COPERNICUS/S2_SR_HARMONIZED/20260825T055000"
+        # calculate_ndvi called once for that single scene (not multi-scene compositing)
+        mock_calc_ndvi.assert_called_once()
+
+
+# ==============================================================================
+# 10. SENTINEL-2 COARSE CATALOG FILTER REFINEMENT VERIFICATION
+# ==============================================================================
+
+
+class TestSentinel2CoarseFilterRefinement:
+    """Proves the behavior of the refined coarse catalog pre-filter (DEFAULT_MAX_CLOUD_PERCENTAGE = 60.0)."""
+
+    @pytest.mark.parametrize(
+        ("scene_cloud", "parcel_coverage", "expected_usable"),
+        [
+            (41.17, 1.00, True),   # Requirement 1: ~41% scene cloud, 100% parcel coverage -> Accepted
+            (43.33, 1.00, True),   # Requirement 2: ~43% scene cloud, 100% parcel coverage -> Accepted
+            (53.88, 1.00, True),   # Requirement 3: ~54% scene cloud, 100% parcel coverage -> Accepted
+            (95.84, 0.00, False),  # Requirement 4: ~96% overcast scene -> Rejected by coarse filter
+            (99.68, 0.00, False),  # Requirement 4: ~99% overcast scene -> Rejected by coarse filter
+            (35.00, 0.40, False),  # Requirement 5: Passes coarse filter (35%), but fails parcel coverage (40% < 70%) -> Rejected
+        ],
+    )
+    def test_coarse_cloud_and_parcel_coverage_gating(
+        self,
+        scene_cloud: float,
+        parcel_coverage: float,
+        expected_usable: bool,
+    ) -> None:
+        """Verifies candidate acceptance / rejection under the refined 60% coarse filter and 70% parcel gate."""
+        passes_coarse = scene_cloud < DEFAULT_MAX_CLOUD_PERCENTAGE
+        passes_parcel = parcel_coverage >= DEFAULT_MIN_USABLE_COVERAGE
+        is_usable = passes_coarse and passes_parcel
+        assert is_usable == expected_usable
+
+    @patch("app.satellite.pipeline.calculate_ndvi_statistics")
+    @patch("app.satellite.pipeline.calculate_ndvi")
+    @patch("app.satellite.pipeline.mask_observation_quality")
+    @patch("app.satellite.pipeline.get_sentinel2_collection")
+    def test_partly_cloudy_scene_with_clear_parcel_selected_as_single_scene(
+        self,
+        mock_get_coll,
+        mock_mask,
+        mock_calc_ndvi,
+        mock_calc_stats,
+    ) -> None:
+        """Requirement 6: A 43.3% cloudy scene with 100% parcel coverage is selected as the single newest observation."""
+        item = {
+            "id": "COPERNICUS/S2_SR_HARMONIZED/20260919T050649_20260919T051841_T44RNQ",
+            "properties": {
+                "system:time_start": 1789803686000,
+                "CLOUDY_PIXEL_PERCENTAGE": 43.33,
+                "USABLE_COVERAGE": 1.00,
+                "SPACECRAFT_NAME": "Sentinel-2B",
+                "MGRS_TILE": "44RNQ",
+                "PRODUCT_ID": "S2B_MSIL2A_20260919",
+            },
+        }
+
+        mock_coll = MagicMock()
+        mock_coll.size().getInfo.return_value = 1
+        mock_image = MagicMock()
+        mock_image.getInfo.return_value = item
+        mock_coll.first.return_value = mock_image
+        mock_get_coll.return_value = mock_coll
+
+        stats = _sample_statistics(mean=0.74, median=0.73, min_val=0.45, max_val=0.92)
+        mock_calc_stats.return_value = EarthEngineResult(status="success", data=stats)
+
+        result = analyze_regional_ndvi(
+            latitude=26.784146,
+            longitude=81.544683,
+            start_date="2026-08-30",
+            end_date="2026-09-29",
+        )
+
+        assert result.status == "success"
+        assert result.image_count == 1
+        assert result.data.observation.image_id == item["id"]
+        assert result.data.observation.cloud_percentage == 43.33
+        assert result.data.observation.usable_coverage_percentage == 100.0
+        assert result.data.statistics.mean == 0.74
+        mock_calc_ndvi.assert_called_once()

@@ -445,3 +445,37 @@ class TestHistoricalSelectionSemantics:
         assert "Computation quota exceeded" in result.error.message
         assert result.image_count is None
         assert result.data is None
+
+    @patch("app.satellite.historical.ee.Dictionary.getInfo")
+    def test_historical_mixed_quality_skips_unusable_selects_up_to_three_usable(
+        self,
+        mock_get_info: MagicMock,
+        sample_window_2025: HistoricalTemporalWindow,
+        sample_region: ee.Geometry,
+    ) -> None:
+        """Requirement B: Mixed quality in historical window: newer unusable scenes are excluded, older usable scenes fill the up-to-3 selection in newest-first order."""
+        # 4 usable candidate scenes in collection (after server-side exclusion of cloudy scenes)
+        items = [
+            _make_mock_image_item("S2/20250824", 1756014600000, cloud_pct=6.0, usable_cov=0.91),
+            _make_mock_image_item("S2/20250814", 1755150600000, cloud_pct=8.5, usable_cov=0.88),
+            _make_mock_image_item("S2/20250804", 1754286600000, cloud_pct=11.0, usable_cov=0.85),
+        ]
+        mock_get_info.return_value = {
+            "available_count": 4,  # 4 usable scenes available in total
+            "selected_images": items,  # Top 3 newest returned by EE limit(3)
+        }
+
+        result = select_historical_observations(
+            temporal_window=sample_window_2025,
+            region=sample_region,
+            max_observations=3,
+        )
+
+        assert result.status == "success"
+        assert result.image_count == 4  # Total available usable count
+        assert len(result.data) == 3  # Strictly up to 3 selected
+        assert [s.selection_rank for s in result.data] == [1, 2, 3]
+        assert [s.image_id for s in result.data] == ["S2/20250824", "S2/20250814", "S2/20250804"]
+        assert result.data[0].usable_coverage_percentage == 91.0
+        assert result.data[1].usable_coverage_percentage == 88.0
+        assert result.data[2].usable_coverage_percentage == 85.0

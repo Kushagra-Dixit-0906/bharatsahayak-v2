@@ -294,7 +294,7 @@
 
 ### 🟢 Implemented Functionality
 - **Multi-Agent Workflow Graph:**
-  - Built on Google ADK 2.0 with directed graph transitions between `START`, `security_checkpoint`, `load_farmer_profile`, `orchestrator`, `hitl_checkpoint`, and `format_final_output`.
+  - Built on Google ADK 2.2.0 with directed graph transitions between `START`, `security_checkpoint`, `load_farmer_profile`, `orchestrator`, `hitl_checkpoint`, and `format_final_output`.
   - Four specialized advisors: `farming_advisor`, `weather_advisor`, `gov_schemes_advisor`, and `crop_disease_advisor` using Gemini 2.5 Flash.
 - **Security Checkpoint & Guardrails:**
   - Regex PII redaction for Indian Aadhaar numbers, 10-digit mobile numbers, and email addresses.

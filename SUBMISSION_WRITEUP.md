@@ -1,73 +1,95 @@
 # BharatSahayak — Project Submission Write-Up
 
 ## Problem Statement
-Agriculture is the backbone of the Indian economy, employing over 50% of the population. However, smallholder and rural farmers face critical information gaps. Modern farming advice, dynamic weather alerts, and government subsidies/schemes are often locked in complex databases, PDF bulletins, or require technical navigation. 
+Agriculture employs over 50% of India's population across 140+ million smallholder farming families. However, smallholder farmers face severe information asymmetry: satellite observation data, soil moisture metrics, climate reanalysis, and government subsidies are locked in complex databases or technical GIS interfaces. Furthermore, rural users are vulnerable to data leaks and phishing.
 
-BharatSahayak solves this by acting as an AI Rural Farming Companion. It translates agricultural datasets and tools into a simple, personalized, multilingual dialogue interface that remembers the farmer's location, crop choices, and land details.
+BharatSahayak solves this by acting as an AI Rural Farming Companion. Built on **Google ADK 2.2.0** and powered by **Gemini 3.5 Flash Lite**, it fuses multi-source satellite Earth observation data (Google Earth Engine) and agricultural domain knowledge into an intuitive, secure, multilingual dialogue assistant.
 
-## Solution Architecture
+---
+
+## Solution Architecture & Workflow
 
 ```mermaid
 graph TD
-    START[User Input] --> SecCheck[Security Checkpoint]
-    SecCheck -- Unsafe/Breach --> Final[format_final_output]
-    SecCheck -- Safe --> LoadProfile[load_farmer_profile]
-    LoadProfile --> Orch[Orchestrator Agent]
+    START[👨‍🌾 Farmer Input] --> SecCheck[🛡️ Security Checkpoint]
+    SecCheck -- Security Breach Blocked --> Final[💬 format_final_output]
+    SecCheck -- Safe Query --> LoadProfile[👤 load_farmer_profile]
+    LoadProfile --> Orch[🧠 Orchestrator Agent]
     
-    Orch --> Tool_Weather[weather_advisor]
-    Orch --> Tool_Disease[crop_disease_advisor]
-    Orch --> Tool_Gov[gov_schemes_advisor]
-    Orch --> Tool_Farming[farming_advisor]
+    Orch -- "Direct Tool Call" --> Tool_Env["🛰️ get_environmental_assessment\n(Earth Engine -> Fusion -> 5B -> 5C)"]
+    Orch -- "Delegates via AgentTool" --> Tool_Weather[🌦️ weather_advisor]
+    Orch -- "Delegates via AgentTool" --> Tool_Disease[🦠 crop_disease_advisor]
+    Orch -- "Delegates via AgentTool" --> Tool_Gov[🏛️ gov_schemes_advisor]
+    Orch -- "Delegates via AgentTool" --> Tool_Farming[🌱 farming_advisor]
 
-    Tool_Weather -.-> MCPServer[MCP Server]
-    Tool_Disease -.-> MCPServer
-    Tool_Gov -.-> MCPServer
-    Tool_Farming -.-> MCPServer
+    Tool_Weather -. McpToolset .-> MCPServer[🔌 MCP Server Tools]
+    Tool_Disease -. McpToolset .-> MCPServer
+    Tool_Gov -. McpToolset .-> MCPServer
+    Tool_Farming -. McpToolset .-> MCPServer
+    Tool_Env -. Stdio .-> MCPServer
 
-    Tool_Weather --> HITL[hitl_checkpoint]
-    Tool_Disease --> HITL
-    Tool_Gov --> HITL
-    Tool_Farming --> HITL
-
-    HITL -- Missing State/Acreage --> RequestMore[RequestInput Pause]
-    RequestMore --> Orch
-    HITL -- Complete --> Final
-    Final --> UI[User Interface]
+    Orch --> HITL[🤝 hitl_checkpoint Node]
+    HITL -- Missing Coordinates / Season --> RequestMore[⏸️ RequestInput Pause]
+    RequestMore -. Farmer Resumes .-> HITL
+    HITL -- "retry_with_info (Resumed)" --> Orch
+    HITL -- "Complete" --> Final
+    Final --> UI[📱 User Interface / ADK Playground]
 ```
 
-## Concepts Used (ADK & MCP Tools)
+---
 
-*   **ADK Multi-Agent Workflow:** Orchestrates deterministic graph transitions using `Workflow` and `START` primitives defined in [agent.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/agent.py#L354-L373).
-*   **LlmAgent & AgentTool:** The core orchestrator LlmAgent utilizes `AgentTool` to route requests to specialized sub-agents (`farming_advisor`, `weather_advisor`, `gov_schemes_advisor`, `crop_disease_advisor`) as defined in [agent.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/agent.py#L49-L133).
-*   **MCP Server (Model Context Protocol):** Developed a standalone service in [mcp_server.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/mcp_server.py) using the MCP Python SDK to expose domain-specific tools.
-*   **McpToolset Integration:** Connected the local stdio MCP server to all four specialized agents via `McpToolset` in [agent.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/agent.py#L25-L33).
-*   **Security Checkpoint:** Implemented a robust security interceptor in [agent.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/agent.py#L137-L232) that sanitizes inputs and manages safety thresholds.
-*   **Agents CLI:** Managed using `agents-cli` for template bootstrapping, virtual environment sync, and local testing.
+## Core Technologies & Concepts Demonstrated
 
-## Security Design
+*   **Google ADK 2.2.0 Multi-Agent Workflow:** Orchestrates deterministic graph transitions using `Workflow`, `START`, `node`, `LlmAgent`, `AgentTool`, and `Runner` with `InMemorySessionService`.
+*   **Gemini 3.5 Flash Lite:** Configured via `GEMINI_MODEL=gemini-3.5-flash-lite` for high-efficiency structured JSON reasoning, multilingual explanation, and strict epistemic grounding.
+*   **Earth Engine Satellite Intelligence (V2 Flow):** Fuses 5 complementary evidence streams:
+    1. Sentinel-2 10m NDVI
+    2. 3-Year historical NDVI seasonal baseline & spectral anomaly quantification
+    3. ERA5-Land reanalysis (~11.1km ambient temperature, volumetric soil moisture, runoff)
+    4. CHIRPS rainfall (~5.566km precipitation distribution)
+    5. Dynamic World 10m probabilistic land cover
+*   **Evidence vs. Interpretation Separation:** Physical evidence is assembled immutably in Phase 4; Phase 5B performs pure-Python deterministic pattern assessment; Phase 5C uses Gemini strictly as an explanation layer. *Gemini never calculates physical measurements or fabricates ungrounded evidence.*
+*   **Model Context Protocol (MCP) Server:** Standalone stdio FastMCP server exposes `get_environmental_assessment`, `get_crop_disease_info`, `get_weather_advisory`, `search_government_schemes`, and `calculate_farming_profitability`.
+*   **Location & Coordinate Integrity Contract:** *"Regional location context is not treated as exact farm location."* State/district names are preserved for general scheme context, while satellite analysis strictly requires verified coordinates. Missing coordinates trigger HITL clarification.
+*   **Crop Disease Advisory:** Evaluates symptoms against a trusted 52-entry agricultural corpus across 10 crops, providing candidate hypotheses, safe non-chemical cultural practices, and KVK referrals with 0 chemical prescriptions.
+*   **Human-in-the-Loop (HITL) Resumption:** Pauses graph execution with `RequestInput(interrupt_id="more_info")` when essential context (such as coordinates or farming season) is missing, resuming statefully without loss of profile context.
 
-1.  **PII Scrubbing:** Redacts Aadhaar numbers, mobile phone numbers, and emails using regex to prevent exposing sensitive details to LLM APIs.
-2.  **Prompt Injection Guard:** Intercepts system keyword instructions (e.g. "ignore previous instructions") and aborts execution to prevent jailbreaking.
-3.  **Audit Logs:** Generates structured JSON logs printed to `sys.stderr` and persisted in `ctx.state["audit_log"]` on every query transaction for auditing.
-4.  **Financial & Sabotage Filters:** Custom filters block extraction of sensitive bank/credit credentials and deny generation of harmful/malicious farming sabotage recipes.
+---
 
-## MCP Server Design
+## Security Boundary & Checkpoint Design
 
-*   `get_weather_advisory`: Returns location-based weather reports and custom advice on irrigation schedules or crop safety.
-*   `get_crop_disease_info`: Diagnoses fungal/bacterial diseases from symptoms (such as brown leaf spots) and details cures and prevention.
-*   `search_government_schemes`: Matches regional government assistance programs (like PM-KISAN or Krishi Bhagya) to a farmer's state.
-*   `calculate_farming_profitability`: Computes estimated sowing costs, MSP revenues, and net profits for crop acreages.
+The intent-grounded security checkpoint runs before any agent or LLM invocation:
+1. **PII Redaction:** Scrubs Aadhaar numbers (`[AADHAAR_REDACTED]`), phone numbers, and emails using regex before processing.
+2. **Intent-Grounded Protection:** Detects and blocks:
+   - System prompt / system instruction extraction
+   - Hidden / developer instruction extraction
+   - API key / token / cloud secret extraction
+   - Internal tool / schema / implementation extraction
+   - Private farmer / user data extraction
+   - Passwords, bank/ATM PINs, CVVs, and Aadhaar credentials
+   - Instruction override / jailbreak attempts
+3. **Conceptual Question Support:** Legitimate educational queries (`"What is a system prompt?"`, `"What is an API?"`, `"Why should passwords be protected?"`) are safely allowed through without false-positive blocking.
+4. **Standard Security Response:** Returns a concise alert:
+   > 🔒 **Security Alert:** I can't provide private information, passwords, API keys, hidden instructions, system prompts, or internal system details. Please remove sensitive information from your request and try again.
+5. **Security Verification:** Verified with 8 automated unit tests in `tests/unit/test_security_hardening.py` (100% pass) and 2 live Playground adversarial validation tests.
 
-## Human-in-the-Loop (HITL) Flow
-Agricultural advice depends heavily on context. If a user asks for government schemes or profitability without declaring their location or land size, the orchestrator triggers `needs_more_info`. The `hitl_checkpoint` node pauses execution using `RequestInput(interrupt_id="more_info")` and waits for user clarification. 
+---
 
-Once the user provides the missing details, the system saves the preferences to the profile state and automatically re-runs the orchestrator to provide tailored guidance.
+## Product Limitations & Honest Disclosures
 
-## Demo Walkthrough
-Refer to the three test cases in the [README.md](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/README.md#L45-L75):
-1.  **Weather Query:** Demystifies crop-weather planning by pulling local weather factors.
-2.  **Disease Query:** Acts as an instant field expert, identifying diseases like Brown Spot in rice.
-3.  **PII/Threat Block:** Demonstrates critical security blocking when private bank details or malicious prompts are sent.
+* **Coordinate Dependency:** Satellite environmental analysis requires exact parcel coordinates; regional state names are insufficient.
+* **Observation Lag:** Earth observation datasets exhibit publication latencies (e.g. ERA5-Land reanalysis latency of several days).
+* **Non-Diagnostic Nature:** Environmental signals represent physical growing conditions and do not prove specific disease pathogens, yield loss, or fertilizer deficiency.
+* **Spectral $\ne$ Agronomic:** NDVI spectral departures represent historical anomalies, not clinical damage.
+* **Browser Geolocation:** Browser GPS / one-tap map geolocation is scheduled for the Phase 9 UI/UX update.
+* **Deployment:** Cloud infrastructure templates are scaffolded in Terraform; live production deployment is scheduled for Phase 10.
 
-## Impact & Value
-BharatSahayak lowers the entry barrier for modern agriculture, supporting both traditional rural farmers and new agri-entrepreneurs. It delivers actionable, secure, and context-aware farming knowledge directly to communities, leading to optimized resource use, cost reductions, and increased yields.
+---
+
+## Next Phase: Phase 9 — UI / UX & Map Experience
+
+The upcoming development milestone (Phase 9) will introduce:
+* Interactive map location picker with automatic coordinate resolution.
+* "Use My Current Location" one-tap browser GPS integration.
+* Visual NDVI vegetation vigor indicators and moisture charts.
+* Streamlined, mobile-friendly conversational interface in English and Hindi.

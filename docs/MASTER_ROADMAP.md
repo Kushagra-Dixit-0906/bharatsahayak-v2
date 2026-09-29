@@ -1,8 +1,8 @@
 # BharatSahayak V2 — Master Project Roadmap
 
 > **Master roadmap and progressive implementation plan for BharatSahayak V2.**
-> *Last Updated: Phase 5C Gemini Explanation Pipeline Complete & Sealed*
-> *Baseline Branch: `bharatsahayak-v2` | Commit: `b05fc54` | GCP Project ID: `bharatsahayak-v2`*
+> *Last Updated: Backend Intelligence & Security Hardening (Phases 0-8) Complete & Verified; Phase 9 UI/UX Entered as Next Active Phase*
+> *Baseline Branch: `bharatsahayak-v2` | GCP Project ID: `bharatsahayak-v2`*
 
 ---
 
@@ -11,7 +11,7 @@
 | Status Icon | Meaning | Definition |
 | :--- | :--- | :--- |
 | 🟢 **IMPLEMENTED** | Active & Implemented | Fully written, tested, and operational in current repository baseline. |
-| 🟡 **PLANNED** | Scheduled Work | Approved architectural phase scheduled for implementation in upcoming phases. |
+| 🟡 **ACTIVE / PLANNED** | Active or Scheduled Work | Current active phase or approved architectural phase scheduled for implementation. |
 | 🔴 **IDEA** | Future Exploration | Conceptual enhancement deferred to post-MVP / future backlog. |
 
 ---
@@ -25,10 +25,10 @@ graph TD
     P2 --> P3["Phase 3: Additional Agri & Environmental Data 🟢"]
     P3 --> P4["Phase 4: Multi-Source Data Fusion 🟢"]
     P4 --> P5["Phase 5: Agricultural Evidence Interpretation & Gemini Reasoning 🟢"]
-    P5 --> P6["Phase 6: MCP & Agent Integration 🟡"]
-    P6 --> P7["Phase 7: End-to-End Farmer Workflow 🟡"]
-    P7 --> P8["Phase 8: Testing, Reliability & Security 🟡"]
-    P8 --> P9["Phase 9: UI / UX & Map Experience 🟡"]
+    P5 --> P6["Phase 6: MCP & Agent Integration 🟢"]
+    P6 --> P7["Phase 7: End-to-End Farmer Workflow 🟢"]
+    P7 --> P8["Phase 8: Testing, Reliability & Security 🟢"]
+    P8 --> P9["Phase 9: UI / UX & Map Experience 🟡 (ACTIVE)"]
     P9 --> P10["Phase 10: Cloud Deployment & Telemetry 🟡"]
     P10 --> P11["Phase 11: Demo, Documentation & Submission 🟡"]
 ```
@@ -192,6 +192,15 @@ graph TD
     - **Step 3 — Isolated Gemini Explanation Service (`39a7617`):** Implemented `GeminiModelClient` interface, `DefaultGeminiClient` (`gemini-2.5-flash`), structured JSON response parsing, Pydantic schema validation, Stage 2 banned chemical/dosage regex scanner, Stage 3 agronomic invariant checks, and deterministic offline fallback engine (`generate_deterministic_fallback_explanation`) supporting all 8 conditions in English and Hindi.
     - **Step 4 — Unified Assessment & Explanation Pipeline (`b05fc54`):** Implemented `AgriculturalAssessmentExplanationResponse` (containing `assessment`, `explanation`, `context_used`), `evaluate_and_explain_agricultural_assessment()`, and `fetch_agricultural_assessment_explanation()`. Configured automatic Gemini bypass on `status == "error"` generating deterministic error responses, fallback status preservation on valid assessments, farmer-context propagation, and public exports in `app/assessment/__init__.py`.
     - **Verification:** 27 context/prompt unit tests, 27 service unit tests, 14 unified pipeline integration tests, 41 Phase 5B regression tests; 1,028 full repository unit tests passed (0 failures). Zero live Gemini API calls in automated test suite.
+  - **5D — Grounded Agricultural Knowledge & Crop Disease Reasoning Engine (🟢 COMPLETE & SEALED):**
+    - Trusted agricultural knowledge retrieval + controlled Gemini advisory pipeline.
+    - 52 verified `KnowledgeEntry` records across 10 major Indian crops (Rice, Wheat, Maize, Chickpea, Mustard, Pigeon pea, Groundnut, Soybean, Cotton, Sugarcane) with 100% provenance traced to Tamil Nadu Agricultural University (TNAU) Agritech Portal.
+    - Strict zero-chemical invariant: 0 pesticide, fungicide, or insecticide active ingredients, quantitative dosages (`ml/L`, `g/ha`), or spray schedules in knowledge entries, prompts, or model outputs.
+    - Non-definitive epistemic stance: conditions framed strictly as candidate hypotheses/possibilities, never clinical or confirmed diagnoses.
+    - Deterministic multi-stage retriever (`app/disease/retriever.py`) scoring symptoms and plant parts with multilingual alias mapping.
+    - Controlled Gemini prompt (`app/disease/prompt.py`) and safety-validated service (`app/disease/service.py`) with 3-stage validation.
+    - Deterministic safe fallback engine (`app/disease/fallback.py`) operating entirely offline without LLM.
+    - Root pipeline `run_crop_problem_pipeline(...)` in `app/disease/pipeline.py`.
 - **Dependencies:** Phase 4 (`a046422`), Phase 5B (`b71cfc3`).
 - **Next Phase:** Phase 6 (MCP Server & Agent Integration).
 - **Future Upgrades (`🔴 IDEA`):** Multimodal convergence between Phase 5 environmental moisture context and leaf photograph disease symptoms.
@@ -199,51 +208,63 @@ graph TD
 ---
 
 ### Phase 6: MCP Server & Agent Integration
-- **Status:** 🟡 **PLANNED**
-- **Purpose:** Upgrade Model Context Protocol (MCP) server from static mock/catalog responses to live, tool-backed satellite and agricultural execution services.
+- **Status:** 🟢 **COMPLETE & INTEGRATED**
+- **Purpose:** Connect Model Context Protocol (MCP) server tools and ADK multi-agent layer with trusted domain pipelines.
 - **Major Work:**
-  - Upgrade FastMCP server tools (`get_farm_satellite_intelligence`, `get_weather_advisory`, `search_government_schemes`, `calculate_farming_profitability`).
-  - Implement strict Pydantic schemas, source provenance metadata, and execution timing.
-  - Connect updated MCP tools to ADK `LlmAgent` instances via `McpToolset`.
+  - Modernized `get_crop_disease_info` in `app/mcp_server.py` to route through the Phase 5D disease pipeline (`run_crop_problem_pipeline`) over `DEFAULT_CORPUS`.
+  - Modernized `crop_disease_advisor` in `app/agent.py` to enforce candidate hypotheses, safe non-chemical cultural practices, and zero chemical prescriptions.
+  - Verified MCP stdio execution and tool contracts via dedicated integration tests in `tests/unit/test_mcp_disease.py`.
+  - Preserved existing FastMCP server tools (`get_weather_advisory`, `search_government_schemes`, `calculate_farming_profitability`).
 - **Dependencies:** Phase 2, Phase 3, Phase 5.
 - **Future Upgrades (`🔴 IDEA`):** Tool result caching layer, circuit breaker for remote API timeouts, and live scheme lookup via official ministry endpoints.
 
 ---
 
 ### Phase 7: End-to-End Farmer Workflow & Interaction Flows
-- **Status:** 🟡 **PLANNED**
-- **Purpose:** Deliver seamless multi-turn conversational flows, intuitive farm onboarding, and human-in-the-loop (HITL) clarifications.
+- **Status:** 🟢 **COMPLETE & VERIFIED**
+- **Purpose:** Deliver seamless multi-turn conversational flows, stateful profile management, and resilient human-in-the-loop (HITL) clarifications.
 - **Major Work:**
-  - Map-based location resolution flow: translate human-understandable location inputs (village, district, pin drop) to coordinates.
-  - Onboard farm profile (location, crop, acreage, season) with interactive clarification.
-  - Ensure language switching (English ⇄ Hindi) persists dynamically across conversational turns.
-  - Seamless HITL resumption for ambiguous or missing parameters without state loss.
+  - Verified and hardened ADK-native `hitl_checkpoint` node (`@node(rerun_on_resume=True)`) in `app/agent.py`.
+  - Deterministic season interception (`is_crop_recommendation_request and is_season_missing`) yielding localized `RequestInput(interrupt_id="more_info")`.
+  - Model-driven HITL for missing context (e.g. missing crop during health inquiries) yielding `RequestInput`.
+  - Defensive resumption normalization: safe coercion of `node_input` and `resume_inputs["more_info"]` (handling dict, string, whitespace, and None).
+  - Dynamic bidirectional language switching (English ⇄ Hindi) across turns and during HITL resumption without lingering language state.
+  - Ambiguous disease clarification workflow: delivers candidate possibilities + immediate safe cultural practices + observation questions as normal advisory text, followed by refined advisory upon symptom clarification in subsequent turns.
+  - Multi-turn state persistence: farmer profile (location, farm size, crops, season) and full conversational query context retained across turns.
+  - Comprehensive integration test suite: 19 integration tests in `tests/integration/test_agent.py` passing cleanly (100% green).
 - **Dependencies:** Phase 5, Phase 6.
 - **Future Upgrades (`🔴 IDEA`):** Regional voice input/output (STT/TTS in Hindi, Kannada, Telugu), multimodal leaf photo upload for vision-based diagnosis.
 
 ---
 
 ### Phase 8: Testing, Reliability, Security & Evaluation
-- **Status:** 🟡 **PLANNED**
-- **Purpose:** Validate entire system reliability, mock external dependencies for automated pipelines, harden security checkpoints, and run domain-specific LLM evaluations.
+- **Status:** 🟢 **IMPLEMENTED & VERIFIED**
+- **Purpose:** Validate end-to-end system reliability, coordinate contract integrity, security boundary hardening, and domain-specific safety evaluations.
 - **Major Work:**
-  - Expand unit tests for satellite calculations, geometry utilities, and state transitions.
-  - Create robust integration tests covering multi-turn HITL flows and live/mocked MCP tools.
-  - Replace generic eval dataset (`basic-dataset.json`) with India-specific agricultural evaluation dataset (English, Hindi, mixed vernacular, adversarial inputs).
-  - Verify PII sanitization (Aadhaar, mobile, credentials) and prompt injection defenses.
+  - Implemented intent-grounded security checkpoint in `app/agent.py` protecting system prompts, hidden instructions, API keys/tokens, internal tools/schemas, private farmer data, passwords, bank/ATM PINs, CVVs, and Aadhaar credentials.
+  - Allowed legitimate conceptual inquiries (e.g. *"What is a system prompt?"*, *"What is an API?"*) without false-positive blocking.
+  - Implemented standardized security alert: `"🔒 Security Alert: I can't provide private information, passwords, API keys, hidden instructions, system prompts, or internal system details. Please remove sensitive information from your request and try again."`
+  - Removed transitional coordinate resolver to enforce the strict coordinate invariant: *"Regional location context is not treated as exact farm location."*
+  - Standardized runtime Gemini model default to `GEMINI_MODEL=gemini-3.5-flash-lite`.
+  - Verified security suite: 8 automated unit tests in `tests/unit/test_security_hardening.py` passing cleanly (100% green).
+  - Verified coordinate behavior: 6 automated unit tests in `tests/unit/test_location_coordinates_behavior.py` passing cleanly.
+  - Completed two live Playground adversarial validation runs confirming zero information leakage.
 - **Dependencies:** Phase 6, Phase 7.
 - **Future Upgrades (`🔴 IDEA`):** Automated synthetic evaluation generation via `agents-cli eval dataset synthesize` and LLM-as-a-judge regression tracking.
 
 ---
 
 ### Phase 9: UI / UX & Map Experience
-- **Status:** 🟡 **PLANNED**
+- **Status:** 🟡 **ACTIVE / NEXT PHASE**
 - **Purpose:** Build a premium, farmer-centric web interface with interactive map selection, NDVI health heatmaps, and clean advisory cards.
-- **Major Work:**
-  - Interactive map component supporting location search, GPS geolocation assistance, and farm boundary selection.
-  - Visual NDVI health indicators (color-coded vegetation density and vigor).
-  - Conversational chat interface with streaming responses, audio/voice toggles, and multi-language switches.
-- **Dependencies:** Phase 7.
+- **Major Work (Planned):**
+  - Farmer-friendly conversational chat interface with streaming responses, audio/voice toggles, and multi-language switches (English/Hindi).
+  - "Use my current location" one-tap browser GPS coordinate acquisition.
+  - Interactive map component supporting manual location search, pin dropping, and farm boundary selection.
+  - Automatic reference date/time handling.
+  - Visual NDVI vegetation vigor indicators and moisture status cards without unnecessary technical jargon.
+  - Mobile-friendly responsive layouts tailored for rural smartphone users.
+- **Dependencies:** Phase 7, Phase 8.
 - **Future Upgrades (`🔴 IDEA`):** Offline progressive web app (PWA) field mode with cached advisories.
 
 ---

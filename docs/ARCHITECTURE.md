@@ -7,7 +7,7 @@
 
 ## 🏛️ System Overview
 
-BharatSahayak V2 is an AI-powered rural agricultural companion designed to empower Indian smallholder farmers. The system is engineered on **Google ADK 2.0 (Agent Development Kit)**, powered by **Gemini 2.5 Flash**, and coupled to local and cloud execution tools via the **Model Context Protocol (MCP)**.
+BharatSahayak V2 is an AI-powered rural agricultural companion designed to empower Indian smallholder farmers. The system is engineered on **Google ADK 2.2.0 (Agent Development Kit)**, powered by **Gemini 2.5 Flash**, and coupled to local and cloud execution tools via the **Model Context Protocol (MCP)**.
 
 ### Architectural Maturity Legend
 
@@ -39,18 +39,20 @@ graph TD
 
     subgraph AgentLayer ["4. Multi-Agent Reasoning Layer"]
         Orchestrator["🧠 Central Orchestrator (LlmAgent)"]
-        FA["🌱 Farming Advisor"]
-        WA["🌦️ Weather Advisor"]
-        GA["🏛️ Government Schemes Advisor"]
-        DA["🦠 Crop Disease Advisor"]
+        subgraph SubAgents ["Specialist Capabilities (AgentTools)"]
+            FA["🌱 Farming Advisor"]
+            WA["🌦️ Weather Advisor"]
+            GA["🏛️ Government Schemes Advisor"]
+            DA["🦠 Crop Disease Advisor"]
+        end
     end
 
     subgraph ToolLayer ["5. Tools & Data Layer (FastMCP over stdio)"]
-        MCPServer["🔌 Local MCP Server\n(Static Rules & Catalog Lookup)"]
+        MCPServer["🔌 Local MCP Server\n(Phase 5D Disease Pipeline + Static/Catalog Tools)"]
     end
 
     subgraph HITLLayer ["6. Interaction & Verification Layer"]
-        HITLNode["🤝 HITL Checkpoint Node\n(RequestInput interrupt for missing Season)"]
+        HITLNode["🤝 HITL Checkpoint Node\n(RequestInput interrupt for missing Season / Context)"]
     end
 
     subgraph OutputLayer ["7. Output & Delivery Layer"]
@@ -62,26 +64,27 @@ graph TD
     SecNode -- Safe / Scrubbed Input --> ProfileNode
     ProfileNode --> Orchestrator
 
-    Orchestrator --> FA
-    Orchestrator --> WA
-    Orchestrator --> GA
-    Orchestrator --> DA
+    Orchestrator -- "Delegates via AgentTool" --> FA
+    Orchestrator -- "Delegates via AgentTool" --> WA
+    Orchestrator -- "Delegates via AgentTool" --> GA
+    Orchestrator -- "Delegates via AgentTool" --> DA
 
     FA -. McpToolset .-> MCPServer
     WA -. McpToolset .-> MCPServer
     GA -. McpToolset .-> MCPServer
     DA -. McpToolset .-> MCPServer
 
-    FA --> HITLNode
-    WA --> HITLNode
-    GA --> HITLNode
-    DA --> HITLNode
-    Orchestrator --> HITLNode
+    FA -. Specialist Response .-> Orchestrator
+    WA -. Specialist Response .-> Orchestrator
+    GA -. Specialist Response .-> Orchestrator
+    DA -. Specialist Response .-> Orchestrator
 
-    HITLNode -- Missing Season --> PauseReq["⏸️ RequestInput Pause"]
-    PauseReq -. Farmer Provides Season .-> HITLNode
-    HITLNode -- Resumed with Data --> Orchestrator
-    HITLNode -- Response Complete --> FormatOut
+    Orchestrator -- OrchestratorOutput --> HITLNode
+
+    HITLNode -- Missing Season / Missing Context --> PauseReq["⏸️ RequestInput Pause"]
+    PauseReq -. Farmer Provides Response .-> HITLNode
+    HITLNode -- "retry_with_info (Resumed)" --> Orchestrator
+    HITLNode -- "Response Complete (__DEFAULT__)" --> FormatOut
     FormatOut --> Farmer
 ```
 
@@ -90,52 +93,67 @@ graph TD
 ## 🧩 Architectural Components Breakdown
 
 ### 1. Framework & Model Engine (`🟢 CURRENT / IMPLEMENTED`)
-- **Google ADK 2.0:** Uses ADK's `Workflow`, `START`, and `node` primitives for graph construction, `LlmAgent` for agent definitions, `AgentTool` for delegation hierarchy, and `Runner` with `InMemorySessionService` for stateful sessions.
-- **Gemini Model:** Standardized on `gemini-2.5-flash` configured via [app/config.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/config.py). Temperature, system instructions, and structured schemas enforce crisp formatting.
+- **Google ADK 2.2.0:** Uses ADK's `Workflow`, `START`, and `node` primitives for graph construction, `LlmAgent` for agent definitions, `AgentTool` for delegation hierarchy, and `Runner` with `InMemorySessionService` for stateful sessions.
+- **Gemini Model:** Standardized on `gemini-3.5-flash-lite` configured via [app/config.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/config.py). Temperature, system instructions, and structured schemas enforce crisp, deterministic grounding.
 
-### 2. Guardrails & Security Checkpoint (`🟢 CURRENT / IMPLEMENTED`)
-The `security_checkpoint` node in [app/agent.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/agent.py) executes prior to any LLM invocation:
+### 2. Guardrails & Intent-Grounded Security Checkpoint (`🟢 CURRENT / IMPLEMENTED`)
+The `security_checkpoint` node in [app/agent.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/agent.py) executes prior to any LLM invocation and enforces an intent-grounded security boundary:
 - **PII Redaction:**
   - **Aadhaar Numbers:** 12-digit Indian national identity numbers (formatted `XXXX XXXX XXXX` or `XXXXXXXXXXXX`) are scrubbed and replaced with `[AADHAAR_REDACTED]`.
   - **Phone Numbers:** 10-digit Indian mobile numbers starting with 6-9 are replaced with `[PHONE_REDACTED]`.
   - **Email Addresses:** Standard email formats replaced with `[EMAIL_REDACTED]`.
-- **Prompt Injection Defense:** Intercepts manipulation phrases (`ignore previous instructions`, `system prompt`, `jailbreak`, `override instructions`, etc.) and immediately halts graph routing to `format_final_output` with a security alert.
-- **Financial & Harmful Content Filters:** Blocks requests attempting to extract bank PINs, passwords, or instructions for malicious soil sabotage/poisoning.
-- **Audit Logging:** Structured audit events with timestamps (Asia/Kolkata timezone), severity levels, and scrub details are appended to `ctx.state["audit_log"]` and logged to `sys.stderr`.
+- **Protected Information & Intent-Grounded Detection:**
+  - **System Prompts & System Instructions:** Blocks attempts to extract prompt templates or base system rules.
+  - **Hidden & Developer Instructions:** Blocks attempts to reveal confidential internal instructions or developer mode overrides.
+  - **API Keys & Authentication Secrets:** Blocks extraction of Gemini API keys, access tokens, bearer tokens, or cloud credentials.
+  - **Internal Tools & Schemas:** Blocks exfiltration of internal tool signatures, MCP schemas, and backend architecture details.
+  - **Private Farmer Data:** Blocks unauthorized extraction of other users' profile records or database dumps.
+  - **Sensitive Credentials & PINs:** Blocks bank PINs, ATM PINs, netbanking passwords, credit card CVVs, and Aadhaar OTPs/credentials.
+  - **Instruction Overrides & Jailbreaks:** Blocks manipulation phrases like `"ignore previous instructions"`, `"bypass rules"`, or `"enable developer mode"`.
+- **Conceptual Inquiry Preservation:** Legitimate educational questions (e.g., *"What is a system prompt?"*, *"What is an API?"*, *"Why is password security important?"*) are allowed through without false-positive blocking.
+- **Standardized Security Alert:** Returns the following farmer-facing response on breach:
+  ```text
+  🔒 Security Alert
+
+  I can't provide private information, passwords, API keys, hidden
+  instructions, system prompts, or internal system details.
+
+  Please remove sensitive information from your request and try again.
+  ```
+- **Audit Logging:** Structured audit events with timestamps (Asia/Kolkata timezone), severity levels, and scrub/block details are appended to `ctx.state["audit_log"]` and logged to `sys.stderr`.
 
 ### 3. State & Profile Management (`🟢 CURRENT / IMPLEMENTED`)
 The `load_farmer_profile` node parses incoming queries to maintain session state across conversational turns:
 - **`FarmerProfile` Schema:**
   - `language`: Detected dynamically per turn ("English" or "Hindi" via Devanagari Unicode `\u0900-\u097f` evaluation).
-  - `location`: Extracted via mapped Indian state and major city dictionaries.
+  - `location`: Extracted regional state/district context. *Regional location context is not treated as exact farm location.*
+  - `latitude` / `longitude`: Exact float coordinates stored ONLY when explicitly supplied by the farmer or via HITL clarification. Transitional coordinate fallback dictionaries have been removed.
   - `crops`: Multilingual English/Hindi crop dictionary extractor.
   - `farm_size`: Regex extraction for acreage (e.g., `2.5 acres`, `5 एकड़`).
   - `season`: Sowing season classification (`Kharif`, `Rabi`, `Zaid`).
 - **Prompt Injection into Context:** The profile is serialized and prepended to the orchestrator prompt on every turn to ensure complete conversational recall.
 
-### 4. Multi-Agent Delegation (`🟢 CURRENT / IMPLEMENTED`)
-- **Central Orchestrator Agent:** The routing hub that decides which advisor agent should handle the farmer's request. Uses structured output schema `OrchestratorOutput` (`response`, `needs_more_info`, `info_request_message`).
+### 4. Multi-Agent Delegation & Tools (`🟢 CURRENT / IMPLEMENTED`)
+- **Central Orchestrator Agent:** The routing hub that analyzes user input, invokes `get_environmental_assessment` directly for satellite analytics, or delegates to specialist advisors using `AgentTool` definitions.
 - **Farming Advisor:** Generates region- and season-specific crop recommendations using a structured visual layout (emojis, estimated investment, profit, difficulty, schemes, next steps).
 - **Weather Advisor:** Provides irrigation advice, fertilizer timing (e.g. urea application), and disease risk warnings.
 - **Government Schemes Advisor:** Outlines central/state schemes (PM-KISAN, PMFBY, state subsidies), required documentation, and application steps.
-- **Crop Disease Advisor:** Diagnoses crop fungal/bacterial diseases from symptom descriptions, detailing organic treatments, chemical controls, and prevention measures.
+- **Crop Disease Advisor:** Evaluates symptoms against the 52-entry knowledge corpus across 10 crops, providing candidate hypotheses, safe non-chemical cultural practices, and KVK escalation with 0 chemical prescriptions.
 
 ### 5. Human-in-the-Loop (HITL) Resumption (`🟢 CURRENT / IMPLEMENTED`)
 - Implemented via `@node(rerun_on_resume=True)` in `_hitl_checkpoint_impl`.
-- If a crop recommendation query lacks a defined farming season (`Kharif`, `Rabi`, or `Zaid`), the node yields a `RequestInput(interrupt_id="more_info")` with a localized prompt (in English or Hindi).
-- When the farmer responds, the execution resumes statefully from `ctx.resume_inputs["more_info"]`, updates the profile, and yields `route="retry_with_info"` to re-run the orchestrator without losing existing context (such as land size or location).
+- **Deterministic Season Interception:** If a crop recommendation query lacks a defined farming season (`Kharif`, `Rabi`, or `Zaid`), the node yields a `RequestInput(interrupt_id="more_info")` with a localized prompt (in English or Hindi).
+- **Coordinate & Context Interception:** If satellite environmental analysis is requested without verified coordinates, the orchestrator triggers a `RequestInput` pause to ask the farmer for their farm location.
+- **Resumption Flow:** When the farmer responds, execution resumes statefully from `ctx.resume_inputs["more_info"]`, extracts updated entities, dynamically adjusts language preference, updates the profile in state, and yields `route="retry_with_info"` to re-run the orchestrator without losing existing context.
 
-### 6. MCP Data Layer (`🟢 CURRENT / IMPLEMENTED` with Known Limitations)
+### 6. MCP Data Layer (`🟢 CURRENT / IMPLEMENTED`)
 - **FastMCP Server:** Implemented in [app/mcp_server.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/mcp_server.py), running over `stdio` via `uv run app/mcp_server.py`.
 - **Tools Exposed:**
-  1. `get_weather_advisory(location, crop)`
-  2. `get_crop_disease_info(crop, symptoms)`
-  3. `search_government_schemes(state, crop)`
-  4. `calculate_farming_profitability(crop, acreage, expected_yield_per_acre)`
-- ⚠️ **CURRENT LIMITATION & UPGRADE AREA:**
-  > [!IMPORTANT]
-  > The current MCP server returns **static, rule-based catalog responses and hardcoded conditional lookups** for selected Indian states (Punjab, Karnataka) and crops (wheat, rice, cotton).
-  > It does **NOT** yet connect to live meteorological APIs, dynamic satellite feeds, or live government database endpoints. Connecting live data sources is a major milestone of upcoming phases.
+  1. `get_environmental_assessment(latitude, longitude, crop, language)`: **Fully integrated with Earth Engine $\to$ Phase 4 $\to$ Phase 5B $\to$ Phase 5C pipeline**.
+  2. `get_crop_disease_info(crop, symptoms)`: Integrated with Phase 5D disease pipeline over the 52-entry verified knowledge corpus across 10 crops.
+  3. `get_weather_advisory(location, crop)`: Advisory tool for weather and agricultural guidance.
+  4. `search_government_schemes(state, crop)`: Lookup tool for central and state agricultural schemes.
+  5. `calculate_farming_profitability(crop, acreage, expected_yield_per_acre)`: Farm economics and net profit calculation tool.
 
 ### 7. Telemetry & Observability (`🟢 CURRENT / IMPLEMENTED`)
 - **OpenTelemetry & GenAI Instrumentation:** [app/app_utils/telemetry.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/app_utils/telemetry.py) configures OpenTelemetry GenAI semantic conventions, optional message-content capture mode (`NO_CONTENT` metadata-only or full), and Google Cloud Storage upload hooks.
@@ -150,13 +168,13 @@ The `load_farmer_profile` node parses incoming queries to maintain session state
 
 ---
 
-## 🛰️ Earth Engine Satellite Intelligence Flow (`🟢 PHASE 1 & PHASE 2 COMPLETE | 🟡 MCP CONNECTION SCHEDULED (Phase 6)`)
+## 🛰️ Earth Engine Satellite Intelligence Flow (`🟢 PHASE 1, PHASE 2, & PHASE 6 COMPLETE & INTEGRATED`)
 
 > [!IMPORTANT]
 > **Current Implementation Status:**
-> - **Phase 1 Instantaneous Satellite Engine (`app/satellite/`):** 🟢 **COMPLETE & SEALED (`60f8d90`)**. Standalone deterministic satellite computation engine providing `analyze_regional_ndvi(...)`, single authoritative observation selection, Cloud Score+ quality masking, NDVI computation, and regional zonal reductions (`382 tests passing`).
-> - **Phase 2 Historical Intelligence & Anomaly Detection:** 🟢 **COMPLETE & SEALED (`DEC-012`–`DEC-017`, `ebba070`)**. Extends the satellite engine with 3-year rolling baselines ($Y-1, Y-2, Y-3$), calendar-date-anchored seasonal windowing ($T_h \pm 15\text{ days}$), target-year window ownership, Option C annual matched-window regional composite observations, pure-Python statistical baseline derivation (median, mean, population std dev ddof=0, sufficiency), empirical spectral departure anomaly quantification, and root payload integration (`700 satellite tests passing`).
-> - **FastMCP Server & Agent Connection:** 🟡 **SCHEDULED FOR PHASE 6**. The active MCP server ([app/mcp_server.py](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/mcp_server.py)) currently retains its initial static/catalog tools until Phase 6 implements the live `get_regional_satellite_analysis` tool adapter.
+> - **Phase 1 Instantaneous Satellite Engine (`app/satellite/`):** 🟢 **COMPLETE & SEALED (`60f8d90`)**. Standalone deterministic satellite computation engine providing `analyze_regional_ndvi(...)`, single authoritative observation selection, Cloud Score+ quality masking, NDVI computation, and regional zonal reductions.
+> - **Phase 2 Historical Intelligence & Anomaly Detection:** 🟢 **COMPLETE & SEALED (`DEC-012`–`DEC-017`, `ebba070`)**. Extends the satellite engine with 3-year rolling baselines ($Y-1, Y-2, Y-3$), calendar-date-anchored seasonal windowing ($T_h \pm 15\text{ days}$), target-year window ownership, Option C annual matched-window regional composite observations, pure-Python statistical baseline derivation (median, mean, population std dev ddof=0, sufficiency), empirical spectral departure anomaly quantification, and root payload integration.
+> - **FastMCP Server & Agent Connection:** 🟢 **COMPLETE & INTEGRATED (`Phase 6`)**. The MCP server exposes `get_environmental_assessment`, which orchestrates the complete Earth Engine $\to$ Phase 4 Fusion $\to$ Phase 5B Deterministic Assessment $\to$ Phase 5C Gemini Explanation pipeline.
 
 ### Multi-Year Historical Satellite Intelligence Architecture (`Phase 2D / DEC-017`)
 
@@ -353,12 +371,16 @@ graph TD
 10. **Error Assessment Bypass Semantics:** If `assessment.status == "error"`, Gemini is bypassed entirely to produce a deterministic error response, preserving `assessment.status == "error"` without converting infrastructure errors into agricultural conclusions.
 11. **Prompt-Injection Defense:** Strict 5-tier structural prompt hierarchy treats all user strings inside passive XML data tags (`<assessment_data>`, `<farmer_context>`) as passive literals.
 12. **Decoupled Camera Workflow:** Visual crop-photo disease diagnosis remains a decoupled, optional tool path, completely independent of the spatial environmental assessment pipeline.
-13. **Orchestrator & MCP Integration Boundary:** The central orchestrator (`app/agent.py`) and FastMCP server (`app/mcp_server.py`) are **NOT yet integrated** with the Phase 5C pipeline. Connecting the unified pipeline to live agent tools is scheduled for Phase 6.
+13. **Orchestrator & MCP Integration Boundary (🟢 COMPLETE & INTEGRATED):** The central orchestrator (`app/agent.py`) connects directly to `get_environmental_assessment` via `mcp_toolset` on the FastMCP server (`app/mcp_server.py`), executing the full Earth Engine $\to$ Phase 4 Fusion $\to$ Phase 5B Deterministic Assessment $\to$ Phase 5C Gemini Explanation pipeline without an unnecessary second LLM rewrite.
 
+---
 
+## ⚠️ Important Product Limitations & Non-Claim Invariants
 
-
-
-
-
-
+1. **Coordinates Prerequisite:** Satellite environmental analysis strictly requires verified geographic coordinates. Regional state/district names provide policy context but are never converted into default coordinates.
+2. **Observation & Publication Lag:** Earth Observation datasets have publication latencies (e.g. ERA5-Land reanalysis latency of several days, Sentinel-2 revisit times of 5 days). Observations reflect available satellite passes, not real-time local forecasts.
+3. **Non-Diagnostic Evidence Boundary:** Environmental evidence (NDVI departures, soil moisture fractions, rainfall anomalies) indicates physical growing conditions but **does not** by itself prove specific disease pathogens, yield loss, drought, or fertilizer deficiency.
+4. **Spectral Departures $\ne$ Agronomic Severity:** Satellite vegetation anomaly indices represent empirical spectral departures from historical baselines, not clinical agronomic damage.
+5. **Data Availability & Cloud Masking:** Satellite coverage may be unavailable during severe cloud cover; Dynamic World classifications may be unavailable for specific scenes. The system reports data gaps transparently rather than fabricating certainty.
+6. **Location UX:** Browser GPS / one-tap geolocation is planned for Phase 9 UI/UX; currently coordinates are supplied via conversational text or HITL clarification.
+7. **Cloud Deployment Status:** Cloud infrastructure templates are scaffolded in Terraform; live production deployment is scheduled for Phase 10.

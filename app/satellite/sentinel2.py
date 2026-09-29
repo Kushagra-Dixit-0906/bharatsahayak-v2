@@ -61,8 +61,8 @@ DEFAULT_MIN_USABLE_COVERAGE: float = 0.70
 # Default lookback window in days for discovering recent satellite observations (DEC-008)
 DEFAULT_LOOKBACK_DAYS: int = 30
 
-# Default maximum scene cloudy pixel percentage threshold (DEC-008)
-DEFAULT_MAX_CLOUD_PERCENTAGE: float = 20.0
+# Default maximum scene cloudy pixel percentage threshold (DEC-008 coarse catalog pre-filter)
+DEFAULT_MAX_CLOUD_PERCENTAGE: float = 60.0
 
 
 def _validate_threshold(

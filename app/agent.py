@@ -13,7 +13,7 @@ from google.adk.events.request_input import RequestInput
 from google.adk.agents.context import Context
 from google.adk.apps import App, ResumabilityConfig
 from google.genai import types
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # MCP Imports
 from google.adk.tools.mcp_tool import McpToolset
@@ -33,6 +33,7 @@ mcp_toolset = McpToolset(
             command="uv",
             args=["run", "app/mcp_server.py"],
         ),
+        timeout=120.0,
     ),
 )
 
@@ -43,6 +44,8 @@ mcp_toolset = McpToolset(
 class FarmerProfile(BaseModel):
     language: str = "English"
     location: str = "Unknown"
+    latitude: float | None = None
+    longitude: float | None = None
     crops: list[str] = []
     farm_size: str = "Unknown"
     season: str | None = None
@@ -80,12 +83,54 @@ class OrchestratorOutput(BaseModel):
             return json.dumps(v, ensure_ascii=False)
         return str(v) if v is not None else ""
 
+class AdvisorInput(BaseModel):
+    request: str = Field(
+        default="",
+        description="The farmer query or details for the advisor."
+    )
+    query: str | None = Field(
+        default=None,
+        description="User query string."
+    )
+    crop: str | None = Field(
+        default=None,
+        description="Crop name if specified."
+    )
+    symptoms: str | None = Field(
+        default=None,
+        description="Observed symptoms or crop issues."
+    )
+    location: str | None = Field(
+        default=None,
+        description="Farmer location, state, or district."
+    )
+
+    model_config = ConfigDict(extra="allow")
+
+    @model_validator(mode="after")
+    def assemble_request(self) -> "AdvisorInput":
+        if not self.request.strip():
+            parts = []
+            if self.query and self.query.strip():
+                parts.append(self.query.strip())
+            if self.crop and self.crop.strip():
+                parts.append(f"Crop: {self.crop.strip()}")
+            if self.symptoms and self.symptoms.strip():
+                parts.append(f"Symptoms: {self.symptoms.strip()}")
+            if self.location and self.location.strip():
+                parts.append(f"Location: {self.location.strip()}")
+            if parts:
+                object.__setattr__(self, "request", " | ".join(parts))
+        return self
+
 # -----------------------------------------------------------------------------
 # 2. Specialized LLM Agents (Sub-Agents)
 # -----------------------------------------------------------------------------
 
 farming_advisor = LlmAgent(
     name="farming_advisor",
+    description="Advises on crop recommendations, seasonal cultivation planning, and farming profitability.",
+    input_schema=AdvisorInput,
     model=Gemini(model=config.model),
     instruction=(
         "You are BharatSahayak's Farming Advisor. Your goal is to help Indian farmers with agricultural queries.\n"
@@ -126,6 +171,8 @@ farming_advisor = LlmAgent(
 
 weather_advisor = LlmAgent(
     name="weather_advisor",
+    description="Provides localized weather forecasts and farming weather advisories.",
+    input_schema=AdvisorInput,
     model=Gemini(model=config.model),
     instruction=(
         "You are BharatSahayak's Weather Advisor. Follow these rules when formulating your response:\n"
@@ -139,6 +186,8 @@ weather_advisor = LlmAgent(
 
 gov_schemes_advisor = LlmAgent(
     name="gov_schemes_advisor",
+    description="Helps farmers discover government agricultural schemes, subsidies, and application steps.",
+    input_schema=AdvisorInput,
     model=Gemini(model=config.model),
     instruction=(
         "You are BharatSahayak's Government Schemes Advisor. Follow these rules when formulating your response:\n"
@@ -152,13 +201,18 @@ gov_schemes_advisor = LlmAgent(
 
 crop_disease_advisor = LlmAgent(
     name="crop_disease_advisor",
+    description="Advises on crop health, pests, and plant diseases using non-chemical cultural practices.",
+    input_schema=AdvisorInput,
     model=Gemini(model=config.model),
     instruction=(
-        "You are BharatSahayak's Crop Disease Advisor. Follow these rules when formulating your response:\n"
-        "1. Always use the `get_crop_disease_info` tool to diagnose crop diseases and identify cures based on symptoms.\n"
-        "2. Your response must include: disease severity level, potential causes, treatment options (chemical and organic, if available), prevention tips, and a clear guideline on when they should contact a local agricultural expert.\n"
-        "3. Respond in the same language as the user's latest query, as specified in the 'Language' field of the Farmer Profile. Do not persist Hindi if the latest query has switched back to English.\n"
-        "Explain symptoms and remedies in simple, jargon-free terms."
+        "You are BharatSahayak's Crop Health & Disease Advisor. Follow these strict rules when formulating your response:\n"
+        "1. Always use the `get_crop_disease_info` tool to look up verified agricultural knowledge based on the crop and observed symptoms.\n"
+        "2. Treat the tool output as authoritative reference evidence. Do NOT invent ungrounded disease facts, pathogens, or treatments.\n"
+        "3. Frame findings as candidate possibilities or hypotheses, NEVER as confirmed or definitive clinical diagnoses.\n"
+        "4. Provide ONLY safe, non-chemical cultural and preventative practices (e.g. sanitation, crop rotation, moisture management, resistant varieties). You MUST NEVER recommend chemical pesticides, fungicides, insecticides, dosages (e.g., ml/L, g/L), active ingredients, or chemical spray schedules.\n"
+        "5. Include clarifying field observations or follow-up questions from the tool output when symptoms are ambiguous, and clearly state when the farmer should consult a local Krishi Vigyan Kendra (KVK) or extension officer.\n"
+        "6. Respond in the same language as the user's latest query, as specified in the 'Language' field of the Farmer Profile. Do not persist Hindi if the latest query has switched back to English.\n"
+        "Explain symptoms and safe cultural steps in simple, clear, farmer-friendly terms."
     ),
     tools=[mcp_toolset]
 )
@@ -202,14 +256,18 @@ orchestrator = LlmAgent(
         "   💰 Profit improvement\n"
         "   🌱 Crop recommendations\n\n"
         "   Ask me anything about your farming needs.\n"
-        "3. When translating the welcome or profile updated responses for Hindi or other languages, translate the text naturally while preserving the exact layout, structure, and emojis.\n"
+        "3. For environmental assessment, satellite vegetation health (NDVI), farm environmental condition, or soil moisture/climate trend queries, you MUST call the `get_environmental_assessment` tool with the farm's exact latitude and longitude from the Farmer Profile. When `get_environmental_assessment` returns an advisory, you MUST return its exact text directly in the `response` field without summarizing, modifying, or re-interpreting it.\n"
+        "4. If an environmental assessment or farm satellite condition query is received but exact farm coordinates are missing from the Farmer Profile (no latitude/longitude coordinates), you MUST NOT call `get_environmental_assessment` with fabricated or default coordinates. Instead, set `needs_more_info` to True and prompt the farmer in `info_request_message` to provide their farm coordinates (latitude and longitude, e.g. 16.7749, 74.0461).\n"
+        "5. For ordinary weather forecasts and short-term rain/irrigation tips, delegate to `weather_advisor`.\n"
+        "6. When translating the welcome or profile updated responses for Hindi or other languages, translate the text naturally while preserving the exact layout, structure, and emojis.\n"
         "You MUST respond ONLY with a valid JSON object conforming to the OrchestratorOutput schema. Do not include any conversational preamble or wrap the JSON in markdown code blocks."
     ),
     tools=[
         AgentTool(farming_advisor),
         AgentTool(weather_advisor),
         AgentTool(gov_schemes_advisor),
-        AgentTool(crop_disease_advisor)
+        AgentTool(crop_disease_advisor),
+        mcp_toolset
     ],
     output_schema=OrchestratorOutput
 )
@@ -261,70 +319,74 @@ def security_checkpoint(ctx: Context, node_input: types.Content) -> Event:
         audit_entry["severity"] = "WARNING"
         audit_entry["details"] = "PII (Aadhaar/Mobile/Email) detected and redacted."
         
-    # 2. Prompt Injection Detection
-    injection_keywords = [
-        "system prompt", "ignore previous instructions", "bypass rules", 
-        "override instructions", "developer mode", "jailbreak", "prompt injection"
+    # 2. Prompt Injection, Exfiltration & Safety Patterns
+    rejection_msg = (
+        "🔒 Security Alert\n\n"
+        "I can't provide private information, passwords, API keys, hidden\n"
+        "instructions, system prompts, or internal system details.\n\n"
+        "Please remove sensitive information from your request and try again."
+    )
+
+    injection_or_override_patterns = [
+        # Override / ignore instructions
+        r"\b(?:ignore|disregard|forget|bypass|override|drop)\s+(?:all\s+)?(?:previous|prior|above|system|developer|hidden)?\s*(?:instructions|rules|prompts|directions|guidelines|constraints|safeguards|filters)\b",
+        # Bypass security / guardrails
+        r"\b(?:bypass|disable|override|jailbreak)\s+(?:rules|security|guardrails|safeguards|filters|safety\s+checks)\b",
+        # Developer / unrestricted mode switching
+        r"\b(?:you\s+are\s+now\s+in|enter|switch\s+to|enable)\s+(?:developer\s+mode|dan\s+mode|god\s+mode|jailbreak\s+mode|unrestricted\s+mode)\b",
+        # Jailbreak / prompt injection keywords
+        r"\b(?:jailbreak|prompt\s+injection)\b",
     ]
-    
-    injected = False
-    for kw in injection_keywords:
-        if kw in text_query.lower():
-            injected = True
+
+    exfiltration_patterns = [
+        # 1. System prompts / system instructions extraction
+        r"\b(?:reveal|show|give(?:\s+me)?|display|print|leak|output|dump|extract|provide|tell(?:\s+me)?|expose|share|read|send|list|what\s+is\s+your|what\s+are\s+your|what's\s+your)\b.*?\b(?:system\s+prompt|system\s+instructions?|system\s+message|base\s+prompt|initial\s+prompt)\b",
+        # 2. Hidden instructions / developer instructions extraction
+        r"\b(?:reveal|show|give(?:\s+me)?|display|print|leak|output|dump|extract|provide|tell(?:\s+me)?|expose|share|read|send|list|what\s+is\s+your|what\s+are\s+your|what's\s+your)\b.*?\b(?:hidden\s+instructions?|developer\s+instructions?|developer\s+mode\s+instructions?|confidential\s+instructions?|internal\s+instructions?)\b",
+        # 3. API keys / access tokens / authentication secrets extraction
+        r"\b(?:reveal|show|give(?:\s+me)?|display|print|leak|output|dump|extract|provide|tell(?:\s+me)?|expose|share|read|send|list|what\s+is\s+the|what\s+are\s+the|what\s+is\s+your|what's\s+the|what's\s+your)\b.*?\b(?:api\s*keys?|api\s*secret|access\s*tokens?|auth\s*tokens?|bearer\s*tokens?|secret\s*keys?|private\s*keys?|credentials?)\b",
+        # 4. Internal tools / tool schemas / implementation details extraction
+        r"\b(?:reveal|show|give(?:\s+me)?|display|print|leak|output|dump|extract|provide|tell(?:\s+me)?|expose|share|read|send|list|what\s+is\s+your|what\s+are\s+your|what's\s+your)\b.*?\b(?:internal\s+tools?|tool\s+schemas?|internal\s+schemas?|internal\s+implementation|internal\s+system\s+details?|mcp\s+tool\s+schemas?|mcp\s+tools?)\b",
+        # 5. Private farmer information / private user data extraction
+        r"\b(?:reveal|show|give(?:\s+me)?|display|print|leak|output|dump|extract|provide|tell(?:\s+me)?|expose|share|read|send|list|what\s+is|what\s+are)\b.*?\b(?:private\s+farmer(?:\s+info|\s+data|\s+information)?|farmer\s+data|farmer\s+profile|farmer\s+information|private\s+user(?:\s+info|\s+data)?|all\s+farmers?(?:\s+data|\s+info)?|other\s+farmers?(?:\s+data|\s+info)?|user\s+records?|private\s+information)\b",
+    ]
+
+    sensitive_credential_patterns = [
+        # High-risk financial credentials (bank pin, ATM pin, netbanking password, CVV, credit card)
+        r"\b(?:bank\s+pin|atm\s+pin|netbanking\s+password|credit\s+card|cvv|master\s+password|admin\s+password)\b",
+        # Direct credential key-value assignment (password: 123, pin: 456)
+        r"\b(?:password|passwd|pin)\s*[:=]\s*\S+",
+        # Providing personal passwords / PINs (e.g. "my password is ...", "my pin is ...")
+        r"\b(?:my\s+password\s+is|here\s+is\s+my\s+password|my\s+pin\s+is|my\s+account\s+password\s+is)\b",
+        # Sensitive identity / auth tokens
+        r"\b(?:aadhaar\s+password|aadhaar\s+pin|aadhaar\s+otp)\b",
+    ]
+
+    harmful_agricultural_patterns = [
+        r"\b(?:how\s+to\s+poison\s+crops|how\s+to\s+sabotage\s+soil|make\s+explosives|sabotage\s+crops)\b",
+    ]
+
+    all_security_patterns = (
+        injection_or_override_patterns
+        + exfiltration_patterns
+        + sensitive_credential_patterns
+        + harmful_agricultural_patterns
+    )
+
+    is_blocked = False
+    matched_detail = ""
+    for pattern in all_security_patterns:
+        if re.search(pattern, text_query, re.IGNORECASE):
+            is_blocked = True
+            matched_detail = f"Security violation matched pattern: {pattern}"
             break
-            
-    if injected:
-        audit_entry["action"] = "BLOCKED_INJECTION"
+
+    if is_blocked:
+        audit_entry["action"] = "BLOCKED_SECURITY"
         audit_entry["severity"] = "CRITICAL"
-        audit_entry["details"] = "Prompt injection attempt detected."
+        audit_entry["details"] = matched_detail
         ctx.state["audit_log"].append(audit_entry)
         print(f"[SECURITY ALERT] {json.dumps(audit_entry)}", file=sys.stderr)
-        
-        rejection_msg = (
-            "🔒 Security Alert\n\n"
-            "Your request contains sensitive or unsafe information.\n\n"
-            "For your safety, BharatSahayak has blocked this request.\n\n"
-            "Please remove:\n"
-            "• Aadhaar numbers\n"
-            "• Bank PINs\n"
-            "• Passwords\n"
-            "• Sensitive credentials\n\n"
-            "Then try again."
-        )
-        return Event(output=rejection_msg, route="security_breach")
-        
-    # 3. Domain-Specific Content & Financial Safety Rule
-    financial_keywords = [
-        "bank pin", "atm pin", "netbanking password", "credit card", "cvv"
-    ]
-    harmful_farming_keywords = [
-        "how to poison crops", "how to sabotage soil", "make explosives"
-    ]
-    
-    unsafe = False
-    for kw in financial_keywords + harmful_farming_keywords:
-        if kw in text_query.lower():
-            unsafe = True
-            break
-            
-    if unsafe:
-        audit_entry["action"] = "BLOCKED_UNSAFE"
-        audit_entry["severity"] = "CRITICAL"
-        audit_entry["details"] = "Unsafe query containing sensitive financial requests or harmful agricultural sabotage."
-        ctx.state["audit_log"].append(audit_entry)
-        print(f"[SECURITY ALERT] {json.dumps(audit_entry)}", file=sys.stderr)
-        
-        rejection_msg = (
-            "🔒 Security Alert\n\n"
-            "Your request contains sensitive or unsafe information.\n\n"
-            "For your safety, BharatSahayak has blocked this request.\n\n"
-            "Please remove:\n"
-            "• Aadhaar numbers\n"
-            "• Bank PINs\n"
-            "• Passwords\n"
-            "• Sensitive credentials\n\n"
-            "Then try again."
-        )
         return Event(output=rejection_msg, route="security_breach")
         
     # Log successful check
@@ -408,7 +470,8 @@ def extract_location(text: str) -> str | None:
         "patna": "Bihar", "पटना": "Bihar",
         "kolkata": "West Bengal", "कोलकाता": "West Bengal",
         "bhopal": "Madhya Pradesh", "भोपाल": "Madhya Pradesh",
-        "ahmedabad": "Gujarat", "अहमदाबाद": "Gujarat"
+        "ahmedabad": "Gujarat", "अहमदाबाद": "Gujarat",
+        "barabanki": "Uttar Pradesh", "बाराबंकी": "Uttar Pradesh"
     }
     for key, val in state_mapping.items():
         if key in text_lower:
@@ -427,6 +490,27 @@ def extract_location(text: str) -> str | None:
         loc = match.group(1).strip()
         if loc.lower() not in ["the", "my", "a", "an", "this", "some"]:
             return loc.capitalize()
+    return None
+
+def extract_coordinates(text: str) -> tuple[float, float] | None:
+    """Extracts latitude and longitude from text if present (e.g. '16.774931, 74.046179' or 'lat 26.78 lon 81.54')."""
+    import re
+    patterns = [
+        # Explicit labels: lat: 16.77, lon: 74.04 or latitude 16.77 longitude 74.04
+        r"(?:lat(?:itude)?\s*[:=]?\s*)([+-]?\d{1,2}\.\d+)\s*[,;]?\s*(?:lon(?:gitude)?\s*[:=]?\s*)([+-]?\d{1,3}\.\d+)",
+        # Standard coordinate pair: 16.774931, 74.046179 or 16.774931,74.046179
+        r"(?:lat(?:itude)?\s*[:=]?\s*)?([+-]?\d{1,2}\.\d+)\s*,\s*(?:lon(?:gitude)?\s*[:=]?\s*)?([+-]?\d{1,3}\.\d+)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            try:
+                lat = float(match.group(1))
+                lon = float(match.group(2))
+                if -90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0:
+                    return lat, lon
+            except ValueError:
+                pass
     return None
 
 def extract_crops(text: str, current_crops: list[str]) -> list[str]:
@@ -471,6 +555,8 @@ def load_farmer_profile(ctx: Context, node_input: types.Content) -> Event:
         ctx.state["farmer_profile"] = {
             "language": "English",
             "location": "Unknown",
+            "latitude": None,
+            "longitude": None,
             "crops": [],
             "farm_size": "Unknown",
             "season": None
@@ -482,8 +568,12 @@ def load_farmer_profile(ctx: Context, node_input: types.Content) -> Event:
     loc = extract_location(text_query)
     if loc:
         profile["location"] = loc
+
+    coords = extract_coordinates(text_query)
+    if coords:
+        profile["latitude"], profile["longitude"] = coords
         
-    profile["crops"] = extract_crops(text_query, profile["crops"])
+    profile["crops"] = extract_crops(text_query, profile.get("crops", []))
     
     sz = extract_farm_size(text_query)
     if sz:
@@ -494,12 +584,14 @@ def load_farmer_profile(ctx: Context, node_input: types.Content) -> Event:
         profile["season"] = season
             
     season_str = f"- Season: {profile.get('season')}\n" if profile.get('season') else ""
+    coords_str = f"- Coordinates: {profile.get('latitude')}, {profile.get('longitude')}\n" if (profile.get("latitude") is not None and profile.get("longitude") is not None) else ""
     orchestrator_prompt = (
         f"Farmer Profile:\n"
-        f"- Location: {profile['location']}\n"
-        f"- Crops: {', '.join(profile['crops']) if profile['crops'] else 'None declared'}\n"
-        f"- Farm Size: {profile['farm_size']}\n"
-        f"- Language: {profile['language']}\n"
+        f"- Location: {profile.get('location', 'Unknown')}\n"
+        f"{coords_str}"
+        f"- Crops: {', '.join(profile.get('crops', [])) if profile.get('crops') else 'None declared'}\n"
+        f"- Farm Size: {profile.get('farm_size', 'Unknown')}\n"
+        f"- Language: {profile.get('language', 'English')}\n"
         f"{season_str}\n"
         f"User Query: {text_query}"
     )
@@ -529,16 +621,11 @@ def is_season_missing(query: str) -> bool:
     seasons = ["kharif", "rabi", "zaid", "खरीफ", "रबी", "जायद", "ज़ैद"]
     return not any(s in q for s in seasons)
 
-async def _hitl_checkpoint_impl(ctx: Context, node_input: dict) -> Event | AsyncGenerator:
+async def _hitl_checkpoint_impl(ctx: Context, node_input: Any) -> Event | AsyncGenerator:
     """Handles Human-in-the-Loop inputs if the orchestrator requests it."""
     query = ctx.state.get("user_query", "")
     profile = ctx.state.get("farmer_profile", {})
     
-    # Update language based on the query
-    lang = detect_language(query)
-    if lang == "Hindi":
-        profile["language"] = "Hindi"
-        
     language = profile.get("language", "English")
     if language == "Hindi":
         clarification_msg = (
@@ -550,52 +637,79 @@ async def _hitl_checkpoint_impl(ctx: Context, node_input: dict) -> Event | Async
     else:
         clarification_msg = "To recommend the best crop, please tell me which season you are planning to farm in: Kharif, Rabi, or Zaid."
         
+    if hasattr(node_input, "model_dump"):
+        node_input_dict = node_input.model_dump()
+    elif isinstance(node_input, dict):
+        node_input_dict = node_input
+    elif hasattr(node_input, "__dict__"):
+        node_input_dict = vars(node_input)
+    else:
+        node_input_dict = {"response": str(node_input) if node_input is not None else ""}
+
     if is_crop_recommendation_request(query) and is_season_missing(query):
-        node_input = {
+        node_input_dict = {
             "response": "",
             "needs_more_info": True,
             "info_request_message": clarification_msg
         }
         
-    needs_more_info = node_input.get("needs_more_info", False)
-    info_request_message = node_input.get("info_request_message", "")
-    response = node_input.get("response", "")
+    needs_more_info = node_input_dict.get("needs_more_info", False)
+    info_request_message = node_input_dict.get("info_request_message", "")
+    response = node_input_dict.get("response", "")
     
     if needs_more_info:
         if not ctx.resume_inputs or "more_info" not in ctx.resume_inputs:
             yield RequestInput(interrupt_id="more_info", message=info_request_message)
             return
         
-        user_answer = ctx.resume_inputs.pop("more_info")
+        raw_answer = ctx.resume_inputs.pop("more_info")
+        if isinstance(raw_answer, dict):
+            user_answer = str(raw_answer.get("result", raw_answer)).strip()
+        elif raw_answer is None:
+            user_answer = ""
+        else:
+            user_answer = str(raw_answer).strip()
+
         original_query = ctx.state.get("user_query", "")
-        updated_query = f"{original_query} (Additional farmer response: {user_answer})"
+        if user_answer:
+            updated_query = f"{original_query} (Additional farmer response: {user_answer})"
+        else:
+            updated_query = original_query
         ctx.state["user_query"] = updated_query
         
-        # Extract and update season if present
-        season = extract_season(user_answer)
-        if season:
-            profile["season"] = season
-            
-        # Update language based on the user answer
-        if detect_language(user_answer) == "Hindi":
+        # Update language based on the user answer if present
+        if user_answer:
+            profile["language"] = detect_language(user_answer)
+        elif detect_language(original_query) == "Hindi":
             profile["language"] = "Hindi"
-        elif detect_language(original_query) == "English":
+        else:
             profile["language"] = "English"
             
-        loc = extract_location(user_answer)
-        if loc:
-            profile["location"] = loc
-            
-        profile["crops"] = extract_crops(user_answer, profile.get("crops", []))
-        
-        sz = extract_farm_size(user_answer)
-        if sz:
-            profile["farm_size"] = sz
-            
+        if user_answer:
+            season = extract_season(user_answer)
+            if season:
+                profile["season"] = season
+
+            loc = extract_location(user_answer)
+            if loc:
+                profile["location"] = loc
+
+            coords = extract_coordinates(user_answer)
+            if coords:
+                profile["latitude"], profile["longitude"] = coords
+
+            profile["crops"] = extract_crops(user_answer, profile.get("crops", []))
+
+            sz = extract_farm_size(user_answer)
+            if sz:
+                profile["farm_size"] = sz
+
         season_str = f"- Season: {profile.get('season')}\n" if profile.get('season') else ""
+        coords_str = f"- Coordinates: {profile.get('latitude')}, {profile.get('longitude')}\n" if (profile.get("latitude") is not None and profile.get("longitude") is not None) else ""
         orchestrator_prompt = (
             f"Farmer Profile:\n"
             f"- Location: {profile.get('location', 'Unknown')}\n"
+            f"{coords_str}"
             f"- Crops: {', '.join(profile.get('crops', [])) if profile.get('crops') else 'None declared'}\n"
             f"- Farm Size: {profile.get('farm_size', 'Unknown')}\n"
             f"- Language: {profile.get('language', 'English')}\n"

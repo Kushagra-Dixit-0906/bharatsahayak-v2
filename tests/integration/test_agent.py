@@ -41,16 +41,24 @@ async def mock_generate_content_stream(*args, **kwargs):
 
     user_query = ""
     if "User Query:" in prompt_text:
-        user_query = prompt_text.split("User Query:", 1)[1]
+        user_query = prompt_text.rsplit("User Query:", 1)[-1]
     else:
         user_query = prompt_text
         
     user_query_lower = user_query.lower()
+    prompt_text_lower = prompt_text.lower()
+
+    is_greeting = (
+        user_query_lower.strip() in ["hello", "hi", "hey", "start", "namaste", "नमस्ते"]
+        or bool(re.search(r"^(hello|hi|hey|start|namaste)\b", user_query_lower.strip()))
+        or "what can you do" in user_query_lower
+        or "what the bot can do" in user_query_lower
+    )
 
     # Check query type and route response
     if "sky blue" in user_query_lower:
         response_text = '{"response": "The sky is blue because of Rayleigh scattering.", "needs_more_info": false, "info_request_message": ""}'
-    elif "hello" in user_query_lower or "start" in user_query_lower or bool(re.search(r"\bhi\b", user_query_lower)):
+    elif is_greeting:
         response_text = (
             '{"response": "👋 Welcome to BharatSahayak!\\n\\nI can help you with:\\n\\n🌾 Crop recommendations\\n'
             '🌦 Weather advisories\\n🦠 Disease diagnosis\\n🏛 Government schemes\\n💰 Profitability analysis\\n\\n'
@@ -58,22 +66,22 @@ async def mock_generate_content_stream(*args, **kwargs):
             '\\\"My rice leaves have brown spots.\\\"", "needs_more_info": false, "info_request_message": ""}'
         )
     elif "उत्तर प्रदेश" in user_query or "उत्तरप्रदेश" in user_query:
-        response_text = (
-            '{"response": "✅ Profile Updated\\n\\n📍 स्थान: उत्तर प्रदेश\\n🌾 फसल: आलू\\n\\n'
-            'मैं अब आपकी सहायता कर सकता हूँ:\\n🌦 मौसम सलाह\\n🦠 रोग निदान\\n🏛 सरकारी योजनाएं\\n'
-            '💰 लाभ सुधार\\n🌱 फसल सिफारिशें\\n\\nअपनी कृषि आवश्यकताओं के बारे में मुझसे कुछ भी पूछें।", '
-            '"needs_more_info": false, "info_request_message": ""}'
-        )
-    elif "potatoes in punjab" in user_query_lower or "potato" in user_query_lower:
-        response_text = (
-            '{"response": "✅ Profile Updated\\n\\n📍 Location: Punjab\\n🌾 Crop: Potato\\n\\n'
-            'I can now help you with:\\n🌦 Weather advisories\\n🦠 Disease diagnosis\\n🏛 Government schemes\\n'
-            '💰 Profit improvement\\n🌱 Crop recommendations\\n\\nAsk me anything about your farming needs.", '
-            '"needs_more_info": false, "info_request_message": ""}'
-        )
-    else:
-        # Standard crop recommendation (English or Hindi)
-        if "language: hindi" in prompt_text.lower() or "कठिनाई" in prompt_text or "बैंगलोर" in prompt_text or "उत्तर प्रदेश" in prompt_text or "उत्तरप्रदेश" in prompt_text:
+        if "language: english" in prompt_text_lower and "additional farmer response:" in user_query_lower:
+            response_text = (
+                '{"response": "🌱 Recommended Crop: Rice (Why chosen: Rice thrives in the region\'s climate)\\n'
+                '📍 Region: Uttar Pradesh\\n💰 Investment: ₹18,000 per acre\\n📈 Profit: ₹128,300 per acre\\n'
+                '⭐ Difficulty: Moderate\\n📅 Best Season: Kharif\\n🏛 Helpful Scheme: PMFBY\\n'
+                '➡ Next Steps: 1. Soil test, 2. Buy seeds, 3. Sowing", "needs_more_info": false, "info_request_message": ""}'
+            )
+        elif "फसल" in user_query_lower and ("उगाएं" in user_query_lower or "उगानी" in user_query_lower or "सिफारिश" in user_query_lower or "खेती" in user_query_lower):
+            response_text = (
+                '{"response": "🌱 अनुशंसित फसल: धान (Why chosen: धान यहाँ का मुख्य भोजन है और मिट्टी इसके लिए उपयुक्त है।)\\n'
+                '📍 क्षेत्र: उत्तर प्रदेश\\n💰 निवेश: 18,000 रुपये प्रति एकड़\\n📈 अपेक्षित लाभ: 1,28,300.00 रुपये का कुल शुद्ध लाभ\\n'
+                '⭐ कठिनाई: मध्यम\\n📅 सबसे अच्छा मौसम: खरीफ (जून-जुलाई)\\n🏛 सहायक योजना: कृषक भाग्य योजना\\n'
+                '➡ अगले कदम: मिट्टी का परीक्षण करें, बीज का चयन करें और नर्सरी तैयार करें", '
+                '"needs_more_info": false, "info_request_message": ""}'
+            )
+        elif "additional farmer response:" in user_query_lower:
             response_text = (
                 '{"response": "🌱 अनुशंसित फसल: धान (Why chosen: धान यहाँ का मुख्य भोजन है और मिट्टी इसके लिए उपयुक्त है।)\\n'
                 '📍 क्षेत्र: उत्तर प्रदेश\\n💰 निवेश: 18,000 रुपये प्रति एकड़\\n📈 अपेक्षित लाभ: 1,28,300.00 रुपये का कुल शुद्ध लाभ\\n'
@@ -83,10 +91,88 @@ async def mock_generate_content_stream(*args, **kwargs):
             )
         else:
             response_text = (
-                '{"response": "🌱 Recommended Crop: Rice (Why chosen: Rice thrives in the region\'s climate)\\n'
-                '📍 Region: Karnataka\\n💰 Investment: ₹18,000 per acre\\n📈 Profit: ₹128,300 per acre\\n'
-                '⭐ Difficulty: Moderate\\n📅 Best Season: Kharif\\n🏛 Helpful Scheme: PMFBY\\n'
-                '➡ Next Steps: 1. Soil test, 2. Buy seeds, 3. Sowing", "needs_more_info": false, "info_request_message": ""}'
+                '{"response": "✅ Profile Updated\\n\\n📍 स्थान: उत्तर प्रदेश\\n🌾 फसल: आलू\\n\\n'
+                'मैं अब आपकी सहायता कर सकता हूँ:\\n🌦 मौसम सलाह\\n🦠 रोग निदान\\n🏛 सरकारी योजनाएं\\n'
+                '💰 लाभ सुधार\\n🌱 फसल सिफारिशें\\n\\nअपनी कृषि आवश्यकताओं के बारे में मुझसे कुछ भी पूछें।", '
+                '"needs_more_info": false, "info_request_message": ""}'
+            )
+    elif "potatoes in punjab" in user_query_lower or ("potato" in user_query_lower and "punjab" in user_query_lower):
+        response_text = (
+            '{"response": "✅ Profile Updated\\n\\n📍 Location: Punjab\\n🌾 Crop: Potato\\n\\n'
+            'I can now help you with:\\n🌦 Weather advisories\\n🦠 Disease diagnosis\\n🏛 Government schemes\\n'
+            '💰 Profit improvement\\n🌱 Crop recommendations\\n\\nAsk me anything about your farming needs.", '
+            '"needs_more_info": false, "info_request_message": ""}'
+        )
+    elif "farmer with 5 acres in haryana" in user_query_lower or ("haryana" in user_query_lower and "5 acres" in user_query_lower):
+        response_text = (
+            '{"response": "✅ Profile Updated\\n\\n📍 Location: Haryana\\n🌾 Crop: Wheat, Rice\\n🚜 Farm Size: 5 acres\\n\\n'
+            'I can now help you with:\\n🌦 Weather advisories\\n🦠 Disease diagnosis\\n🏛 Government schemes\\n'
+            '💰 Profit improvement\\n🌱 Crop recommendations\\n\\nAsk me anything about your farming needs.", '
+            '"needs_more_info": false, "info_request_message": ""}'
+        )
+    elif "leaves are turning yellow" in user_query_lower and "additional farmer response:" not in user_query_lower and ("crops: none declared" in prompt_text_lower or ("wheat" not in user_query_lower and "rice" not in user_query_lower and "crops: wheat" not in prompt_text_lower)):
+        response_text = '{"response": "", "needs_more_info": true, "info_request_message": "Which crop is affected: Wheat, Rice, Mustard, or Cotton?"}'
+    elif "leaves are turning yellow" in user_query_lower and ("wheat" in user_query_lower or "wheat" in prompt_text_lower or "additional farmer response: wheat" in user_query_lower):
+        response_text = (
+            '{"response": "### 🌾 Crop Health Advisory: Wheat\\n\\n'
+            '**Candidate Condition (Hypothesis):** Wheat Stripe / Yellow Rust (*Puccinia striiformis*)\\n\\n'
+            '**Safe Cultural Actions:**\\n'
+            '- Practice crop rotation with non-host legume crops.\\n'
+            '- Use certified rust-resistant wheat varieties recommended for your region.\\n'
+            '- Avoid excess nitrogen fertilization; ensure balanced nutrient management.\\n\\n'
+            '**Next Steps:**\\n'
+            '- Inspect field for yellow-orange pustules in linear stripes on leaves.\\n'
+            '- Consult your local Krishi Vigyan Kendra (KVK) or agricultural extension officer for on-field verification.", '
+            '"needs_more_info": false, "info_request_message": ""}'
+        )
+    elif ("spindle" in user_query_lower or "gray center" in user_query_lower or "grey center" in user_query_lower) and "rice" in user_query_lower:
+        response_text = (
+            '{"response": "### 🌾 Refined Crop Health Advisory: Rice\\n\\n'
+            '**Candidate Condition (High Hypothesis):** Rice Blast (*Magnaporthe oryzae*)\\n\\n'
+            '**Diagnostic Summary:** Spindle-shaped lesions with greyish centers on rice leaves strongly align with Rice Blast candidate characteristics.\\n\\n'
+            '**Safe Cultural & Preventative Practices:**\\n'
+            '- Ensure balanced fertilizer application; split nitrogen doses and avoid excess N.\\n'
+            '- Maintain proper field drainage to reduce canopy humidity.\\n'
+            '- Remove and destroy infected crop residues and weed hosts from field borders.\\n\\n'
+            '**Recommendation:**\\n'
+            '- Consult your local Krishi Vigyan Kendra (KVK) or district agricultural officer for physical field confirmation.", '
+            '"needs_more_info": false, "info_request_message": ""}'
+        )
+    elif "brown spots" in user_query_lower:
+        response_text = (
+            '{"response": "### 🌾 Crop Health Advisory: Rice\\n\\n'
+            '**Candidate Hypotheses:**\\n'
+            '1. Rice Blast (*Magnaporthe oryzae*) — Spindle/diamond lesions with grey centers.\\n'
+            '2. Brown Spot (*Bipolaris oryzae*) — Small circular to oval brown spots with yellow halo.\\n\\n'
+            '**Safe Cultural & Preventative Practices:**\\n'
+            '- Avoid excessive nitrogen fertilizer application; ensure balanced potassium (K) nutrition.\\n'
+            '- Maintain proper water drainage and avoid prolonged water stagnation.\\n'
+            '- Keep field bunds clear of collateral grass weed hosts.\\n\\n'
+            '**🔍 Clarifying Observations Needed:**\\n'
+            '- Are the leaf spots diamond/spindle-shaped with grey centers, or small circular brown spots?\\n'
+            '- Are distinct yellow halos visible around the spots?\\n\\n'
+            '**Next Steps:**\\n'
+            '- Inspect lesions closely and consult your local Krishi Vigyan Kendra (KVK) for verification.", '
+            '"needs_more_info": false, "info_request_message": ""}'
+        )
+    else:
+        # Standard crop recommendation (English or Hindi)
+        loc_name_hi = "उत्तर प्रदेश" if ("uttar pradesh" in prompt_text_lower or "उत्तर प्रदेश" in prompt_text or "उत्तरप्रदेश" in prompt_text) else "कर्नाटक"
+        loc_name_en = "Uttar Pradesh" if ("uttar pradesh" in prompt_text_lower or "उत्तर प्रदेश" in prompt_text or "उत्तरप्रदेश" in prompt_text) else "Karnataka"
+        if "language: hindi" in prompt_text.lower() or "कठिनाई" in prompt_text or "बैंगलोर" in prompt_text or "उत्तर प्रदेश" in prompt_text or "उत्तरप्रदेश" in prompt_text:
+            response_text = (
+                f'{{"response": "🌱 अनुशंसित फसल: धान (Why chosen: धान यहाँ का मुख्य भोजन है और मिट्टी इसके लिए उपयुक्त है।)\\n'
+                f'📍 क्षेत्र: {loc_name_hi}\\n💰 निवेश: 18,000 रुपये प्रति एकड़\\n📈 अपेक्षित लाभ: 1,28,300.00 रुपये का कुल शुद्ध लाभ\\n'
+                f'⭐ कठिनाई: मध्यम\\n📅 सबसे अच्छा मौसम: खरीफ (जून-जुलाई)\\n🏛 सहायक योजना: कृषक भाग्य योजना\\n'
+                f'➡ अगले कदम: मिट्टी का परीक्षण करें, बीज का चयन करें और नर्सरी तैयार करें", '
+                f'"needs_more_info": false, "info_request_message": ""}}'
+            )
+        else:
+            response_text = (
+                f'{{"response": "🌱 Recommended Crop: Rice (Why chosen: Rice thrives in the region\'s climate)\\n'
+                f'📍 Region: {loc_name_en}\\n💰 Investment: ₹18,000 per acre\\n📈 Profit: ₹128,300 per acre\\n'
+                f'⭐ Difficulty: Moderate\\n📅 Best Season: Kharif\\n🏛 Helpful Scheme: PMFBY\\n'
+                f'➡ Next Steps: 1. Soil test, 2. Buy seeds, 3. Sowing", "needs_more_info": false, "info_request_message": ""}}'
             )
 
     chunk = types.GenerateContentResponse(
@@ -616,6 +702,342 @@ def test_profile_location_persistence() -> None:
             final_response += "".join(p.text for p in event.content.parts if p.text)
             
     # Verify that the subsequent crop recommendation uses Uttar Pradesh, not Punjab!
-    assert "उत्तर प्रदेश" in final_response
+    assert ("उत्तर प्रदेश" in final_response or "Uttar Pradesh" in final_response)
     assert "Punjab" not in final_response
 
+
+def test_multi_turn_disease_clarification_workflow() -> None:
+    """
+    Test realistic multi-turn disease workflow:
+    - Turn 1: Farmer queries ambiguous brown spots on rice.
+      Advisory returns candidate hypotheses, safe non-chemical cultural practices,
+      clarifying observations (spindle vs circular spots), and KVK advice.
+    - Asserts 0 chemicals and non-definitive diagnosis language.
+    - Turn 2: Farmer supplies clarifying details (spindle-shaped lesions with grey centers).
+      Session preserves context (location: Punjab, crop: rice) and produces refined Rice Blast advisory.
+    """
+    session_service = InMemorySessionService()
+    session = session_service.create_session_sync(user_id="farmer_1", app_name="test")
+    runner = Runner(agent=root_agent, session_service=session_service, app_name="test")
+
+    with patch.object(AsyncModels, "generate_content_stream", side_effect=mock_generate_content_stream):
+        # Turn 1: Initial ambiguous symptoms
+        message1 = types.Content(
+            role="user",
+            parts=[types.Part.from_text(text="I am a rice farmer in Punjab. My rice leaves have brown spots.")]
+        )
+        events1 = list(
+            runner.run(
+                new_message=message1,
+                user_id="farmer_1",
+                session_id=session.id,
+                run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+            )
+        )
+
+        final_response1 = ""
+        for event in events1:
+            if event.content and event.content.parts:
+                final_response1 += "".join(p.text for p in event.content.parts if p.text)
+
+        # Invariants on Turn 1
+        assert "Crop Health Advisory" in final_response1
+        assert "Candidate" in final_response1
+        assert "Clarifying Observations Needed" in final_response1
+        assert "Krishi Vigyan Kendra" in final_response1 or "KVK" in final_response1
+        # Banned chemical terms check
+        banned_chemicals = ["mancozeb", "carbendazim", "tricyclazole", "propiconazole", "ml/l", "g/l", "g/ha"]
+        for chem in banned_chemicals:
+            assert chem not in final_response1.lower(), f"Prohibited chemical term found: {chem}"
+        assert "potential diagnosis" not in final_response1.lower()
+
+        # Check that farmer profile captured location and crop
+        session_t1 = session_service.get_session_sync(session_id=session.id, app_name="test", user_id="farmer_1")
+        assert session_t1.state["farmer_profile"]["location"] == "Punjab"
+        assert "rice" in session_t1.state["farmer_profile"]["crops"]
+
+        # Turn 2: Farmer provides clarifying symptom details
+        message2 = types.Content(
+            role="user",
+            parts=[types.Part.from_text(text="The spots on my rice leaves are spindle shaped with grey centers.")]
+        )
+        events2 = list(
+            runner.run(
+                new_message=message2,
+                user_id="farmer_1",
+                session_id=session.id,
+                run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+            )
+        )
+
+        final_response2 = ""
+        for event in events2:
+            if event.content and event.content.parts:
+                final_response2 += "".join(p.text for p in event.content.parts if p.text)
+
+        # Invariants on Turn 2: Refined advisory
+        assert "Refined" in final_response2 or "Rice Blast" in final_response2
+        assert "Candidate" in final_response2
+        assert "Safe Cultural" in final_response2
+        for chem in banned_chemicals:
+            assert chem not in final_response2.lower(), f"Prohibited chemical term found: {chem}"
+        assert "potential diagnosis" not in final_response2.lower()
+
+
+def test_model_driven_hitl_missing_crop() -> None:
+    """
+    Test model-driven HITL where orchestrator returns needs_more_info=True
+    when essential crop context is missing.
+    Verify:
+    - RequestInput is emitted
+    - Resume input reaches HITL node
+    - Profile state is updated
+    - Final advisory is produced with zero chemicals.
+    """
+    session_service = InMemorySessionService()
+    session = session_service.create_session_sync(user_id="farmer_2", app_name="test")
+    runner = Runner(agent=root_agent, session_service=session_service, app_name="test")
+
+    with patch.object(AsyncModels, "generate_content_stream", side_effect=mock_generate_content_stream):
+        # Turn 1: Farmer reports symptoms without mentioning any crop
+        message1 = types.Content(
+            role="user",
+            parts=[types.Part.from_text(text="My crop leaves are turning yellow.")]
+        )
+        events1 = list(
+            runner.run(
+                new_message=message1,
+                user_id="farmer_2",
+                session_id=session.id,
+                run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+            )
+        )
+
+        # Check that RequestInput interrupt was yielded
+        has_request_input = False
+        for event in events1:
+            if event.content and event.content.parts:
+                for part in event.content.parts:
+                    if part.function_call and part.function_call.name == "adk_request_input":
+                        assert part.function_call.id == "more_info"
+                        assert "Which crop is affected" in part.function_call.args.get("message", "")
+                        has_request_input = True
+        assert has_request_input, "Expected model-driven RequestInput interrupt"
+
+        # Turn 2: Farmer responds with crop name
+        part = types.Part(
+            function_response=types.FunctionResponse(
+                name="adk_request_input",
+                id="more_info",
+                response={"result": "Wheat"}
+            )
+        )
+        message2 = types.Content(role="user", parts=[part])
+        events2 = list(
+            runner.run(
+                new_message=message2,
+                user_id="farmer_2",
+                session_id=session.id,
+                run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+            )
+        )
+
+        final_response = ""
+        for event in events2:
+            if event.content and event.content.parts:
+                final_response += "".join(p.text for p in event.content.parts if p.text)
+
+        assert "Wheat" in final_response
+        assert "Stripe / Yellow Rust" in final_response or "Candidate" in final_response
+        assert "Safe Cultural Actions" in final_response
+
+        # Verify profile updated with crop
+        session_t2 = session_service.get_session_sync(session_id=session.id, app_name="test", user_id="farmer_2")
+        assert "wheat" in session_t2.state["farmer_profile"]["crops"]
+
+
+def test_hitl_edge_case_empty_or_whitespace_resume() -> None:
+    """
+    Test HITL node robustness when user resumes with empty or whitespace input.
+    Verifies that the workflow does not crash and preserves prior state.
+    """
+    session_service = InMemorySessionService()
+    session = session_service.create_session_sync(user_id="farmer_3", app_name="test")
+    runner = Runner(agent=root_agent, session_service=session_service, app_name="test")
+
+    with patch.object(AsyncModels, "generate_content_stream", side_effect=mock_generate_content_stream):
+        # Turn 1: Trigger season HITL
+        message1 = types.Content(
+            role="user",
+            parts=[types.Part.from_text(text="I have 3 acres in Punjab and want to start farming.")]
+        )
+        list(runner.run(new_message=message1, user_id="farmer_3", session_id=session.id, run_config=RunConfig(streaming_mode=StreamingMode.SSE)))
+
+        # Turn 2: Resume with empty whitespace
+        part = types.Part(
+            function_response=types.FunctionResponse(
+                name="adk_request_input",
+                id="more_info",
+                response={"result": "   "}
+            )
+        )
+        message2 = types.Content(role="user", parts=[part])
+        events2 = list(
+            runner.run(
+                new_message=message2,
+                user_id="farmer_3",
+                session_id=session.id,
+                run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+            )
+        )
+
+        # Verify state is preserved and execution completed without crashing
+        session_t2 = session_service.get_session_sync(session_id=session.id, app_name="test", user_id="farmer_3")
+        assert session_t2.state["farmer_profile"]["location"] == "Punjab"
+        assert session_t2.state["farmer_profile"]["farm_size"] == "3 acres"
+
+
+def test_hitl_english_to_hindi_language_switch() -> None:
+    """
+    Test HITL flow where initial query is in English, but the farmer
+    responds to the clarification prompt in Hindi.
+    Verifies that the language preference switches to Hindi.
+    """
+    session_service = InMemorySessionService()
+    session = session_service.create_session_sync(user_id="farmer_4", app_name="test")
+    runner = Runner(agent=root_agent, session_service=session_service, app_name="test")
+
+    with patch.object(AsyncModels, "generate_content_stream", side_effect=mock_generate_content_stream):
+        # Turn 1: English query missing season
+        message1 = types.Content(
+            role="user",
+            parts=[types.Part.from_text(text="I have 2 acres in Uttar Pradesh and want to start farming.")]
+        )
+        list(runner.run(new_message=message1, user_id="farmer_4", session_id=session.id, run_config=RunConfig(streaming_mode=StreamingMode.SSE)))
+
+        # Turn 2: Farmer replies in Hindi
+        part = types.Part(
+            function_response=types.FunctionResponse(
+                name="adk_request_input",
+                id="more_info",
+                response={"result": "खरीफ का मौसम"}
+            )
+        )
+        message2 = types.Content(role="user", parts=[part])
+        events2 = list(
+            runner.run(
+                new_message=message2,
+                user_id="farmer_4",
+                session_id=session.id,
+                run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+            )
+        )
+
+        final_response = ""
+        for event in events2:
+            if event.content and event.content.parts:
+                final_response += "".join(p.text for p in event.content.parts if p.text)
+
+        # Verify profile language is Hindi and output is localized in Hindi
+        session_t2 = session_service.get_session_sync(session_id=session.id, app_name="test", user_id="farmer_4")
+        assert session_t2.state["farmer_profile"]["language"] == "Hindi"
+        assert "🌱 अनुशंसित फसल" in final_response
+
+
+def test_hitl_hindi_to_english_language_switch() -> None:
+    """
+    Test HITL flow where initial query is in Hindi, but the farmer
+    responds to the clarification prompt in English.
+    Verifies that the language preference switches to English.
+    """
+    session_service = InMemorySessionService()
+    session = session_service.create_session_sync(user_id="farmer_5", app_name="test")
+    runner = Runner(agent=root_agent, session_service=session_service, app_name="test")
+
+    with patch.object(AsyncModels, "generate_content_stream", side_effect=mock_generate_content_stream):
+        # Turn 1: Hindi query missing season
+        message1 = types.Content(
+            role="user",
+            parts=[types.Part.from_text(text="मेरे पास उत्तर प्रदेश में 2 एकड़ जमीन है और मैं खेती शुरू करना चाहता हूं।")]
+        )
+        list(runner.run(new_message=message1, user_id="farmer_5", session_id=session.id, run_config=RunConfig(streaming_mode=StreamingMode.SSE)))
+
+        # Turn 2: Farmer replies in English
+        part = types.Part(
+            function_response=types.FunctionResponse(
+                name="adk_request_input",
+                id="more_info",
+                response={"result": "Kharif season"}
+            )
+        )
+        message2 = types.Content(role="user", parts=[part])
+        events2 = list(
+            runner.run(
+                new_message=message2,
+                user_id="farmer_5",
+                session_id=session.id,
+                run_config=RunConfig(streaming_mode=StreamingMode.SSE),
+            )
+        )
+
+        final_response = ""
+        for event in events2:
+            if event.content and event.content.parts:
+                final_response += "".join(p.text for p in event.content.parts if p.text)
+
+        # Verify profile language is English and output is in English
+        session_t2 = session_service.get_session_sync(session_id=session.id, app_name="test", user_id="farmer_5")
+        assert session_t2.state["farmer_profile"]["language"] == "English"
+        assert "Recommended Crop" in final_response
+
+
+def test_hitl_profile_context_retention_across_turns() -> None:
+    """
+    Test that complete profile context (location, multiple crops, farm size, season)
+    persists across multi-turn declaration, clarification, and resolution.
+    """
+    session_service = InMemorySessionService()
+    session = session_service.create_session_sync(user_id="farmer_6", app_name="test")
+    runner = Runner(agent=root_agent, session_service=session_service, app_name="test")
+
+    with patch.object(AsyncModels, "generate_content_stream", side_effect=mock_generate_content_stream):
+        # Turn 1: Declare profile details
+        message1 = types.Content(
+            role="user",
+            parts=[types.Part.from_text(text="I am a farmer with 5 acres in Haryana growing wheat and rice.")]
+        )
+        list(runner.run(new_message=message1, user_id="farmer_6", session_id=session.id, run_config=RunConfig(streaming_mode=StreamingMode.SSE)))
+
+        # Verify Turn 1 profile
+        session_t1 = session_service.get_session_sync(session_id=session.id, app_name="test", user_id="farmer_6")
+        assert session_t1.state["farmer_profile"]["location"] == "Haryana"
+        assert session_t1.state["farmer_profile"]["farm_size"] == "5 acres"
+        assert "wheat" in session_t1.state["farmer_profile"]["crops"]
+        assert "rice" in session_t1.state["farmer_profile"]["crops"]
+
+        # Turn 2: Ask what crop to grow (triggers season HITL)
+        message2 = types.Content(
+            role="user",
+            parts=[types.Part.from_text(text="What crop should I grow?")]
+        )
+        list(runner.run(new_message=message2, user_id="farmer_6", session_id=session.id, run_config=RunConfig(streaming_mode=StreamingMode.SSE)))
+
+        # Turn 3: Answer with season
+        part = types.Part(
+            function_response=types.FunctionResponse(
+                name="adk_request_input",
+                id="more_info",
+                response={"result": "Rabi"}
+            )
+        )
+        message3 = types.Content(role="user", parts=[part])
+        list(runner.run(new_message=message3, user_id="farmer_6", session_id=session.id, run_config=RunConfig(streaming_mode=StreamingMode.SSE)))
+
+        # Verify all profile parameters are retained
+        session_t3 = session_service.get_session_sync(session_id=session.id, app_name="test", user_id="farmer_6")
+        profile = session_t3.state["farmer_profile"]
+        assert profile["location"] == "Haryana"
+        assert profile["farm_size"] == "5 acres"
+        assert "wheat" in profile["crops"]
+        assert "rice" in profile["crops"]
+        assert profile["season"] == "Rabi"

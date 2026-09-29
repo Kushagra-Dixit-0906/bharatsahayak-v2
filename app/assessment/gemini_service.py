@@ -19,7 +19,7 @@ using Gemini 2.5 Flash, backed by an automated 3-stage validation pipeline and
 a 100% deterministic pure-Python fallback generator.
 
 Architectural Invariants:
-1. Isolated Service: Not integrated into the production agent or orchestrator flow yet.
+1. Production Integration: Integrated into the agent workflow via the MCP get_environmental_assessment tool.
 2. Controlled Prompt: Must exclusively use build_gemini_prompt(context).
 3. Authoritative Assessment: Gemini is an explanation layer; it cannot mutate or
    override Phase 5B deterministic findings.

@@ -85,7 +85,17 @@ def build_gemini_prompt(context: GeminiAssessmentContext) -> str:
         "   - NO quantitative fertilizer dosage calculations (e.g. kg/acre).\n"
         "   - NO exact irrigation depth or quantitative water volume prescriptions.\n"
         "   - NO crop disease or pest diagnoses from satellite data alone.\n"
-        "   - NO quantitative yield loss predictions."
+        "   - NO quantitative yield loss predictions.\n"
+        "7. Farmer-Facing Translation & Communication Quality:\n"
+        "   - Act as an empathetic, practical agricultural advisor speaking directly to an Indian smallholder farmer.\n"
+        "   - Translate technical remote-sensing telemetry into simple, intuitive farming language:\n"
+        "     * Soil Moisture: Describe soil water content intuitively as adequate, dry, or wet (e.g., 'Topsoil moisture levels are currently adequate for crop growth' rather than technical telemetry like 'topsoil volumetric water fraction is 0.47').\n"
+        "     * Vegetation / Crop Greenness: Describe NDVI and canopy vigor as crop greenness, vegetative health, or growth vigor relative to typical past seasons (rather than technical phrases like '3-year historical seasonal baseline' or raw decimal numbers).\n"
+        "     * Weather & Rainfall: Express rainfall in mm or simple seasonal terms (e.g. 'recent light rainfall', 'sustained dry period').\n"
+        "   - In 'observations', state 2-3 key practical facts about crop health, soil moisture, and rainfall in simple farmer language.\n"
+        "   - In 'interpretation', explain clearly in empathetic, everyday words what these conditions mean for crop growth and field care.\n"
+        "   - In 'recommended_next_steps', write clear, natural, actionable sentences directed to the farmer (e.g., 'Inspect crop foliage across your field for any signs of uneven growth') without echoing internal enum or action_type names.\n"
+        "   - Never invent soil pH, NPK values, soil texture, disease diagnoses, or chemical recommendations."
     )
 
     # 2. Output Schema & Formatting Specifications

@@ -106,7 +106,7 @@ async def test_hitl_checkpoint_multilingual_season_clarification_hindi() -> None
     """Test that hitl_checkpoint uses Hindi clarification prompt for Hindi queries."""
     ctx = MockContext()
     ctx.state["user_query"] = "मेरे पास उत्तर प्रदेश में 2 एकड़ जमीन है और मैं खेती शुरू करना चाहता हूं।"
-    ctx.state["farmer_profile"] = {"crops": [], "location": "Uttar Pradesh", "farm_size": "2 acres", "language": "English"}
+    ctx.state["farmer_profile"] = {"crops": [], "location": "Uttar Pradesh", "farm_size": "2 acres", "language": "Hindi"}
     ctx.resume_inputs = {}
     
     node_input = {
