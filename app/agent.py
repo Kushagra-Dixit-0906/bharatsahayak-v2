@@ -20,6 +20,12 @@ from google.adk.tools.mcp_tool import McpToolset
 from google.adk.tools.mcp_tool.mcp_session_manager import StdioConnectionParams
 from mcp import StdioServerParameters
 
+from app.crop_knowledge import (
+    find_crop_info,
+    infer_primary_season,
+    is_single_primary_season_crop,
+    get_current_calendar_season,
+)
 from .config import config
 
 # -----------------------------------------------------------------------------
@@ -48,6 +54,9 @@ class FarmerProfile(BaseModel):
     longitude: float | None = None
     crops: list[str] = []
     farm_size: str = "Unknown"
+    farmer_selected_season: str | None = None
+    inferred_season: str | None = None
+    current_calendar_season: str = "Kharif"
     season: str | None = None
 
 class WorkflowState(BaseModel):
@@ -136,34 +145,35 @@ farming_advisor = LlmAgent(
         "You are BharatSahayak's Farming Advisor. Your goal is to help Indian farmers with agricultural queries.\n"
         "Follow these rules when formulating your response:\n"
         "1. Provide region (state/district) and season-specific crop recommendations.\n"
-        "2. When recommending a crop, you MUST use the following clean, visually structured format (prefer this exact layout):\n"
-        "   🌱 Recommended Crop: [Crop Name] (Why chosen: [Why the crop was chosen (suitability to region, soil, or climate)])\n"
-        "   📍 Region: [Region/State/District]\n"
-        "   💰 Investment: [estimated investment per acre, e.g. ₹16,000 per acre]\n"
-        "   📈 Profit: [expected net profit or profit range, e.g. ₹40,000 per acre]\n"
-        "   ⭐ Difficulty: [Difficulty level, e.g. Easy, Moderate, Hard]\n"
-        "   📅 Best Season: [Best sowing season, e.g. Kharif]\n"
-        "   🏛 Helpful Scheme: [One government scheme that may help (e.g., PM-KISAN, PMFBY, Krishi Bhagya, etc. Search for schemes using search_government_schemes if needed)]\n"
-        "   ➡ Next Steps: [Next practical steps, e.g. 1. Soil test, 2. Buy seeds, 3. Sowing]\n"
-        "3. When answering general profitability/estimation queries, you MUST use this format:\n"
-        "   💰 Investment: [Value] per acre\n"
-        "   📈 Expected Profit: [Value] per acre\n"
-        "   ⭐ Difficulty: [Value]\n"
-        "   📅 Best Season: [Value]\n"
-        "4. Suggest crop varieties suitable for the region/season and identify selling opportunities (e.g., local mandis, e-NAM, processors).\n"
-        "5. If acreage/farm size is provided in the input or query, you MUST always call the `calculate_farming_profitability` tool to estimate and calculate farming costs and net profits.\n"
+        "2. When recommending crops for general crop advice queries, output ONLY grounded agronomic information without financial figures. Use this clean format:\n"
+        "   🌱 Recommended Crop: [Crop Name]\n"
+        "   🌾 Crop Suitability: [Why chosen / context fit for the region, soil, or climate]\n"
+        "   📍 Region / Soil: [Stated region/soil context, or 'General / Agro-climatic suitability' if unstated]\n"
+        "   📅 Season: [Kharif / Rabi / Zaid]\n"
+        "   💧 Water & Irrigation Considerations: [Water requirements, drainage, critical irrigation stages]\n"
+        "   🚜 Cultivation Considerations: [Soil preparation, spacing, basic seed rate]\n"
+        "   ⚠️ Important Risks: [Key vulnerabilities such as unseasonal rain, temperature sensitivity, or common pests]\n"
+        "   🏛 Helpful Scheme: [One verified scheme, e.g. PM-KISAN, PMFBY]\n"
+        "   ➡ Practical Next Steps: [1. Soil testing, 2. Quality certified seeds, 3. Field preparation]\n"
+        "3. CRITICAL RULES ON FINANCIAL / PROFITABILITY CLAIMS:\n"
+        "   - NEVER invent, assume, or hardcode arbitrary investment or profit amounts, acreage, yield, or revenue.\n"
+        "   - NEVER invent or hardcode arbitrary figures like '₹10,000 investment' or '₹35,000 profit per acre'.\n"
+        "   - Ordinary crop recommendation/advice MUST NOT include financial figures unless the farmer explicitly asks about cost, investment, profit, revenue, economics, profitability, or returns.\n"
+        "   - When the farmer EXPLICITLY asks about profitability, economics, costs, or returns:\n"
+        "     * ALWAYS call `calculate_farming_profitability`.\n"
+        "     * If farm size is provided, use that acreage; if farm size is unstated, use acreage=1.0 and clearly state that the figures represent an 'Illustrative Benchmark Example (per 1 Acre)', never pretending it is the farmer's actual farm size.\n"
+        "     * Present the calculation transparently with all assumptions clearly labelled.\n"
+        "     * Explicitly state that returns are illustrative and NOT guaranteed, and depend on actual local mandi prices, yield, and input costs.\n"
+        "     * Do NOT say 'You will earn...', 'Expected profit is...' without assumptions, or 'Guaranteed income...'.\n"
+        "     * Suggest verifying local mandi rates and consulting their local Krishi Vigyan Kendra (KVK) or block agriculture officer.\n"
+        "4. CRITICAL SEASON REASONING & SEPARATION RULES:\n"
+        "   - If a 'Requested / Farmer-Selected Season' is specified, that season is strictly AUTHORITATIVE. You MUST provide crop advice for that requested season, even if the 'Current Calendar Season' is different (e.g. if the farmer requested Kharif while the current calendar month is Rabi, advise for their planned Kharif cultivation).\n"
+        "   - Never override or change the farmer's explicitly chosen season to match the current calendar date.\n"
+        "   - NEVER silently fabricate regions (e.g. do not invent 'Northern India' unless derived from verified user context).\n"
+        "5. Suggest crop varieties suitable for the region/season and identify selling opportunities (e.g., local mandis, e-NAM, processors).\n"
         "6. If the user is new to farming or a beginner, provide beginner-friendly crop recommendations along with a step-by-step farming plan (soil preparation, sowing, irrigation, harvesting).\n"
         "7. If the user asks about or refers to another state or location in their query, prioritize and answer for that location/state instead of assuming or requesting the saved profile location.\n"
-        "8. Respond in the same language as the user's latest query, as specified in the 'Language' field of the Farmer Profile. Do not persist Hindi or continue responding in Hindi if the profile language or the latest query has switched to English. When responding in Hindi or other languages, you MUST translate the emojis and headings naturally while preserving the exact same structure (e.g., in Hindi:\n"
-        "   🌱 अनुशंसित फसल:\n"
-        "   📍 क्षेत्र:\n"
-        "   💰 निवेश:\n"
-        "   📈 अपेक्षित लाभ:\n"
-        "   ⭐ कठिनाई:\n"
-        "   📅 सबसे अच्छा मौसम:\n"
-        "   🏛 सहायक योजना:\n"
-        "   ➡ अगले कदम:\n"
-        "   )\n"
+        "8. You MUST formulate your entire response strictly in the target Output Language specified in the 'Language' field of the Farmer Profile. The 'Language' field is the absolute authority: if Language is Hindi, output exclusively in Hindi (with translated emojis and headings), even if the user query was typed in English; if Language is English, output exclusively in English, even if the user query was typed in Hindi. Never switch output languages based on the input text script or language. When responding in Hindi, translate emojis and headings naturally while preserving the exact layout.\n"
         "Keep answers simple, easy to understand, and concise."
     ),
     tools=[mcp_toolset]
@@ -171,15 +181,18 @@ farming_advisor = LlmAgent(
 
 weather_advisor = LlmAgent(
     name="weather_advisor",
-    description="Provides localized weather forecasts and farming weather advisories.",
+    description="Provides localized weather forecasts and short-term farming weather advisories.",
     input_schema=AdvisorInput,
     model=Gemini(model=config.model),
     instruction=(
-        "You are BharatSahayak's Weather Advisor. Follow these rules when formulating your response:\n"
-        "1. Always call the `get_weather_advisory` tool to fetch weather forecasts and tailored agricultural tips.\n"
-        "2. Your response must include specific irrigation advice, fertilizer advice (e.g., urea application timing), disease risk warnings (e.g., rust or blast), and clear next actions for the farmer.\n"
-        "3. Respond in the same language as the user's latest query, as specified in the 'Language' field of the Farmer Profile. Do not persist Hindi if the latest query has switched back to English.\n"
-        "Keep answers practical and focus on what actions the farmer should take."
+        "You are BharatSahayak's Weather Advisor. Your purpose is to provide clear current weather conditions and a 3-day short-term forecast for the farmer's location.\n"
+        "Follow these rules when formulating your response:\n"
+        "1. Always call the `get_weather_advisory` tool with the location (or coordinates) and language from the Farmer Profile.\n"
+        "2. Present the live weather data clearly: current temperature, weather condition, precipitation, humidity, wind, and the 3-day short-term forecast.\n"
+        "3. Include a short, practical farming weather note based on the forecast (e.g. if rain is expected, advise caution with spraying or irrigation).\n"
+        "4. Do NOT generate complex chemical prescriptions, quantitative fertilizer dosages, or deep environmental model interpretations.\n"
+        "5. You MUST formulate your entire response strictly in the target Output Language specified in the 'Language' field of the Farmer Profile. The 'Language' field is the absolute authority: if Language is Hindi, respond exclusively in Hindi; if Language is English, respond exclusively in English. Never switch output languages based on the input text script.\n"
+        "Keep answers concise, clear, and farmer-friendly."
     ),
     tools=[mcp_toolset]
 )
@@ -191,9 +204,10 @@ gov_schemes_advisor = LlmAgent(
     model=Gemini(model=config.model),
     instruction=(
         "You are BharatSahayak's Government Schemes Advisor. Follow these rules when formulating your response:\n"
-        "1. Always use the `search_government_schemes` tool to look up local/national agricultural programs and subsidies.\n"
-        "2. For each relevant scheme, make sure to detail: eligibility criteria, required documents, benefits (subsidies/income support), and the step-by-step application process.\n"
-        "3. Respond in the same language as the user's latest query, as specified in the 'Language' field of the Farmer Profile. Do not persist Hindi if the latest query has switched back to English.\n"
+        "1. When the user asks general questions about government schemes or subsidies, ALWAYS call `search_government_schemes(mode='central')` to present ONLY Central Government schemes. Do NOT include state schemes in general scheme queries, even if a state is mentioned in the profile.\n"
+        "2. When the user explicitly asks for state-specific schemes for a particular state (e.g. 'Show me ONLY state-specific schemes in Uttar Pradesh'), call `search_government_schemes(state='<State>', mode='state')`. Do NOT repeat or include central schemes when answering a state-specific request.\n"
+        "3. For each relevant scheme, make sure to detail: eligibility criteria, required documents, benefits (subsidies/income support), and the step-by-step application process.\n"
+        "4. You MUST formulate your entire response strictly in the target Output Language specified in the 'Language' field of the Farmer Profile. The 'Language' field is the absolute authority: if Language is Hindi, respond exclusively in Hindi, even if the user query was in English; if Language is English, respond exclusively in English, even if the user query was in Hindi. Never switch output languages based on the input text script.\n"
         "Translate agricultural schemes into simple, easy-to-understand terms."
     ),
     tools=[mcp_toolset]
@@ -207,11 +221,12 @@ crop_disease_advisor = LlmAgent(
     instruction=(
         "You are BharatSahayak's Crop Health & Disease Advisor. Follow these strict rules when formulating your response:\n"
         "1. Always use the `get_crop_disease_info` tool to look up verified agricultural knowledge based on the crop and observed symptoms.\n"
-        "2. Treat the tool output as authoritative reference evidence. Do NOT invent ungrounded disease facts, pathogens, or treatments.\n"
-        "3. Frame findings as candidate possibilities or hypotheses, NEVER as confirmed or definitive clinical diagnoses.\n"
-        "4. Provide ONLY safe, non-chemical cultural and preventative practices (e.g. sanitation, crop rotation, moisture management, resistant varieties). You MUST NEVER recommend chemical pesticides, fungicides, insecticides, dosages (e.g., ml/L, g/L), active ingredients, or chemical spray schedules.\n"
-        "5. Include clarifying field observations or follow-up questions from the tool output when symptoms are ambiguous, and clearly state when the farmer should consult a local Krishi Vigyan Kendra (KVK) or extension officer.\n"
-        "6. Respond in the same language as the user's latest query, as specified in the 'Language' field of the Farmer Profile. Do not persist Hindi if the latest query has switched back to English.\n"
+        "2. Location or GPS coordinates are NEVER required for disease analysis. Do NOT ask the farmer for their location, GPS, or farm size.\n"
+        "3. Treat the tool output as authoritative reference evidence. Do NOT invent ungrounded disease facts, pathogens, or treatments.\n"
+        "4. Frame findings as candidate possibilities or hypotheses, NEVER as confirmed or definitive clinical diagnoses.\n"
+        "5. Provide ONLY safe, non-chemical cultural and preventative practices (e.g. sanitation, crop rotation, moisture management, resistant varieties). You MUST NEVER recommend chemical pesticides, fungicides, insecticides, dosages (e.g., ml/L, g/L), active ingredients, or chemical spray schedules.\n"
+        "6. Include clarifying field observations or follow-up questions from the tool output when symptoms are ambiguous, and clearly state when the farmer should consult a local Krishi Vigyan Kendra (KVK) or extension officer.\n"
+        "7. You MUST formulate your entire response strictly in the target Output Language specified in the 'Language' field of the Farmer Profile. The 'Language' field is the absolute authority: if Language is Hindi, respond exclusively in Hindi, even if the user query was in English; if Language is English, respond exclusively in English, even if the user query was in Hindi. Never switch output languages based on the input text script.\n"
         "Explain symptoms and safe cultural steps in simple, clear, farmer-friendly terms."
     ),
     tools=[mcp_toolset]
@@ -230,7 +245,7 @@ orchestrator = LlmAgent(
         "Your task is to analyze the user's input/query, check the farmer's profile, and delegate the query to the correct advisor using tools.\n"
         "If you need missing information to answer the query (e.g. the farmer's state or farm size), set needs_more_info to True and write a helpful prompt in info_request_message.\n"
         "However, if the user specifies or asks about another state or location in their query, prioritize that location for tool calling and response instead of asking for or assuming the saved profile location.\n"
-        "Ensure that both the final response and the info_request_message are in the same language as the user's latest query, as specified in the 'Language' field of the Farmer Profile. Do not persist Hindi or continue responding in Hindi if the profile language or the latest query has switched to English or a different language.\n"
+        "Ensure that both the final response and the info_request_message are strictly in the target Output Language specified in the 'Language' field of the Farmer Profile. The 'Language' field is the absolute authority: if Language is Hindi, your response MUST be in Hindi (Devanagari), even if the user typed in English; if Language is English, your response MUST be in English, even if the user typed in Hindi or Devanagari. Never switch output languages based on the input query text script.\n"
         "Follow these strict rules for specific queries:\n"
         "1. If the User Query is a greeting (e.g. 'hello', 'hi', 'hey', 'start') or asks what the bot can do, you MUST set needs_more_info to False and return the following exact welcome message in the response field:\n"
         "   👋 Welcome to BharatSahayak!\n\n"
@@ -256,10 +271,11 @@ orchestrator = LlmAgent(
         "   💰 Profit improvement\n"
         "   🌱 Crop recommendations\n\n"
         "   Ask me anything about your farming needs.\n"
-        "3. For environmental assessment, satellite vegetation health (NDVI), farm environmental condition, or soil moisture/climate trend queries, you MUST call the `get_environmental_assessment` tool with the farm's exact latitude and longitude from the Farmer Profile. When `get_environmental_assessment` returns an advisory, you MUST return its exact text directly in the `response` field without summarizing, modifying, or re-interpreting it.\n"
-        "4. If an environmental assessment or farm satellite condition query is received but exact farm coordinates are missing from the Farmer Profile (no latitude/longitude coordinates), you MUST NOT call `get_environmental_assessment` with fabricated or default coordinates. Instead, set `needs_more_info` to True and prompt the farmer in `info_request_message` to provide their farm coordinates (latitude and longitude, e.g. 16.7749, 74.0461).\n"
-        "5. For ordinary weather forecasts and short-term rain/irrigation tips, delegate to `weather_advisor`.\n"
-        "6. When translating the welcome or profile updated responses for Hindi or other languages, translate the text naturally while preserving the exact layout, structure, and emojis.\n"
+        "3. CRITICAL RULE FOR CROP HEALTH / DISEASE / PEST QUERIES: Crop health, pest, and disease advisories do NOT require GPS, farm coordinates, or location. When a crop name and/or symptoms are present (e.g. 'My rice leaves have brown spots and some leaves are turning yellow'), NEVER ask the farmer for their location, state, or GPS coordinates. Set needs_more_info to False and delegate immediately to crop_disease_advisor or call get_crop_disease_info. Only set needs_more_info to True if both the crop and symptoms are completely missing.\n"
+        "4. For environmental assessment, satellite vegetation health (NDVI), farm environmental condition, or soil moisture/climate trend queries, you MUST call the `get_environmental_assessment` tool with the farm's exact latitude and longitude from the Farmer Profile and language='hi' if the Language in Farmer Profile is Hindi, or language='en' if English. When `get_environmental_assessment` returns an advisory, you MUST return its exact text directly in the `response` field without summarizing, modifying, or re-interpreting it.\n"
+        "5. If an environmental assessment or farm satellite condition query is received but exact farm coordinates are missing from the Farmer Profile (no latitude/longitude coordinates), you MUST NOT call `get_environmental_assessment` with fabricated or default coordinates. Instead, set `needs_more_info` to True and prompt the farmer in `info_request_message` to provide their farm coordinates (latitude and longitude, e.g. 16.7749, 74.0461).\n"
+        "6. For ordinary weather forecasts and short-term rain/irrigation tips, delegate to `weather_advisor`.\n"
+        "7. When translating the welcome or profile updated responses for Hindi or other languages, translate the text naturally while preserving the exact layout, structure, and emojis.\n"
         "You MUST respond ONLY with a valid JSON object conforming to the OrchestratorOutput schema. Do not include any conversational preamble or wrap the JSON in markdown code blocks."
     ),
     tools=[
@@ -399,15 +415,8 @@ def security_checkpoint(ctx: Context, node_input: types.Content) -> Event:
             parts=[types.Part.from_text(text=text_query)]
         )
         return Event(output=scrubbed_content)
-        
-    return Event(output=node_input)
 
-def detect_language(text: str) -> str:
-    """Detects if the user is typing in Hindi (Devanagari) or English."""
-    for char in text:
-        if '\u0900' <= char <= '\u097f':
-            return "Hindi"
-    return "English"
+    return Event(output=node_input)
 
 def extract_season(text: str) -> str | None:
     """Extracts season names (Kharif/Rabi/Zaid) from text."""
@@ -437,6 +446,14 @@ def extract_location(text: str) -> str | None:
     if not non_season_words:
         return None
 
+    import re
+    if re.search(r"\bup\b", text_lower) or "यूपी" in text_lower or "यू पी" in text_lower:
+        return "Uttar Pradesh"
+    if re.search(r"\bmp\b", text_lower) or "एमपी" in text_lower or "एम पी" in text_lower:
+        return "Madhya Pradesh"
+    if re.search(r"\bap\b", text_lower):
+        return "Andhra Pradesh"
+
     state_mapping = {
         "punjab": "Punjab", "पंजाब": "Punjab",
         "karnataka": "Karnataka", "कर्नाटक": "Karnataka",
@@ -451,7 +468,7 @@ def extract_location(text: str) -> str | None:
         "madhya pradesh": "Madhya Pradesh", "मध्य प्रदेश": "Madhya Pradesh", "मध्यप्रदेश": "Madhya Pradesh",
         "bihar": "Bihar", "बिहार": "Bihar",
         "west bengal": "West Bengal", "पश्चिम बंगाल": "West Bengal",
-        "odisha": "Odisha", "ओडिशा": "Ohisha",
+        "odisha": "Odisha", "ओडिशा": "Odisha",
         "kerala": "Kerala", "केरल": "Kerala",
         "assam": "Assam", "असम": "Assam",
         "himachal pradesh": "Himachal Pradesh", "हिमाचल प्रदेश": "Himachal Pradesh", "हिमाचलप्रदेश": "Himachal Pradesh",
@@ -484,13 +501,47 @@ def extract_location(text: str) -> str | None:
         if cleaned:
             return cleaned.title()
             
-    import re
     match = re.search(r"\b(?:in|from|at)\s+([A-Za-z]+)", text)
     if match:
         loc = match.group(1).strip()
         if loc.lower() not in ["the", "my", "a", "an", "this", "some"]:
             return loc.capitalize()
     return None
+
+def detect_language(text: str, default: str = "English") -> str:
+    """Detects if the user is typing in Hindi (Devanagari) or English.
+    If text contains no alphabetic/script characters, or is a neutral choice/button token
+    (e.g., 'Kharif', 'Rabi', 'Zaid', 'yes', 'no') or an entity response (e.g. State/UT name),
+    preserves the default/current session language.
+    """
+    if not text or not text.strip():
+        return default
+    for char in text:
+        if '\u0900' <= char <= '\u097f':
+            return "Hindi"
+    clean = text.strip().lower()
+    neutral_tokens = {
+        "kharif", "rabi", "zaid", "yes", "no", "central", "state", "ok", "okay",
+        "ha", "haan", "nahi", "nahi thanks"
+    }
+    if clean in neutral_tokens or not any(c.isalpha() for c in text):
+        return default
+
+    # If the input is just an entity/location response (e.g., "UP", "Uttar Pradesh", "Punjab")
+    # without conversational English sentence structure, preserve the ongoing session language.
+    words = clean.split()
+    conversational_markers = {
+        "tell", "what", "how", "why", "when", "which", "where", "who", "whom",
+        "explain", "about", "give", "show", "can", "is", "are", "do", "does", "did",
+        "i", "my", "me", "we", "our", "farm", "crop", "crops", "suggest", "recommend",
+        "season", "help", "need", "want", "please", "sir"
+    }
+    if len(words) <= 3 and not any(w in conversational_markers for w in words):
+        loc = extract_location(text)
+        if loc:
+            return default
+
+    return "English"
 
 def extract_coordinates(text: str) -> tuple[float, float] | None:
     """Extracts latitude and longitude from text if present (e.g. '16.774931, 74.046179' or 'lat 26.78 lon 81.54')."""
@@ -518,7 +569,7 @@ def extract_crops(text: str, current_crops: list[str]) -> list[str]:
     crop_mappings = {
         "wheat": "wheat", "गेहूं": "wheat", "गेहूँ": "wheat",
         "rice": "rice", "चावल": "rice", "धान": "rice", "paddy": "paddy",
-        "cotton": "cotton", "कпас": "cotton",
+        "cotton": "cotton", "कपास": "cotton",
         "potato": "potato", "आलू": "potato",
         "tomato": "tomato", "टमाटर": "tomato",
         "maize": "maize", "मक्का": "maize", "मक्की": "maize",
@@ -559,11 +610,15 @@ def load_farmer_profile(ctx: Context, node_input: types.Content) -> Event:
             "longitude": None,
             "crops": [],
             "farm_size": "Unknown",
+            "farmer_selected_season": None,
+            "inferred_season": None,
+            "current_calendar_season": "Kharif",
             "season": None
         }
     
     profile = ctx.state["farmer_profile"]
-    profile["language"] = detect_language(text_query)
+    current_lang = profile.get("language", "English")
+    profile["language"] = detect_language(text_query, default=current_lang)
     
     loc = extract_location(text_query)
     if loc:
@@ -579,32 +634,76 @@ def load_farmer_profile(ctx: Context, node_input: types.Content) -> Event:
     if sz:
         profile["farm_size"] = sz
         
-    season = extract_season(text_query)
-    if season:
-        profile["season"] = season
-            
-    season_str = f"- Season: {profile.get('season')}\n" if profile.get('season') else ""
+    # Season reasoning & separation
+    current_calendar_season = get_current_calendar_season()
+    profile["current_calendar_season"] = current_calendar_season
+
+    explicit_season = extract_season(text_query)
+    if explicit_season:
+        profile["farmer_selected_season"] = explicit_season
+        profile["season"] = explicit_season
+    elif not profile.get("farmer_selected_season") and not profile.get("season"):
+        crops_to_check = profile.get("crops", []) or extract_crops(text_query, [])
+        if crops_to_check:
+            inferred = infer_primary_season(crops_to_check[0], profile.get("location"))
+            if inferred:
+                profile["inferred_season"] = inferred
+                profile["season"] = inferred
+
+    season_lines = []
+    if profile.get("farmer_selected_season"):
+        season_lines.append(f"- Requested / Farmer-Selected Season: {profile['farmer_selected_season']} (AUTHORITATIVE: You MUST advise for this requested season, regardless of current calendar month)")
+    elif profile.get("inferred_season"):
+        season_lines.append(f"- Inferred Normal Crop Season: {profile['inferred_season']} (Based on verified agricultural cultivation norms)")
+    season_lines.append(f"- Current Calendar Season: {current_calendar_season}")
+    season_str = "\n".join(season_lines) + "\n"
+
     coords_str = f"- Coordinates: {profile.get('latitude')}, {profile.get('longitude')}\n" if (profile.get("latitude") is not None and profile.get("longitude") is not None) else ""
+    target_lang = profile.get("language", "English")
     orchestrator_prompt = (
         f"Farmer Profile:\n"
         f"- Location: {profile.get('location', 'Unknown')}\n"
         f"{coords_str}"
         f"- Crops: {', '.join(profile.get('crops', [])) if profile.get('crops') else 'None declared'}\n"
         f"- Farm Size: {profile.get('farm_size', 'Unknown')}\n"
-        f"- Language: {profile.get('language', 'English')}\n"
-        f"{season_str}\n"
-        f"User Query: {text_query}"
+        f"- Language: {target_lang}\n"
+        f"{season_str}"
+        f"User Query: {text_query}\n\n"
+        f"IMPORTANT LANGUAGE DIRECTIVE: The target Output Language is {target_lang}. You MUST produce your entire response and all messages strictly in {target_lang}, regardless of the script or language in the User Query."
     )
     
     return Event(output=orchestrator_prompt, state={"farmer_profile": profile})
 
-def is_crop_recommendation_request(query: str) -> bool:
+def is_disease_query(query: str) -> bool:
+    """Checks if the query is asking about crop disease, pests, or plant symptoms."""
     q = query.lower()
-    
+    disease_indicators = [
+        "disease", "pest", "spots", "yellow", "wilt", "rot", "blight", "rust",
+        "fungus", "infection", "symptoms", "leaves turning", "brown spots",
+        "insects", "damage", "attack", "curl", "mildew", "canker",
+        "रोग", "कीट", "धब्बे", "पीले", "पत्ते", "फंगस", "सड़न", "झुलसा", "कीड़े"
+    ]
+    return any(w in q for w in disease_indicators)
+
+def is_crop_recommendation_request(query: str, profile: dict | None = None) -> bool:
+    """Checks if the user is requesting crop recommendations from scratch."""
+    if is_disease_query(query):
+        return False
+
+    q = query.lower()
+
+    # Exclude government schemes and weather/environmental from crop recommendation HITL
+    scheme_or_weather = [
+        "scheme", "subsid", "yojana", "योजना", "सब्सिडी",
+        "weather", "forecast", "barish", "rain", "temperature", "humidity", "बारिश", "मौसम का हाल"
+    ]
+    if any(k in q for k in scheme_or_weather):
+        return False
+
     # 1. Wants to start farming
     if "start farming" in q or "farming startup" in q or "farming business" in q or "खेती शुरू" in q or "खेती करना" in q:
         return True
-        
+
     rec_patterns = [
         "what crop", "which crop", "what crops", "which crops", "what to grow", "which to grow", "what should i grow",
         "crop should i grow", "crops should i grow", "recommend crop", "recommend crops", "recommend a crop",
@@ -616,27 +715,96 @@ def is_crop_recommendation_request(query: str) -> bool:
     ]
     return any(p in q for p in rec_patterns)
 
-def is_season_missing(query: str) -> bool:
+def is_season_missing(query: str, profile: dict | None = None) -> bool:
+    """Checks if the season is unknown and cannot be inferred from context or declared crops."""
+    # 1. Season explicitly provided in query or already selected by farmer
+    if extract_season(query) is not None:
+        return False
+
+    if profile and (profile.get("farmer_selected_season") or profile.get("season")):
+        return False
+
+    # 2. Check if a crop is specified in query or profile with a clear primary season
+    known_crops = profile.get("crops", []) if profile else []
+    query_crops = extract_crops(query, [])
+    all_crops = list(dict.fromkeys(known_crops + query_crops))
+
+    loc = profile.get("location") if profile else extract_location(query)
+    for c in all_crops:
+        inferred = infer_primary_season(c, loc)
+        if inferred:
+            # If crop has a single clear primary season in this region/context, season is deterministically resolvable
+            if is_single_primary_season_crop(c, loc):
+                return False
+
+    # If no crops or multi-season crops without clear context, season is missing
+    if not all_crops:
+        return True
+
+    return False
+
+def is_region_missing(query: str, profile: dict | None = None) -> bool:
+    """Checks if the geographic region (State/UT) is unknown for crop recommendation."""
+    if profile:
+        loc = profile.get("location")
+        if loc and str(loc).strip().lower() not in ["unknown", "none", "", "null"]:
+            return False
+    if extract_location(query) is not None:
+        return False
+    return True
+
+def is_weather_query(query: str) -> bool:
+    """Checks if the user query is asking for weather, forecast, rain, or temperature conditions."""
+    if is_disease_query(query):
+        return False
     q = query.lower()
-    seasons = ["kharif", "rabi", "zaid", "खरीफ", "रबी", "जायद", "ज़ैद"]
-    return not any(s in q for s in seasons)
+    # Exclude environmental assessment queries that specifically ask for satellite/NDVI analysis
+    env_markers = [
+        "satellite", "environmental assessment", "ndvi", "dynamic world", "chirps",
+        "farm environment", "उपग्रह", "खेत पर्यावरण"
+    ]
+    if any(m in q for m in env_markers):
+        return False
+
+    weather_keywords = [
+        "weather", "forecast", "temperature", "humidity", "rain", "rainfall", "barish", "precipitation",
+        "wind", "climate advisory", "weather advisory", "मौसम", "पूर्वानुमान", "बारिश", "तापमान", "हवा"
+    ]
+    return any(k in q for k in weather_keywords)
+
+def is_weather_location_missing(query: str, profile: dict | None = None) -> bool:
+    """Checks if location or coordinates are missing for a weather forecast query."""
+    if profile:
+        if profile.get("latitude") is not None and profile.get("longitude") is not None:
+            return False
+        loc = profile.get("location")
+        if loc and str(loc).strip().lower() not in ["unknown", "none", "", "null"]:
+            return False
+    if extract_coordinates(query) is not None:
+        return False
+    if extract_location(query) is not None:
+        return False
+    return True
 
 async def _hitl_checkpoint_impl(ctx: Context, node_input: Any) -> Event | AsyncGenerator:
     """Handles Human-in-the-Loop inputs if the orchestrator requests it."""
     query = ctx.state.get("user_query", "")
     profile = ctx.state.get("farmer_profile", {})
-    
     language = profile.get("language", "English")
     if language == "Hindi":
-        clarification_msg = (
+        season_clarification_msg = (
             "🌾 सर्वोत्तम फसल की सिफारिश करने के लिए कृपया बताइए कि आप किस मौसम में खेती करना चाहते हैं:\n"
             "• खरीफ\n"
             "• रबी\n"
             "• ज़ायद"
         )
+        region_clarification_msg = "🌾 सटीक फसल सलाह के लिए कृपया अपना राज्य (State/UT) बताइए (जैसे: उत्तर प्रदेश, पंजाब, महाराष्ट्र, राजस्थान)।"
+        weather_location_msg = "🌦 मौसम और पूर्वानुमान की सटीक जानकारी के लिए कृपया अपना राज्य, जिला या शहर बताइए (जैसे: लखनऊ, पंजाब, जयपुर, बाराबंकी)।"
     else:
-        clarification_msg = "To recommend the best crop, please tell me which season you are planning to farm in: Kharif, Rabi, or Zaid."
-        
+        season_clarification_msg = "To recommend the best crop, please tell me which season you are planning to farm in: Kharif, Rabi, or Zaid."
+        region_clarification_msg = "To provide a tailored crop recommendation, please share your State/UT (e.g., Uttar Pradesh, Punjab, Maharashtra, Rajasthan)."
+        weather_location_msg = "Please share your State, District, or City (e.g., Punjab, Uttar Pradesh, Jaipur, Lucknow) to get the local weather forecast."
+
     if hasattr(node_input, "model_dump"):
         node_input_dict = node_input.model_dump()
     elif isinstance(node_input, dict):
@@ -646,22 +814,39 @@ async def _hitl_checkpoint_impl(ctx: Context, node_input: Any) -> Event | AsyncG
     else:
         node_input_dict = {"response": str(node_input) if node_input is not None else ""}
 
-    if is_crop_recommendation_request(query) and is_season_missing(query):
+    # Progressive refinement for crop recommendations:
+    # 1. First ensure season is known / selected
+    # 2. Then ensure region (State/UT) is known
+    if is_crop_recommendation_request(query, profile):
+        if is_season_missing(query, profile):
+            node_input_dict = {
+                "response": "",
+                "needs_more_info": True,
+                "info_request_message": season_clarification_msg
+            }
+        elif is_region_missing(query, profile):
+            node_input_dict = {
+                "response": "",
+                "needs_more_info": True,
+                "info_request_message": region_clarification_msg
+            }
+    # Location refinement for Weather queries:
+    elif is_weather_query(query) and is_weather_location_missing(query, profile):
         node_input_dict = {
             "response": "",
             "needs_more_info": True,
-            "info_request_message": clarification_msg
+            "info_request_message": weather_location_msg
         }
-        
+
     needs_more_info = node_input_dict.get("needs_more_info", False)
     info_request_message = node_input_dict.get("info_request_message", "")
     response = node_input_dict.get("response", "")
-    
+
     if needs_more_info:
         if not ctx.resume_inputs or "more_info" not in ctx.resume_inputs:
             yield RequestInput(interrupt_id="more_info", message=info_request_message)
             return
-        
+
         raw_answer = ctx.resume_inputs.pop("more_info")
         if isinstance(raw_answer, dict):
             user_answer = str(raw_answer.get("result", raw_answer)).strip()
@@ -676,18 +861,16 @@ async def _hitl_checkpoint_impl(ctx: Context, node_input: Any) -> Event | AsyncG
         else:
             updated_query = original_query
         ctx.state["user_query"] = updated_query
-        
-        # Update language based on the user answer if present
+
+        # Update language based on user's answer (preserving session language for neutral option tokens)
+        current_lang = profile.get("language", "English")
         if user_answer:
-            profile["language"] = detect_language(user_answer)
-        elif detect_language(original_query) == "Hindi":
-            profile["language"] = "Hindi"
-        else:
-            profile["language"] = "English"
-            
+            profile["language"] = detect_language(user_answer, default=current_lang)
+
         if user_answer:
             season = extract_season(user_answer)
             if season:
+                profile["farmer_selected_season"] = season
                 profile["season"] = season
 
             loc = extract_location(user_answer)
@@ -704,22 +887,37 @@ async def _hitl_checkpoint_impl(ctx: Context, node_input: Any) -> Event | AsyncG
             if sz:
                 profile["farm_size"] = sz
 
-        season_str = f"- Season: {profile.get('season')}\n" if profile.get('season') else ""
+        current_calendar_season = profile.get("current_calendar_season", get_current_calendar_season())
+        season_lines = []
+        if profile.get("farmer_selected_season"):
+            season_lines.append(f"- Requested / Farmer-Selected Season: {profile['farmer_selected_season']} (AUTHORITATIVE: You MUST advise for this requested season, regardless of current calendar month)")
+        elif profile.get("inferred_season"):
+            season_lines.append(f"- Inferred Crop Season: {profile['inferred_season']} (Derived from crop cultivation norms)")
+        season_lines.append(f"- Current Calendar Season: {current_calendar_season}")
+        season_str = "\n".join(season_lines) + "\n"
+
+        # If this is a crop recommendation and region is still missing after season was provided, ask for State/UT
+        if is_crop_recommendation_request(updated_query, profile) and is_region_missing(updated_query, profile):
+            yield RequestInput(interrupt_id="more_info", message=region_clarification_msg)
+            return
+
         coords_str = f"- Coordinates: {profile.get('latitude')}, {profile.get('longitude')}\n" if (profile.get("latitude") is not None and profile.get("longitude") is not None) else ""
+        target_lang = profile.get("language", "English")
         orchestrator_prompt = (
             f"Farmer Profile:\n"
             f"- Location: {profile.get('location', 'Unknown')}\n"
             f"{coords_str}"
             f"- Crops: {', '.join(profile.get('crops', [])) if profile.get('crops') else 'None declared'}\n"
             f"- Farm Size: {profile.get('farm_size', 'Unknown')}\n"
-            f"- Language: {profile.get('language', 'English')}\n"
-            f"{season_str}\n"
-            f"User Query: {updated_query}"
+            f"- Language: {target_lang}\n"
+            f"{season_str}"
+            f"User Query: {updated_query}\n\n"
+            f"IMPORTANT LANGUAGE DIRECTIVE: The target Output Language is {target_lang}. You MUST produce your entire response strictly in {target_lang}, regardless of the script or language in the User Query."
         )
-        
+
         yield Event(output=orchestrator_prompt, route="retry_with_info", state={"farmer_profile": profile, "user_query": updated_query})
         return
-        
+
     yield Event(output=response)
 
 hitl_checkpoint = node(rerun_on_resume=True)(_hitl_checkpoint_impl)

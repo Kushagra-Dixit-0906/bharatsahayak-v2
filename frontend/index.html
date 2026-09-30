@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BharatSahayak — AI Farming Companion</title>
+  <meta name="description" content="BharatSahayak: AI-powered agricultural companion for Indian farmers. Get crop advice, weather updates, government schemes, and satellite farm analysis." />
+
+  <!-- Noto Sans covers both Latin and Devanagari script -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<!-- =========================================================
+     WELCOME MODAL
+     Both languages always visible here regardless of selection.
+     ========================================================= -->
+<div id="welcome-overlay" class="overlay" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+  <div class="welcome-card">
+
+    <button id="welcome-close" class="close-btn" aria-label="Close welcome screen">&times;</button>
+
+    <div class="welcome-icon" aria-hidden="true">&#127807;</div><!-- 🌾 -->
+
+    <h1 id="welcome-title" class="welcome-title">BharatSahayak</h1>
+
+    <p class="welcome-subtitle">
+      आपका कृषि सहायक &bull; Your Farming Companion
+    </p>
+
+    <p class="welcome-desc">
+      अपने खेत, फसल और कृषि से जुड़ी जानकारी आसान भाषा में पाएं।<br/>
+      Get simple guidance about your crops, farm environment &amp; government schemes.
+    </p>
+
+    <p class="lang-select-label">Choose language / भाषा चुनें</p>
+    <div class="lang-toggle" role="group" aria-label="Language selection">
+      <button id="welcome-lang-en" class="lang-btn active" data-lang="en" aria-pressed="true">English</button>
+      <button id="welcome-lang-hi" class="lang-btn"        data-lang="hi" aria-pressed="false">हिंदी</button>
+    </div>
+
+    <button id="welcome-start" class="btn-primary btn-large">
+      Start &bull; शुरू करें
+    </button>
+
+  </div>
+</div>
+
+<!-- =========================================================
+     MAIN APPLICATION
+     ========================================================= -->
+<div id="app" class="app" hidden>
+
+  <!-- Header -->
+  <header class="app-header" role="banner">
+    <div class="header-inner">
+      <button id="header-brand-btn" class="header-brand" aria-label="Go to home / start new conversation">
+        <span class="header-back-arrow" aria-hidden="true">&#8592;</span>
+        <span class="header-icon" aria-hidden="true">&#127807;</span>
+        <span class="header-name">BharatSahayak</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Chat area -->
+  <main id="chat-area" class="chat-area" role="main" aria-label="Conversation">
+
+    <!-- Empty / greeting state -->
+    <div id="empty-state" class="empty-state">
+      <div class="empty-icon" aria-hidden="true">&#127807;</div>
+      <h2 id="empty-greeting" class="empty-greeting"></h2>
+      <p  id="empty-subtext"  class="empty-subtext"></p>
+    </div>
+
+    <!-- Message thread -->
+    <div id="messages" class="messages" role="log" aria-live="polite" aria-label="Messages"></div>
+
+  </main>
+
+  <!-- Bottom panel -->
+  <div class="bottom-panel">
+
+    <!-- Quick actions (visible while chat is empty) -->
+    <div id="quick-actions" class="quick-actions" role="group" aria-label="Quick actions">
+
+      <button class="qa-btn" data-action="crop" id="qa-crop">
+        <span class="qa-icon" aria-hidden="true">&#127807;</span><!-- 🌱 -->
+        <div class="qa-text">
+          <div class="qa-title" data-i18n="qa_crop_title">Crop Advice</div>
+          <div class="qa-desc"  data-i18n="qa_crop_desc">Recommendations for your region</div>
+        </div>
+      </button>
+
+      <button class="qa-btn" data-action="weather" id="qa-weather">
+        <span class="qa-icon" aria-hidden="true">🌦️</span>
+        <div class="qa-text">
+          <div class="qa-title" data-i18n="qa_weather_title">Weather</div>
+          <div class="qa-desc"  data-i18n="qa_weather_desc">Forecasts &amp; farming advisories</div>
+        </div>
+      </button>
+
+      <button class="qa-btn" data-action="schemes" id="qa-schemes">
+        <span class="qa-icon" aria-hidden="true">&#127963;&#65039;</span><!-- 🏛️ -->
+        <div class="qa-text">
+          <div class="qa-title" data-i18n="qa_schemes_title">Government Schemes</div>
+          <div class="qa-desc"  data-i18n="qa_schemes_desc">Subsidies &amp; eligibility</div>
+        </div>
+      </button>
+
+      <button class="qa-btn" data-action="disease" id="qa-disease">
+        <span class="qa-icon" aria-hidden="true">&#129440;</span><!-- 🦠 -->
+        <div class="qa-text">
+          <div class="qa-title" data-i18n="qa_disease_title">Crop Problem</div>
+          <div class="qa-desc"  data-i18n="qa_disease_desc">Disease &amp; pest advisory</div>
+        </div>
+      </button>
+
+      <button class="qa-btn" data-action="environment" id="qa-environment">
+        <span class="qa-icon" aria-hidden="true">&#128202;</span><!-- 📊 -->
+        <div class="qa-text">
+          <div class="qa-title" data-i18n="qa_env_title">Farm Environment</div>
+          <div class="qa-desc"  data-i18n="qa_env_desc">Satellite analysis of your farm</div>
+        </div>
+      </button>
+
+    </div><!-- /quick-actions -->
+
+    <!-- Text input row -->
+    <div class="input-row">
+      <label for="msg-input" class="sr-only" data-i18n="input_label">Message BharatSahayak</label>
+      <input
+        id="msg-input"
+        type="text"
+        class="msg-input"
+        autocomplete="off"
+        spellcheck="true"
+        maxlength="2000"
+        aria-label="Type your farming question"
+      />
+      <button id="send-btn" class="send-btn" aria-label="Send message" disabled>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2.5"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="22" y1="2" x2="11" y2="13"/>
+          <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+        </svg>
+      </button>
+    </div>
+
+  </div><!-- /bottom-panel -->
+
+</div><!-- /app -->
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

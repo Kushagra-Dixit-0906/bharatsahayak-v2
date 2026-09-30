@@ -86,16 +86,27 @@ def build_gemini_prompt(context: GeminiAssessmentContext) -> str:
         "   - NO exact irrigation depth or quantitative water volume prescriptions.\n"
         "   - NO crop disease or pest diagnoses from satellite data alone.\n"
         "   - NO quantitative yield loss predictions.\n"
-        "7. Farmer-Facing Translation & Communication Quality:\n"
-        "   - Act as an empathetic, practical agricultural advisor speaking directly to an Indian smallholder farmer.\n"
-        "   - Translate technical remote-sensing telemetry into simple, intuitive farming language:\n"
-        "     * Soil Moisture: Describe soil water content intuitively as adequate, dry, or wet (e.g., 'Topsoil moisture levels are currently adequate for crop growth' rather than technical telemetry like 'topsoil volumetric water fraction is 0.47').\n"
-        "     * Vegetation / Crop Greenness: Describe NDVI and canopy vigor as crop greenness, vegetative health, or growth vigor relative to typical past seasons (rather than technical phrases like '3-year historical seasonal baseline' or raw decimal numbers).\n"
-        "     * Weather & Rainfall: Express rainfall in mm or simple seasonal terms (e.g. 'recent light rainfall', 'sustained dry period').\n"
-        "   - In 'observations', state 2-3 key practical facts about crop health, soil moisture, and rainfall in simple farmer language.\n"
-        "   - In 'interpretation', explain clearly in empathetic, everyday words what these conditions mean for crop growth and field care.\n"
-        "   - In 'recommended_next_steps', write clear, natural, actionable sentences directed to the farmer (e.g., 'Inspect crop foliage across your field for any signs of uneven growth') without echoing internal enum or action_type names.\n"
-        "   - Never invent soil pH, NPK values, soil texture, disease diagnoses, or chemical recommendations."
+        "7. Farmer-Facing Plain Language & Communication Quality:\n"
+        "   - You are speaking directly to an Indian smallholder farmer who may have limited technical background. Use simple, conversational, everyday agricultural language.\n"
+        "   - Explain what the environmental observations mean in practical terms for their field rather than repeating technical field names or raw metrics.\n"
+        "   - NEVER copy sentences, phrases, or diagnostic wording from <assessment_data> or prompt instructions. Generate fresh, natural phrasing independently for each assessment.\n"
+        "   - Strictly avoid technical jargon, such as: 'historical baseline', 'vegetation vigor', 'negative departure', 'meteorological reanalysis', 'volumetric fraction', 'spectral departure', and internal pattern names.\n"
+        "   - Translation Principles (principles only; do NOT copy these sentences verbatim):\n"
+        "     * Crop Health / Greenness: Talk about how green and healthy the crop looks compared to usual growth at this time of year.\n"
+        "     * Soil Moisture: Talk about whether the soil near the surface feels dry, moist, or wet, and what that means for irrigation.\n"
+        "     * Weather & Rain: Talk about recent rain, dry periods, or heat in simple everyday terms.\n"
+        "   - When target_language is 'hi' (Hindi):\n"
+        "     * Write in natural, clear, idiomatic Indian Hindi (Devanagari script) that an ordinary farmer easily understands.\n"
+        "     * Avoid mechanical, literal machine translations and awkward phrasing.\n"
+        "     * Do NOT translate internal technical keywords or enum names directly (e.g. use 'खेत का मुआयना करें' instead of translating enum terms literally).\n"
+        "   - In 'headline': Write one short, clear, farmer-friendly summary sentence for mobile display.\n"
+        "   - In 'summary': Provide a 1-2 sentence plain-language overview of current field conditions.\n"
+        "   - In 'observations': State 1 to 3 important practical facts in plain words (e.g. crop greenness, topsoil moisture, recent rainfall).\n"
+        "   - In 'interpretation': Explain in 1-2 simple, empathetic sentences what these conditions mean for the farmer's crops.\n"
+        "   - In 'recommended_next_steps': Provide 1 to 3 clear, practical, low-risk field actions directed at the farmer without echoing enum names.\n"
+        "   - In 'limitations': Briefly mention data caveats only when truly relevant (e.g. cloud cover or data lag), keeping it short.\n"
+        "   - Keep responses concise, practical, and conversational—do not make it sound like a scientific or bureaucratic report.\n"
+        "   - Never invent crop stage, soil pH, NPK, chemical prescriptions, disease diagnoses, or quantitative yield predictions."
     )
 
     # 2. Output Schema & Formatting Specifications
@@ -139,17 +150,13 @@ def build_gemini_prompt(context: GeminiAssessmentContext) -> str:
         f"maximum_data_lag_days: {context.maximum_data_lag_days}",
     ]
 
-    # Identified patterns with full structured evidence
+    # Identified patterns with full structured evidence (without internal technical summaries)
     assessment_lines.append("\nidentified_patterns:")
     if context.identified_patterns:
         for idx, pattern in enumerate(context.identified_patterns, 1):
             assessment_lines.append(f"  - pattern #{idx}:")
             assessment_lines.append(f"    pattern_type: {pattern.pattern_type}")
             assessment_lines.append(f"    evidence_support: {pattern.evidence_support}")
-            assessment_lines.append(
-                f"    technical_summary: {pattern.technical_summary} "
-                "(Internal diagnostic context only; not farmer-facing text)"
-            )
             assessment_lines.append("    supporting_evidence:")
             if pattern.supporting_evidence:
                 for ev in pattern.supporting_evidence:

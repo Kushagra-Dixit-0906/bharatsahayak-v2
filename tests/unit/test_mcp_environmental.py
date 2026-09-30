@@ -119,8 +119,8 @@ def test_get_environmental_assessment_context_propagation_english() -> None:
         assert kwargs["presentation"].target_language == "en"
 
         assert "Normal Environmental Conditions" in result
-        assert "Key Observations:" in result
-        assert "Recommended Next Steps:" in result
+        assert "Field Observations:" in result
+        assert "Recommended Actions:" in result
 
 
 def test_get_environmental_assessment_context_propagation_hindi() -> None:
@@ -143,5 +143,5 @@ def test_get_environmental_assessment_context_propagation_hindi() -> None:
         assert kwargs["presentation"].target_language == "hi"
 
         assert "सामान्य पर्यावरणीय स्थिति" in result
-        assert "प्रमुख अवलोकन:" in result
-        assert "अनुशंसित अगले कदम:" in result
+        assert "खेत की स्थिति:" in result
+        assert "सलाह और अगले कदम:" in result

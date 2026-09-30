@@ -63,8 +63,10 @@ FORBIDDEN_DEFINITIVE_LANGUAGE = [
 def test_mcp_rice_query_zero_chemicals_and_grounded_output():
     """A: get_crop_disease_info on Rice brown spots returns Phase 5D output without chemicals."""
     output = get_crop_disease_info(crop="rice", symptoms="brown spots with yellow halo on leaves")
-    assert "Crop Advisory Status:" in output
+    assert "Crop Problem Advisory" in output
     assert "Brown Spot" in output or "Blast" in output
+    assert "Crop Advisory Status:" not in output
+    assert "strong_match" not in output
 
     # Must NOT contain forbidden chemical recommendations
     for pattern in FORBIDDEN_CHEMICAL_PATTERNS:
@@ -78,7 +80,7 @@ def test_mcp_rice_query_zero_chemicals_and_grounded_output():
 def test_mcp_wheat_query_uses_phase_5d_corpus():
     """B: get_crop_disease_info on Wheat yellow stripes uses Phase 5D corpus instead of old hardcoded string."""
     output = get_crop_disease_info(crop="wheat", symptoms="yellow stripes on leaves")
-    assert "Crop Advisory Status:" in output
+    assert "Crop Problem Advisory" in output
     assert "Yellow Rust" in output or "Rust" in output
     assert "Propiconazole" not in output
     assert "25 EC" not in output
@@ -92,7 +94,7 @@ def test_mcp_wheat_query_uses_phase_5d_corpus():
 def test_mcp_batch2_cotton_query_retrieves_pink_bollworm():
     """C: get_crop_disease_info retrieves Batch 2 crop (Cotton) correctly."""
     output = get_crop_disease_info(crop="cotton", symptoms="flower buds are twisting in rosette shape and caterpillars in bolls")
-    assert "Crop Advisory Status:" in output
+    assert "Crop Problem Advisory" in output
     assert "Pink Bollworm" in output
     assert "Cotton" in output
     assert "Safe Cultural & Preventive Actions" in output
@@ -101,7 +103,7 @@ def test_mcp_batch2_cotton_query_retrieves_pink_bollworm():
 def test_mcp_hindi_query_uses_phase_5d_retrieval():
     """D: get_crop_disease_info handles Devanagari Hindi inputs safely without crashing."""
     output = get_crop_disease_info(crop="धान", symptoms="पत्तियों पर भूरे धब्बे हैं")
-    assert "Crop Advisory Status:" in output
+    assert "Crop Problem Advisory" in output
     assert len(output) > 50
 
     for pattern in FORBIDDEN_CHEMICAL_PATTERNS:
@@ -112,7 +114,7 @@ def test_mcp_hindi_query_uses_phase_5d_retrieval():
 def test_mcp_unknown_unsupported_crop_returns_insufficient_evidence():
     """E: get_crop_disease_info on unsupported crop with novel symptoms returns safe insufficient evidence behavior."""
     output = get_crop_disease_info(crop="dragonfruit", symptoms="unrecognized distortion")
-    assert "insufficient_evidence" in output or "None identified" in output
+    assert "No matching condition identified" in output or "None identified" in output
     assert "Mancozeb" not in output
     assert "Neem Oil" not in output  # Legacy ungrounded fallback removed
 
@@ -120,7 +122,8 @@ def test_mcp_unknown_unsupported_crop_returns_insufficient_evidence():
 def test_mcp_empty_input_handling():
     """Empty or whitespace inputs return safe insufficient evidence without crashing."""
     output = get_crop_disease_info(crop="", symptoms="")
-    assert "insufficient_evidence" in output
+    assert "Crop Problem Advisory" in output
+    assert "No crop or symptoms were provided" in output
     assert "Unknown" in output
 
 
