@@ -1,13 +1,13 @@
 # BharatSahayak V2 — System Architecture & Design
 
 > **Current architectural baseline, operational mechanics, guardrails, and planned evolution.**
-> *Baseline Branch: `bharatsahayak-v2` | Commit: `b05fc54`*
+> *Baseline Branch: `bharatsahayak-v2` | Commit: `13b80ef`*
 
 ---
 
 ## 🏛️ System Overview
 
-BharatSahayak V2 is an AI-powered rural agricultural companion designed to empower Indian smallholder farmers. The system is engineered on **Google ADK 2.2.0 (Agent Development Kit)**, powered by **Gemini 2.5 Flash**, and coupled to local and cloud execution tools via the **Model Context Protocol (MCP)**.
+BharatSahayak V2 is an AI-powered rural agricultural companion designed to empower Indian smallholder farmers. The system is engineered on **Google ADK 2.2.0 (Agent Development Kit)**, powered by **Gemini 3.5 Flash Lite**, and coupled to local and cloud execution tools via the **Model Context Protocol (MCP)**.
 
 ### Architectural Maturity Legend
 
@@ -382,5 +382,5 @@ graph TD
 3. **Non-Diagnostic Evidence Boundary:** Environmental evidence (NDVI departures, soil moisture fractions, rainfall anomalies) indicates physical growing conditions but **does not** by itself prove specific disease pathogens, yield loss, drought, or fertilizer deficiency.
 4. **Spectral Departures $\ne$ Agronomic Severity:** Satellite vegetation anomaly indices represent empirical spectral departures from historical baselines, not clinical agronomic damage.
 5. **Data Availability & Cloud Masking:** Satellite coverage may be unavailable during severe cloud cover; Dynamic World classifications may be unavailable for specific scenes. The system reports data gaps transparently rather than fabricating certainty.
-6. **Location UX:** Browser GPS / one-tap geolocation is planned for Phase 9 UI/UX; currently coordinates are supplied via conversational text or HITL clarification.
+6. **Location UX:** Browser GPS / one-tap geolocation is implemented in the Phase 9 web interface (`frontend/`); coordinates can also be supplied via conversational text or HITL clarification.
 7. **Cloud Deployment Status:** Cloud infrastructure templates are scaffolded in Terraform; live production deployment is scheduled for Phase 10.

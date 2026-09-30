@@ -183,7 +183,7 @@ The security boundary has been verified through focused unit testing and live Pl
 3. **Evidence Boundary:** Environmental evidence (NDVI departures, soil moisture fractions, rainfall anomalies) indicates physical growing conditions but **does not** by itself prove specific disease pathogens, yield loss, or nutrient deficiencies.
 4. **Spectral Departures $\ne$ Agronomic Severity:** Satellite vegetation anomaly indices represent empirical spectral departures from historical baselines, not clinical agronomic damage.
 5. **Data Availability:** Satellite coverage may be unavailable during severe cloud cover; Dynamic World classifications may be unavailable for specific scenes. The system reports data gaps transparently rather than fabricating certainty.
-6. **Location UX:** Browser GPS / one-tap geolocation is planned for Phase 9 UI/UX; currently coordinates are supplied via conversational text or HITL input.
+6. **Location UX:** Browser GPS / one-tap geolocation is implemented in the Phase 9 web interface (`frontend/`); coordinates can also be supplied via conversational text or HITL clarification.
 7. **Deployment Status:** Cloud infrastructure templates are scaffolded in Terraform; live production deployment is scheduled for Phase 10.
 
 ---
@@ -201,19 +201,31 @@ The security boundary has been verified through focused unit testing and live Pl
 | **Phase 6** | MCP Server & Agent Integration (`get_environmental_assessment`) | 🟢 **IMPLEMENTED** |
 | **Phase 7** | End-to-End Farmer Workflow & Interaction Flows | 🟢 **IMPLEMENTED** |
 | **Phase 8** | Testing, Reliability & Security Hardening Checkpoint | 🟢 **IMPLEMENTED** |
-| **Phase 9** | UI / UX & Map Experience (Frontend Chat & Map Picker) | 🟡 **ACTIVE / NEXT PHASE** |
-| **Phase 10** | Cloud Deployment & OpenTelemetry Infrastructure | 🟡 **PLANNED** |
+| **Phase 9** | UI / UX & Map Experience (Farmer Web Interface & Live Weather) | 🟢 **IMPLEMENTED** |
+| **Phase 10** | Cloud Deployment & OpenTelemetry Infrastructure | 🟡 **PLANNED / NEXT PHASE** |
 | **Phase 11** | Demo Packaging, Documentation & Submission | 🟡 **PLANNED** |
 
 ---
 
-## 🔮 Next Step: Phase 9 — UI / UX & Map Experience (Planned)
+## ✨ Phase 9: Farmer-Facing Web Interface (Implemented)
 
-The next active phase focuses on building a dedicated, farmer-centric web frontend:
-* **Interactive Map Location Picker:** Map tap and boundary selection with automatic coordinate resolution.
-* **"Use My Current Location" Geolocation:** One-tap browser GPS coordinates acquisition.
-* **Visual Environmental Dashboard:** Color-coded vegetation vigor indicators, moisture bars, and historical NDVI charts.
-* **Conversational Chat Interface:** Multi-language audio/text toggles with clean recommendation cards and no technical jargon.
+BharatSahayak includes a dedicated web interface tailored for rural farmers:
+* **Conversational Web Application:** Built with HTML5/CSS/JavaScript and served via a FastAPI bridge server on port `18082`.
+* **Bilingual Support:** Full English and Hindi (हिन्दी) onboarding and conversation flows.
+* **One-Tap Geolocation:** "Use my current location" browser GPS coordinate acquisition.
+* **Interactive HITL Clarification:** Inline cards prompting for missing coordinates or seasonal context with seamless session resumption.
+* **Live Open-Meteo Weather Subsystem:** Real-time weather and 3-day forecast with centroid coordinate fallbacks for 36 Indian states and agricultural districts.
+* **Deterministic Crop Knowledge:** Crop database covering 15+ major Indian crops with Kharif/Rabi/Zaid seasonality and regional overrides.
+
+---
+
+## 🔮 Next Step: Phase 10 — Cloud Deployment & Telemetry (Planned / Next Phase)
+
+The next active phase focuses on containerized deployment and observability:
+* **Docker Containerization:** Packaging FastAPI bridge and ADK agent backend into production containers.
+* **Terraform Cloud Run Provisioning:** Deploying services into GCP project `bharatsahayak-v2`.
+* **Earth Engine Cloud Authentication:** Configuring service account credentials for Earth Engine in Cloud Run.
+* **OpenTelemetry & Cloud Logging:** Verifying BigQuery completions views and Cloud Storage telemetry streams.
 
 ---
 
@@ -226,6 +238,7 @@ The next active phase focuses on building a dedicated, farmer-centric web fronte
 * Google Earth Engine access (via `gcloud auth application-default login`)
 
 ### Quick Start
+
 ```bash
 # 1. Clone repository
 git clone https://github.com/Kushagra-Dixit-0906/bharatsahayak.git
@@ -239,8 +252,11 @@ GEMINI_MODEL=gemini-3.5-flash-lite
 # 3. Install dependencies
 uv pip install -e .
 
-# 4. Run ADK Playground
-uv run adk web app --host 127.0.0.1 --port 18081 --reload_agents
-```
+# 4. Option A: Run Farmer Web Application (Recommended)
+uv run python frontend/server.py
+# Access Web UI at: http://127.0.0.1:18082
 
-Access the interactive developer UI at: **[http://127.0.0.1:18081](http://127.0.0.1:18081)**
+# 5. Option B: Run ADK Developer Playground
+uv run adk web app --host 127.0.0.1 --port 18081 --reload_agents
+# Access Developer Playground at: http://127.0.0.1:18081
+```

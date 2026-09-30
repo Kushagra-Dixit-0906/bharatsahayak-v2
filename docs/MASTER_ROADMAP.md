@@ -1,7 +1,7 @@
 # BharatSahayak V2 — Master Project Roadmap
 
 > **Master roadmap and progressive implementation plan for BharatSahayak V2.**
-> *Last Updated: Backend Intelligence & Security Hardening (Phases 0-8) Complete & Verified; Phase 9 UI/UX Entered as Next Active Phase*
+> *Last Updated: Phases 0-9 Complete & Verified (UI/UX, Live Weather Service, Crop Knowledge Database, and Security Hardening); Phase 10 (Cloud Deployment & Telemetry) Scheduled as Next Phase*
 > *Baseline Branch: `bharatsahayak-v2` | GCP Project ID: `bharatsahayak-v2`*
 
 ---
@@ -28,8 +28,8 @@ graph TD
     P5 --> P6["Phase 6: MCP & Agent Integration 🟢"]
     P6 --> P7["Phase 7: End-to-End Farmer Workflow 🟢"]
     P7 --> P8["Phase 8: Testing, Reliability & Security 🟢"]
-    P8 --> P9["Phase 9: UI / UX & Map Experience 🟡 (ACTIVE)"]
-    P9 --> P10["Phase 10: Cloud Deployment & Telemetry 🟡"]
+    P8 --> P9["Phase 9: UI / UX & Map Experience 🟢"]
+    P9 --> P10["Phase 10: Cloud Deployment & Telemetry 🟡 (PLANNED / NEXT PHASE)"]
     P10 --> P11["Phase 11: Demo, Documentation & Submission 🟡"]
 ```
 
@@ -255,26 +255,48 @@ graph TD
 ---
 
 ### Phase 9: UI / UX & Map Experience
-- **Status:** 🟡 **ACTIVE / NEXT PHASE**
-- **Purpose:** Build a premium, farmer-centric web interface with interactive map selection, NDVI health heatmaps, and clean advisory cards.
-- **Major Work (Planned):**
-  - Farmer-friendly conversational chat interface with streaming responses, audio/voice toggles, and multi-language switches (English/Hindi).
-  - "Use my current location" one-tap browser GPS coordinate acquisition.
-  - Interactive map component supporting manual location search, pin dropping, and farm boundary selection.
-  - Automatic reference date/time handling.
-  - Visual NDVI vegetation vigor indicators and moisture status cards without unnecessary technical jargon.
-  - Mobile-friendly responsive layouts tailored for rural smartphone users.
+- **Status:** 🟢 **IMPLEMENTED & VERIFIED**
+- **Purpose:** Build a premium, farmer-centric web presentation interface with one-tap geolocation, bilingual interaction, live weather integration, deterministic crop knowledge, and clean advisory cards.
+- **Major Work (Implemented):**
+  - **FastAPI Presentation Layer Bridge ([`frontend/server.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/frontend/server.py)):** Lightweight web server on port 18082 serving static UI assets and exposing `/api/session` and `/api/run`, streaming session turns directly to ADK `root_agent` runner.
+  - **Farmer-Friendly Web Interface ([`frontend/index.html`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/frontend/index.html), [`frontend/style.css`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/frontend/style.css), [`frontend/app.js`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/frontend/app.js)):**
+    - Bilingual welcome onboarding modal supporting English and Hindi (हिन्दी) with quick profile initialization.
+    - Top navigation with active status pill, language toggle, and "New Chat" session reset.
+    - 5 preset quick-action suggestion buttons (*Crop Advice*, *Weather*, *Government Schemes*, *Crop Problem*, *Farm Environment*).
+    - Mobile-first responsive layout with zero horizontal overflow and accessibility contrast.
+  - **Location & Coordinate Acquisition:**
+    - "Use my current location" one-tap browser GPS coordinate acquisition via HTML5 `navigator.geolocation` API.
+    - Manual coordinate input field with regex latitude/longitude validation and user error feedback.
+  - **Human-in-the-Loop (HITL) Resumption Cards:**
+    - Visual clarification cards rendered directly in the chat stream when farm coordinates or sowing season are required.
+    - Resumes agent execution asynchronously via `/api/run` without losing conversation state or requiring page reloads.
+  - **Live Weather Subsystem ([`app/weather_service.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/weather_service.py)):**
+    - Public Open-Meteo REST API integration for real-time weather and 3-day meteorological forecasts.
+    - Comprehensive fallback centroid coordinate dictionary covering 36 Indian states, union territories, and major agricultural districts.
+    - Multilingual WMO weather code dictionary translating numerical codes to descriptive English and Hindi conditions.
+  - **Deterministic Crop Knowledge & Seasonality Layer ([`app/crop_knowledge.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/crop_knowledge.py)):**
+    - Comprehensive database of major Indian crops, primary and secondary seasonal cycles (Kharif, Rabi, Zaid), water requirements, and soil preferences.
+    - Regional state overrides (e.g. West Bengal Aus/Aman/Boro rice cycles; Assam Autumn/Winter/Summer paddy).
+    - Calendar-based season detection function determining current sowing season from calendar month.
+  - **Verification & Testing:**
+    - Verified with dedicated unit test suites: `tests/unit/test_phase9_frontend.py`, `tests/unit/test_weather_service.py`, `tests/unit/test_crop_knowledge.py`.
+    - Testing: 1,263 unit tests passed and 52 integration tests passed. The broader suite contains known non-blocking/stale/external failures documented in the final audit; these were not Phase 9 implementation blockers.
 - **Dependencies:** Phase 7, Phase 8.
-- **Future Upgrades (`🔴 IDEA`):** Offline progressive web app (PWA) field mode with cached advisories.
+- **Future Backlog / Deferred Enhancements (`🔴 IDEA`):**
+  - Interactive Leaflet/canvas polygon boundary drawing component.
+  - Audio/voice input/output toggles (STT/TTS in regional Indian languages).
+  - Offline progressive web app (PWA) field mode with cached advisories.
 
 ---
 
 ### Phase 10: Cloud Deployment & Telemetry
-- **Status:** 🟡 **PLANNED**
+- **Status:** 🟡 **PLANNED / NEXT PHASE**
 - **Purpose:** Deploy production services to Google Cloud Platform (Cloud Run / Vertex AI Agent Engine) with full OpenTelemetry monitoring.
 - **Major Work:**
+  - Create production containerization configuration (`Dockerfile` and `.dockerignore`).
   - Finalize Terraform infrastructure in `deployment/terraform/single-project/` for GCP project `bharatsahayak-v2`.
-  - Configure Vertex AI Reasoning Engine / Cloud Run service containers.
+  - Configure Vertex AI Reasoning Engine / Cloud Run service containers with automated secret injection.
+  - Establish Cloud Run runtime environment for Google Earth Engine service account authentication.
   - Verify Cloud Storage telemetry bucket, GenAI completion hooks, and Cloud Logging streams.
 - **Dependencies:** Phase 8, Phase 9.
 - **Future Upgrades (`🔴 IDEA`):** Automated CI/CD deployment via Cloud Build GitHub triggers.

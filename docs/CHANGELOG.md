@@ -7,6 +7,33 @@
 
 ## [Unreleased] — Planned Phases 1 through 11
 
+### 🟢 Complete & Verified — Phase 9: UI / UX & Map Experience (Frontend Chat, Live Weather & Crop Knowledge — Commit `13b80ef`)
+- **FastAPI Presentation Bridge Server ([`frontend/server.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/frontend/server.py)):**
+  - Implemented standalone presentation bridge server on port `18082` mounting static assets and exposing `/api/session` and `/api/run`.
+  - Bridges browser chat turns asynchronously to ADK `root_agent` runner, serializing text responses and signaling HITL interrupts.
+- **Farmer-Facing Conversational Web Interface ([`frontend/`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/frontend/)):**
+  - Created bilingual onboarding modal (`index.html`, `app.js`, `style.css`) with quick language, state, crop, and farm size configuration.
+  - Implemented responsive header with active status pill, English/Hindi language toggle, and "New Chat" session reset.
+  - Created 5 preset quick-action suggestion buttons (*Crop Advice*, *Weather*, *Government Schemes*, *Crop Problem*, *Farm Environment*).
+  - Implemented mobile-first responsive layout with zero horizontal overflow.
+- **Location & Geolocation Handling:**
+  - Implemented one-tap "Use my current location" browser GPS coordinate acquisition using HTML5 `navigator.geolocation`.
+  - Added manual coordinate input field with regex coordinate bounds validation ($[-90, 90]$ latitude, $[-180, 180]$ longitude).
+- **Interactive Human-in-the-Loop (HITL) Cards:**
+  - Implemented dynamic inline UI clarification cards that render directly in the chat stream when farm coordinates or sowing season are missing.
+  - Resumes session execution seamlessly via `/api/run` without full-page reloads.
+- **Live Meteorological Weather Subsystem ([`app/weather_service.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/weather_service.py)):**
+  - Integrated public Open-Meteo REST API for live weather conditions and 3-day meteorological forecasts.
+  - Added built-in centroid coordinate dictionary covering 36 Indian states, union territories, and key agricultural districts.
+  - Implemented bilingual WMO weather interpretation code mapping for English and Hindi condition descriptions.
+- **Deterministic Crop Knowledge & Seasonality Database ([`app/crop_knowledge.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/crop_knowledge.py)):**
+  - Created curated crop knowledge database covering 15+ major Indian crops with Kharif/Rabi/Zaid seasonality and water/soil requirements.
+  - Implemented regional state agro-climatic overrides (e.g. West Bengal Aus/Aman/Boro rice cropping cycles).
+  - Implemented calendar-based season detection function (`detect_season_from_calendar`).
+- **Testing & Verification:**
+  - Added unit test suites: `tests/unit/test_phase9_frontend.py`, `tests/unit/test_weather_service.py`, `tests/unit/test_crop_knowledge.py`.
+  - Testing: 1,263 unit tests passed and 52 integration tests passed. The broader suite contains known non-blocking/stale/external failures documented in the final audit; these were not Phase 9 implementation blockers.
+
 ### 🟢 Complete & Sealed — Phase 5C: Grounded Gemini Explanation Layer & Unified Assessment Pipeline (`DEC-024`, `DEC-025` — 68 Unit/Integration Tests)
 - **Step 1 — Gemini Context Boundary ([`app/assessment/gemini_types.py`](file:///d:/Documents/Desktop/adk-workspace/bharatsahayak/app/assessment/gemini_types.py), `74c9f49`):**
   - Implemented `GeminiAssessmentContext` root context model, `ContextPatternSummary`, `VerifiedFarmerContext`, and `PresentationPreferences`.
