@@ -201,6 +201,7 @@ web.mount("/", StaticFiles(directory=_frontend_dir, html=True), name="static")
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    port = int(os.environ.get("UI_PORT", 18082))
-    print(f"\n  BharatSahayak Farmer UI -> http://127.0.0.1:{port}\n")
-    uvicorn.run(web, host="127.0.0.1", port=port, log_level="warning")
+    host = os.environ.get("HOST", "0.0.0.0")
+    port = int(os.environ.get("PORT", os.environ.get("UI_PORT", 8080)))
+    print(f"\n  BharatSahayak Farmer UI -> http://{host}:{port}\n")
+    uvicorn.run(web, host=host, port=port, log_level="warning")
