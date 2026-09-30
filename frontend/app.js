@@ -14,8 +14,8 @@
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════
 
-/** All API calls go through the bridge server on 18082. */
-const API_BASE = "http://127.0.0.1:18082/api";
+/** All API calls go through relative paths to target the same origin. */
+const API_BASE = "/api";
 
 /** Environmental query detection keywords (EN + HI). */
 const ENV_KEYWORDS = [
