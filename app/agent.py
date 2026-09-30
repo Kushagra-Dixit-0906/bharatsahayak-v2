@@ -292,14 +292,16 @@ orchestrator = LlmAgent(
 # 4. Workflow Nodes (Python functions)
 # -----------------------------------------------------------------------------
 
-def security_checkpoint(ctx: Context, node_input: types.Content) -> Event:
+def security_checkpoint(ctx: Context, node_input: types.Content | str) -> Event:
     """Security Checkpoint Node - PII scrubbing, prompt injection detection, and content safety."""
     import re
     import sys
     import json
     
     text_query = ""
-    if node_input and node_input.parts:
+    if isinstance(node_input, str):
+        text_query = node_input
+    elif node_input and hasattr(node_input, "parts") and node_input.parts:
         text_query = "".join(part.text for part in node_input.parts if part.text)
         
     # Initialize audit logs list in state
@@ -594,10 +596,12 @@ def extract_farm_size(text: str) -> str | None:
         return f"{match.group(1)} acres"
     return None
 
-def load_farmer_profile(ctx: Context, node_input: types.Content) -> Event:
+def load_farmer_profile(ctx: Context, node_input: types.Content | str) -> Event:
     """Loads and updates the farmer profile based on conversation input."""
     text_query = ""
-    if node_input and node_input.parts:
+    if isinstance(node_input, str):
+        text_query = node_input
+    elif node_input and hasattr(node_input, "parts") and node_input.parts:
         text_query = "".join(part.text for part in node_input.parts if part.text)
     
     ctx.state["user_query"] = text_query
