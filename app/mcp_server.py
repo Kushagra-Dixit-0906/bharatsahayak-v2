@@ -144,7 +144,23 @@ def get_environmental_assessment(
     import os
     import ee
     try:
-        ee.Initialize(project=os.environ.get("EE_PROJECT_ID", "bharatsahayak-v2"))
+        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+            from google.oauth2 import service_account
+            credentials = service_account.Credentials.from_service_account_file(
+                os.environ["GOOGLE_APPLICATION_CREDENTIALS"],
+                scopes=[
+                    "https://www.googleapis.com/auth/earthengine",
+                    "https://www.googleapis.com/auth/cloud-platform",
+                ],
+            )
+            ee.Initialize(
+                credentials=credentials,
+                project=os.environ.get("EE_PROJECT_ID", "bharatsahayak-v2"),
+            )
+        else:
+            ee.Initialize(
+                project=os.environ.get("EE_PROJECT_ID", "bharatsahayak-v2")
+            )
     except Exception:
         pass
 
