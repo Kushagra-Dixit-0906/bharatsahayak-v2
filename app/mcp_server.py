@@ -1,3 +1,4 @@
+import logging
 import math
 import sys
 from mcp.server.fastmcp import FastMCP
@@ -13,6 +14,7 @@ from app.disease.pipeline import run_crop_problem_pipeline
 from app.disease.types import CropProblemAdvisory
 
 mcp = FastMCP("BharatSahayak Farming MCP Server")
+logger = logging.getLogger(__name__)
 
 
 def _detect_language(text: str) -> str:
@@ -143,26 +145,72 @@ def get_environmental_assessment(
 
     import os
     import ee
-    try:
-        if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
-            from google.oauth2 import service_account
-            credentials = service_account.Credentials.from_service_account_file(
-                os.environ["GOOGLE_APPLICATION_CREDENTIALS"],
-                scopes=[
-                    "https://www.googleapis.com/auth/earthengine",
-                    "https://www.googleapis.com/auth/cloud-platform",
-                ],
+
+    gac_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    logger.info("Earth Engine auth diagnostic: GOOGLE_APPLICATION_CREDENTIALS present=%s", bool(gac_path))
+
+    if gac_path:
+        file_readable = False
+        try:
+            with open(gac_path, "r", encoding="utf-8") as f:
+                _ = f.read(1)
+            file_readable = True
+            logger.info("Earth Engine auth diagnostic: Credential file readable=True")
+        except Exception as exc:
+            logger.error(
+                "Earth Engine auth diagnostic: Credential file readable=False (error: %s: %s)",
+                type(exc).__name__,
+                exc,
             )
-            ee.Initialize(
-                credentials=credentials,
-                project=os.environ.get("EE_PROJECT_ID", "bharatsahayak-v2"),
-            )
-        else:
+
+        credentials = None
+        if file_readable:
+            try:
+                from google.oauth2 import service_account
+                credentials = service_account.Credentials.from_service_account_file(
+                    gac_path,
+                    scopes=[
+                        "https://www.googleapis.com/auth/earthengine",
+                        "https://www.googleapis.com/auth/cloud-platform",
+                    ],
+                )
+                logger.info("Earth Engine auth diagnostic: service_account.Credentials loading succeeded")
+            except Exception as exc:
+                logger.error(
+                    "Earth Engine auth diagnostic: service_account.Credentials loading failed (error: %s: %s)",
+                    type(exc).__name__,
+                    exc,
+                )
+
+        if credentials is not None:
+            try:
+                ee.Initialize(
+                    credentials=credentials,
+                    project=os.environ.get("EE_PROJECT_ID", "bharatsahayak-v2"),
+                )
+                sa_email = getattr(credentials, "service_account_email", "unknown")
+                logger.info(
+                    "Earth Engine initialization succeeded with service account (service_account_email=%s)",
+                    sa_email,
+                )
+            except Exception as exc:
+                logger.error(
+                    "Earth Engine auth diagnostic: ee.Initialize failed with service account (error: %s: %s)",
+                    type(exc).__name__,
+                    exc,
+                )
+    else:
+        try:
             ee.Initialize(
                 project=os.environ.get("EE_PROJECT_ID", "bharatsahayak-v2")
             )
-    except Exception:
-        pass
+            logger.info("Earth Engine initialization succeeded with default credentials")
+        except Exception as exc:
+            logger.error(
+                "Earth Engine auth diagnostic: ee.Initialize failed with default credentials (error: %s: %s)",
+                type(exc).__name__,
+                exc,
+            )
 
     farmer_context = None
     if crop:
