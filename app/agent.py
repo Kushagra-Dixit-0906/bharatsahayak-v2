@@ -33,11 +33,18 @@ from .config import config
 # -----------------------------------------------------------------------------
 
 # Configure connection to the local MCP server running over stdio
+_mcp_env = {
+    "EE_PROJECT_ID": os.environ.get("EE_PROJECT_ID", "bharatsahayak-v2"),
+}
+if os.environ.get("GOOGLE_APPLICATION_CREDENTIALS"):
+    _mcp_env["GOOGLE_APPLICATION_CREDENTIALS"] = os.environ["GOOGLE_APPLICATION_CREDENTIALS"]
+
 mcp_toolset = McpToolset(
     connection_params=StdioConnectionParams(
         server_params=StdioServerParameters(
             command="uv",
             args=["run", "app/mcp_server.py"],
+            env=_mcp_env,
         ),
         timeout=120.0,
     ),
